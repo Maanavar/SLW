@@ -1,0 +1,23 @@
+{
+  "name": "siva-lathe-works",
+  "version": "1.0.0",
+  "description": "Business management system for Siva Lathe Works",
+  "main": "dist/app.js",
+  "scripts": {
+    "dev": "npm run copy-assets && esbuild src/js/index.js --bundle --watch --outfile=dist/app.js --sourcemap",
+    "build": "npm run copy-assets && esbuild src/js/index.js --bundle --minify --outfile=dist/app.js",
+    "copy-assets": "node scripts/copy-assets.js",
+    "preview": "npx http-server dist -p 8080"
+  },
+  "keywords": [
+    "business",
+    "manufacturing",
+    "lathe",
+    "management"
+  ],
+  "author": "Siva Lathe Works Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  }
+}
