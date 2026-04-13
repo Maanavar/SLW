@@ -1,7 +1,7 @@
 // ===== DASHBOARD =====
 function calculateCustomerBalance(customerId) {
-  const jobs = getJobs().filter(j => j.customerId === customerId);
-  const payments = getPayments().filter(p => p.customerId === customerId);
+  const jobs = getJobs().filter((j) => j.customerId === customerId);
+  const payments = getPayments().filter((p) => p.customerId === customerId);
 
   const totalNet = jobs.reduce((sum, j) => sum + getJobNetValue(j), 0);
   const totalPaidFromJobs = jobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
@@ -11,13 +11,13 @@ function calculateCustomerBalance(customerId) {
 }
 
 function calculateMonthlyBalances(customerId) {
-  const jobs = getJobs().filter(j => j.customerId === customerId);
-  const payments = getPayments().filter(p => p.customerId === customerId);
+  const jobs = getJobs().filter((j) => j.customerId === customerId);
+  const payments = getPayments().filter((p) => p.customerId === customerId);
 
   const monthMap = {};
 
   // Group jobs by month
-  jobs.forEach(job => {
+  jobs.forEach((job) => {
     const monthKey = job.date.substring(0, 7); // YYYY-MM
     if (!monthMap[monthKey]) {
       monthMap[monthKey] = {
@@ -27,7 +27,7 @@ function calculateMonthlyBalances(customerId) {
         paidFromJobs: 0,
         paidFromPayments: 0,
         balance: 0,
-        jobs: []
+        jobs: [],
       };
     }
     monthMap[monthKey].totalNet += getJobNetValue(job);
@@ -36,7 +36,7 @@ function calculateMonthlyBalances(customerId) {
   });
 
   // Add payments to their respective months
-  payments.forEach(payment => {
+  payments.forEach((payment) => {
     let targetMonth = '';
     if (payment.paymentForMonth) {
       targetMonth = payment.paymentForMonth;
@@ -54,7 +54,7 @@ function calculateMonthlyBalances(customerId) {
   });
 
   // Calculate balance for each month
-  Object.values(monthMap).forEach(month => {
+  Object.values(monthMap).forEach((month) => {
     month.balance = month.totalNet - month.paidFromJobs - month.paidFromPayments;
   });
 
@@ -89,14 +89,19 @@ function refreshDashboard() {
   totalSummary.pending = totalSummary.net - totalSummary.received;
 
   document.getElementById('dailyNet').textContent = formatCurrency(dailySummary.net);
-  document.getElementById('dailyMeta').textContent = `${dailySummary.jobs} jobs · Received ${formatCurrency(dailySummary.received)} · Pending ${formatCurrency(dailySummary.pending)}`;
+  document.getElementById('dailyMeta').textContent =
+    `${dailySummary.jobs} jobs · Received ${formatCurrency(dailySummary.received)} · Pending ${formatCurrency(dailySummary.pending)}`;
   document.getElementById('weeklyNet').textContent = formatCurrency(weeklySummary.net);
-  document.getElementById('weeklyMeta').textContent = `${weeklySummary.jobs} jobs · Received ${formatCurrency(weeklySummary.received)} · Pending ${formatCurrency(weeklySummary.pending)}`;
+  document.getElementById('weeklyMeta').textContent =
+    `${weeklySummary.jobs} jobs · Received ${formatCurrency(weeklySummary.received)} · Pending ${formatCurrency(weeklySummary.pending)}`;
   document.getElementById('monthlyNet').textContent = formatCurrency(monthlySummary.net);
-  document.getElementById('monthlyMeta').textContent = `${monthlySummary.jobs} jobs · Received ${formatCurrency(monthlySummary.received)} · Pending ${formatCurrency(monthlySummary.pending)}`;
+  document.getElementById('monthlyMeta').textContent =
+    `${monthlySummary.jobs} jobs · Received ${formatCurrency(monthlySummary.received)} · Pending ${formatCurrency(monthlySummary.pending)}`;
 
   document.getElementById('dashTotalBilled').textContent = formatCurrency(totalSummary.billed);
-  document.getElementById('dashTotalCommission').textContent = formatCurrency(totalSummary.commission);
+  document.getElementById('dashTotalCommission').textContent = formatCurrency(
+    totalSummary.commission
+  );
   document.getElementById('dashNetEarned').textContent = formatCurrency(totalSummary.net);
   document.getElementById('dashTotalReceived').textContent = formatCurrency(totalSummary.received);
   document.getElementById('dashTotalPending').textContent = formatCurrency(totalSummary.pending);
@@ -112,14 +117,18 @@ function updateTypeBalanceSummary(customers, jobs, payments) {
   const typeConfigs = [
     { type: 'Monthly', valueId: 'typePendingMonthly', metaId: 'typePendingMonthlyMeta' },
     { type: 'Invoice', valueId: 'typePendingInvoice', metaId: 'typePendingInvoiceMeta' },
-    { type: 'Party-Credit', valueId: 'typePendingPartyCredit', metaId: 'typePendingPartyCreditMeta' }
+    {
+      type: 'Party-Credit',
+      valueId: 'typePendingPartyCredit',
+      metaId: 'typePendingPartyCreditMeta',
+    },
   ];
 
   typeConfigs.forEach(({ type, valueId, metaId }) => {
-    const activeCustomers = customers.filter(customer => customer.type === type);
-    const customerIds = new Set(activeCustomers.map(customer => customer.id));
-    const typeJobs = jobs.filter(job => customerIds.has(job.customerId));
-    const typePayments = payments.filter(payment => customerIds.has(payment.customerId));
+    const activeCustomers = customers.filter((customer) => customer.type === type);
+    const customerIds = new Set(activeCustomers.map((customer) => customer.id));
+    const typeJobs = jobs.filter((job) => customerIds.has(job.customerId));
+    const typePayments = payments.filter((payment) => customerIds.has(payment.customerId));
 
     const billed = typeJobs.reduce((sum, job) => sum + (Number(job.amount) || 0), 0);
     const net = typeJobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
@@ -143,11 +152,11 @@ function refreshCustomerBalances(customers, jobs, payments) {
 
   // Calculate per-customer data
   const customerData = customers
-    .filter(c => c.type !== 'Cash')
-    .filter(c => filterType === 'all' || c.type === filterType)
-    .map(customer => {
-      const custJobs = jobs.filter(j => j.customerId === customer.id);
-      const custPayments = payments.filter(p => p.customerId === customer.id);
+    .filter((c) => c.type !== 'Cash')
+    .filter((c) => filterType === 'all' || c.type === filterType)
+    .map((customer) => {
+      const custJobs = jobs.filter((j) => j.customerId === customer.id);
+      const custPayments = payments.filter((p) => p.customerId === customer.id);
 
       const billed = custJobs.reduce((sum, j) => sum + (Number(j.amount) || 0), 0);
       const commission = custJobs.reduce((sum, j) => sum + (Number(j.commissionAmount) || 0), 0);
@@ -162,10 +171,10 @@ function refreshCustomerBalances(customers, jobs, payments) {
         commission,
         net,
         paid,
-        pending
+        pending,
       };
     })
-    .filter(c => c.billed > 0 || c.paid > 0) // Only show customers with activity
+    .filter((c) => c.billed > 0 || c.paid > 0) // Only show customers with activity
     .sort((a, b) => b.pending - a.pending); // Sort by pending descending
 
   const tbody = document.getElementById('customerBalancesTable');
@@ -181,24 +190,30 @@ function refreshCustomerBalances(customers, jobs, payments) {
     return;
   }
 
-  tbody.innerHTML = customerData.map(c => {
-    const typeClass = `type-${c.type.toLowerCase().replace('-', '')}`;
-    let status = 'CLEAR';
-    let statusClass = 'badge-green';
+  tbody.innerHTML = customerData
+    .map((c) => {
+      const typeClass = `type-${c.type.toLowerCase().replace('-', '')}`;
+      let status = 'CLEAR';
+      let statusClass = 'badge-green';
 
-    if (c.pending > 0) {
-      status = 'PENDING';
-      statusClass = 'badge-red';
-    } else if (c.pending < 0) {
-      status = 'CREDIT';
-      statusClass = 'badge-blue';
-    }
+      if (c.pending > 0) {
+        status = 'PENDING';
+        statusClass = 'badge-red';
+      } else if (c.pending < 0) {
+        status = 'CREDIT';
+        statusClass = 'badge-blue';
+      }
 
-    // Commission paid status - assuming commissions are paid as part of job payment
-    const commissionPaid = c.commission > 0 ? (c.paid >= c.net ? 'Paid' : 'Pending') : 'N/A';
-    const commissionPaidClass = commissionPaid === 'Paid' ? 'badge-green' : commissionPaid === 'Pending' ? 'badge-orange' : 'badge-blue';
+      // Commission paid status - assuming commissions are paid as part of job payment
+      const commissionPaid = c.commission > 0 ? (c.paid >= c.net ? 'Paid' : 'Pending') : 'N/A';
+      const commissionPaidClass =
+        commissionPaid === 'Paid'
+          ? 'badge-green'
+          : commissionPaid === 'Pending'
+            ? 'badge-orange'
+            : 'badge-blue';
 
-    return `
+      return `
       <tr>
         <td><strong>${c.name}</strong></td>
         <td><span class="type-badge ${typeClass}">${c.type}</span></td>
@@ -211,7 +226,8 @@ function refreshCustomerBalances(customers, jobs, payments) {
         <td><span class="badge ${statusClass}">${status}</span></td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 }
 
 function updatePendingBadge() {
@@ -219,7 +235,9 @@ function updatePendingBadge() {
   const payments = getPayments();
 
   const totalNet = jobs.reduce((sum, j) => sum + getJobNetValue(j), 0);
-  const totalPaid = jobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0) + payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid =
+    jobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0) +
+    payments.reduce((sum, p) => sum + p.amount, 0);
   const totalPending = totalNet - totalPaid;
 
   document.getElementById('pending-badge').textContent = formatCurrency(totalPending);

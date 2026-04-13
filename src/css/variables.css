@@ -1,6 +1,8 @@
 /* ===== CSS VARIABLES & BASE STYLES ===== */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -36,8 +38,9 @@
   --space-2xl: 48px;
 
   /* Typography */
-  --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
-  --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  --font-main:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
 
   /* Transitions */
   --transition-fast: 150ms ease;
@@ -60,7 +63,7 @@ html {
   font-size: 16px;
 }
 
-html[data-theme="dark"] {
+html[data-theme='dark'] {
   --bg-primary: #000000;
   --bg-secondary: rgba(28, 28, 30, 0.88);
   --bg-tertiary: #1c1c1e;
@@ -92,5 +95,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  transition: background-color var(--transition-normal), color var(--transition-normal);
+  transition:
+    background-color var(--transition-normal),
+    color var(--transition-normal);
 }

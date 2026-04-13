@@ -1,18 +1,23 @@
 function refreshWorkTypeList() {
   const showInactive = document.getElementById('showInactiveWorkTypes')?.checked;
   const workTypes = getWorkTypes()
-    .filter(wt => showInactive ? true : wt.isActive !== false)
+    .filter((wt) => (showInactive ? true : wt.isActive !== false))
     .sort((a, b) => {
-    if (a.category < b.category) return -1;
-    if (a.category > b.category) return 1;
-    return a.name.localeCompare(b.name);
-  });
+      if (a.category < b.category) {
+return -1;
+}
+      if (a.category > b.category) {
+return 1;
+}
+      return a.name.localeCompare(b.name);
+    });
 
   const tbody = document.getElementById('workTypeListTable');
 
-  tbody.innerHTML = workTypes.map(wt => {
-    const isInactive = wt.isActive === false;
-    return `
+  tbody.innerHTML = workTypes
+    .map((wt) => {
+      const isInactive = wt.isActive === false;
+      return `
     <tr class="${isInactive ? 'table-row-inactive' : ''}">
       <td><span class="badge badge-blue">${wt.category}</span></td>
       <td><strong>${wt.name}</strong></td>
@@ -29,5 +34,6 @@ function refreshWorkTypeList() {
       </td>
     </tr>
   `;
-  }).join('');
+    })
+    .join('');
 }

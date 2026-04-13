@@ -4,9 +4,11 @@ let paymentSelectedCustomer = null;
 function updatePaymentCoverageFields() {
   const coverageType = document.getElementById('paymentCoverageType');
   const fields = document.querySelectorAll('.payment-coverage-group');
-  if (!coverageType) return;
+  if (!coverageType) {
+return;
+}
 
-  fields.forEach(field => {
+  fields.forEach((field) => {
     field.classList.toggle('visible', field.dataset.coverage === coverageType.value);
   });
 
@@ -16,7 +18,7 @@ function updatePaymentCoverageFields() {
     const selectedMonth = monthInput?.value;
     if (selectedMonth) {
       const monthlyBalances = calculateMonthlyBalances(paymentSelectedCustomer.id);
-      const selectedMonthData = monthlyBalances.find(m => m.monthKey === selectedMonth);
+      const selectedMonthData = monthlyBalances.find((m) => m.monthKey === selectedMonth);
       updateMonthBalanceForPayment(selectedMonthData);
     }
   } else {
@@ -28,7 +30,9 @@ function updatePaymentCoverageFields() {
 function updateMonthBalanceForPayment(monthData) {
   const markMonthField = document.getElementById('markMonthPaidField');
   if (!monthData) {
-    if (markMonthField) markMonthField.style.display = 'none';
+    if (markMonthField) {
+markMonthField.style.display = 'none';
+}
     return;
   }
 
@@ -53,10 +57,13 @@ function updateMonthBalanceDisplay(customerId) {
   const section = document.getElementById('monthBalanceSection');
   const table = document.getElementById('monthBalanceTable');
 
-  if (!table) return;
+  if (!table) {
+return;
+}
 
   if (monthlyBalances.length === 0) {
-    table.innerHTML = '<div style="color: var(--text-muted);">No transactions for this customer yet.</div>';
+    table.innerHTML =
+      '<div style="color: var(--text-muted);">No transactions for this customer yet.</div>';
     section.style.display = 'block';
     return;
   }
@@ -69,14 +76,18 @@ function updateMonthBalanceDisplay(customerId) {
       <div style="text-align: right;">Paid</div>
       <div style="text-align: right;">Balance</div>
     </div>
-    ${monthlyBalances.map(month => `
+    ${monthlyBalances
+      .map(
+        (month) => `
       <div style="display: grid; grid-template-columns: 120px 1fr 1fr 1fr; gap: var(--space-sm); padding: 8px 0; border-bottom: 1px solid var(--border-light);">
         <div>${month.monthLabel}</div>
         <div style="text-align: right; color: var(--text-secondary);">${formatCurrency(month.totalNet)}</div>
         <div style="text-align: right; color: var(--text-secondary);">${formatCurrency(month.paidFromJobs + month.paidFromPayments)}</div>
         <div style="text-align: right; font-weight: 600; color: ${month.balance > 0 ? 'var(--accent-red)' : 'var(--accent-green)'};">${formatCurrency(month.balance)}</div>
       </div>
-    `).join('')}
+    `
+      )
+      .join('')}
   `;
 
   // Show mark-as-paid option if coverage is month type
@@ -84,7 +95,7 @@ function updateMonthBalanceDisplay(customerId) {
     const monthInput = document.getElementById('paymentForMonth');
     const selectedMonth = monthInput?.value;
     if (selectedMonth) {
-      const selectedMonthData = monthlyBalances.find(m => m.monthKey === selectedMonth);
+      const selectedMonthData = monthlyBalances.find((m) => m.monthKey === selectedMonth);
       updateMonthBalanceForPayment(selectedMonthData);
     }
   }
@@ -104,11 +115,11 @@ function initPaymentEntry() {
   document.getElementById('paymentForMonth').value = currentMonth;
   document.getElementById('paymentForMonth').max = currentMonth;
   updatePaymentCoverageFields();
-  
+
   setupSearchableDropdown(
     'paymentCustomerSearch',
     'paymentCustomerDropdown',
-    () => getActiveCustomers().filter(c => c.type !== 'Cash'),
+    () => getActiveCustomers().filter((c) => c.type !== 'Cash'),
     (customer) => {
       paymentSelectedCustomer = customer;
       document.getElementById('paymentSelectedCustomerId').value = customer.id;
@@ -121,7 +132,7 @@ function initPaymentEntry() {
       } else if (balance < 0) {
         display.innerHTML = `<span class="badge badge-green">Credit: ${formatCurrency(Math.abs(balance))}</span>`;
       } else {
-        display.innerHTML = `<span class="badge badge-green">No pending balance</span>`;
+        display.innerHTML = '<span class="badge badge-green">No pending balance</span>';
       }
 
       // Show month-wise balance breakdown
@@ -129,9 +140,10 @@ function initPaymentEntry() {
     },
     (customer) => {
       const balance = calculateCustomerBalance(customer.id);
-      const balanceHtml = balance !== 0 
-        ? `<span class="customer-pending ${balance > 0 ? 'has-pending' : 'clear'}">${balance > 0 ? formatCurrency(balance) : 'Clear'}</span>` 
-        : '';
+      const balanceHtml =
+        balance !== 0
+          ? `<span class="customer-pending ${balance > 0 ? 'has-pending' : 'clear'}">${balance > 0 ? formatCurrency(balance) : 'Clear'}</span>`
+          : '';
       return `
         <div class="dropdown-item" data-id="${customer.id}">
           <div>
@@ -144,11 +156,11 @@ function initPaymentEntry() {
     },
     (customer) => [customer.name, customer.shortCode || '', customer.type]
   );
-  
+
   // Payment mode buttons
-  document.querySelectorAll('.payment-mode').forEach(btn => {
+  document.querySelectorAll('.payment-mode').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.payment-mode').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.payment-mode').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
     });
   });
@@ -162,10 +174,13 @@ function initPaymentEntry() {
   const paymentForMonth = document.getElementById('paymentForMonth');
   if (paymentForMonth) {
     paymentForMonth.addEventListener('change', () => {
-      if (paymentSelectedCustomer && document.getElementById('paymentCoverageType').value === 'month') {
+      if (
+        paymentSelectedCustomer &&
+        document.getElementById('paymentCoverageType').value === 'month'
+      ) {
         const selectedMonth = paymentForMonth.value;
         const monthlyBalances = calculateMonthlyBalances(paymentSelectedCustomer.id);
-        const selectedMonthData = monthlyBalances.find(m => m.monthKey === selectedMonth);
+        const selectedMonthData = monthlyBalances.find((m) => m.monthKey === selectedMonth);
         updateMonthBalanceForPayment(selectedMonthData);
       }
     });
@@ -180,25 +195,27 @@ function initPaymentEntry() {
 
 function handlePaymentSubmit(e) {
   e.preventDefault();
-  
+
   if (!paymentSelectedCustomer) {
     showToast('Error', 'Please select a customer', 'error');
     return;
   }
 
-  const currentCustomer = getCustomers().find(customer => customer.id === paymentSelectedCustomer.id);
+  const currentCustomer = getCustomers().find(
+    (customer) => customer.id === paymentSelectedCustomer.id
+  );
   if (!currentCustomer || currentCustomer.isActive === false) {
     showToast('Error', 'Selected customer is inactive. Please choose an active customer.', 'error');
     return;
   }
   paymentSelectedCustomer = currentCustomer;
-  
+
   const amount = parseFloat(document.getElementById('paymentAmount').value);
   if (!amount || amount <= 0) {
     showToast('Error', 'Please enter a valid amount', 'error');
     return;
   }
-  
+
   const activeMode = document.querySelector('.payment-mode.active');
   const coverageType = document.getElementById('paymentCoverageType').value;
   const paymentForDate = document.getElementById('paymentForDate').value;
@@ -218,7 +235,7 @@ function handlePaymentSubmit(e) {
     showToast('Error', 'Please select a month for this payment', 'error');
     return;
   }
-  
+
   const payment = {
     date: document.getElementById('paymentDateInput').value,
     customerId: paymentSelectedCustomer.id,
@@ -230,25 +247,27 @@ function handlePaymentSubmit(e) {
     paymentForFromDate: coverageType === 'range' ? paymentForFromDate : '',
     paymentForToDate: coverageType === 'range' ? paymentForToDate : '',
     paymentForMonth: coverageType === 'month' ? paymentForMonth : '',
-    notes: document.getElementById('paymentNotes').value || ''
+    notes: document.getElementById('paymentNotes').value || '',
   };
-  
+
   const savedPayment = savePayment(payment);
 
   // Handle marking entire month as paid if checkbox is checked
   const markMonthAsPaid = document.getElementById('markMonthAsPaid');
   if (coverageType === 'month' && markMonthAsPaid && markMonthAsPaid.checked) {
-    const jobs = getJobs().filter(j => j.customerId === paymentSelectedCustomer.id && j.date.startsWith(paymentForMonth));
+    const jobs = getJobs().filter(
+      (j) => j.customerId === paymentSelectedCustomer.id && j.date.startsWith(paymentForMonth)
+    );
     if (jobs.length > 0) {
-      jobs.forEach(job => {
+      jobs.forEach((job) => {
         job.paymentStatus = 'Paid';
         job.paidAmount = job.netAmount;
         job.paymentMode = activeMode ? activeMode.dataset.mode : 'Cash';
       });
       const allJobs = getJobs();
       // Update only the jobs that were modified
-      jobs.forEach(modifiedJob => {
-        const index = allJobs.findIndex(j => j.id === modifiedJob.id);
+      jobs.forEach((modifiedJob) => {
+        const index = allJobs.findIndex((j) => j.id === modifiedJob.id);
         if (index >= 0) {
           allJobs[index] = modifiedJob;
         }
@@ -258,12 +277,16 @@ function handlePaymentSubmit(e) {
   }
 
   const newBalance = calculateCustomerBalance(paymentSelectedCustomer.id);
-  const coverageLabel = coverageType === 'single'
-    ? `for ${formatDate(paymentForDate)}`
-    : coverageType === 'range'
-      ? `for ${formatDate(paymentForFromDate)} to ${formatDate(paymentForToDate)}`
-      : `for ${paymentForMonth || '-'}`;
-  showToast('Payment Recorded', `${paymentSelectedCustomer.name} ${coverageLabel} — Pending: ${formatCurrency(newBalance)}`);
+  const coverageLabel =
+    coverageType === 'single'
+      ? `for ${formatDate(paymentForDate)}`
+      : coverageType === 'range'
+        ? `for ${formatDate(paymentForFromDate)} to ${formatDate(paymentForToDate)}`
+        : `for ${paymentForMonth || '-'}`;
+  showToast(
+    'Payment Recorded',
+    `${paymentSelectedCustomer.name} ${coverageLabel} — Pending: ${formatCurrency(newBalance)}`
+  );
 
   // Reset form
   resetPaymentForm();
@@ -288,7 +311,7 @@ function resetPaymentForm() {
   document.getElementById('paymentCoverageType').value = 'single';
   document.getElementById('paymentNotes').value = '';
   document.getElementById('customerPendingDisplay').innerHTML = '';
-  document.querySelectorAll('.payment-mode').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.payment-mode').forEach((b) => b.classList.remove('active'));
   document.querySelector('.payment-mode[data-mode="Cash"]').classList.add('active');
   updatePaymentCoverageFields();
 }

@@ -9,7 +9,12 @@ let editingCustomerId = null;
 let editingWorkTypeId = null;
 
 function customerNeedsDc(customer) {
-  return !!customer && (DC_CUSTOMER_IDS.has(customer.id) || ['Ramani Motors', 'Ramani Cars', 'N Mahalingam'].includes(customer.name) || customer.requiresDc === true);
+  return (
+    !!customer &&
+    (DC_CUSTOMER_IDS.has(customer.id) ||
+      ['Ramani Motors', 'Ramani Cars', 'N Mahalingam'].includes(customer.name) ||
+      customer.requiresDc === true)
+  );
 }
 
 function getJobGroupKey(job) {
@@ -21,16 +26,20 @@ function getJobGroupKey(job) {
 
 function getJobCardJobs(groupKey) {
   return getJobs()
-    .filter(job => getJobGroupKey(job) === groupKey)
+    .filter((job) => getJobGroupKey(job) === groupKey)
     .sort((a, b) => (a.jobCardLine || a.id) - (b.jobCardLine || b.id));
 }
 
 function jobHasDcDetails(job) {
-  return Boolean((job.dcNo || '').trim() || (job.vehicleNo || '').trim() || (job.dcDate || '').trim());
+  return Boolean(
+    (job.dcNo || '').trim() || (job.vehicleNo || '').trim() || (job.dcDate || '').trim()
+  );
 }
 
 function getJobDcStatus(job) {
-  if (job.dcStatus) return job.dcStatus;
+  if (job.dcStatus) {
+return job.dcStatus;
+}
   if (!customerNeedsDc({ id: job.customerId, name: job.customerName })) {
     return 'Not Required';
   }
@@ -43,10 +52,13 @@ function updateDcApprovalRequirement() {
   const dcNo = document.getElementById('dcNo');
   const dcDate = document.getElementById('dcDate');
 
-  if (!approvalField || !vehicleNo || !dcNo || !dcDate) return;
+  if (!approvalField || !vehicleNo || !dcNo || !dcDate) {
+return;
+}
 
   const hasDcDetails = !!(vehicleNo.value.trim() || dcNo.value.trim() || dcDate.value.trim());
-  const dcFieldsVisible = approvalField.parentElement && approvalField.parentElement.style.display !== 'none';
+  const dcFieldsVisible =
+    approvalField.parentElement && approvalField.parentElement.style.display !== 'none';
 
   if (dcFieldsVisible && !hasDcDetails) {
     approvalField.classList.add('dc-approval-required');
@@ -58,7 +70,9 @@ function updateDcApprovalRequirement() {
 function setDcApprovalVisibility(visible) {
   const approvalField = document.getElementById('dcApprovalField');
   const approvalToggle = document.getElementById('dcApproval');
-  if (!approvalField || !approvalToggle) return;
+  if (!approvalField || !approvalToggle) {
+return;
+}
 
   approvalField.style.display = visible ? 'block' : 'none';
   if (!visible) {
@@ -71,7 +85,9 @@ function setDcApprovalVisibility(visible) {
 
 function setDcFieldVisibility(visible) {
   const dcFields = document.getElementById('dcFields');
-  if (!dcFields) return;
+  if (!dcFields) {
+return;
+}
   dcFields.classList.toggle('visible', visible);
   if (!visible) {
     document.getElementById('vehicleNo').value = '';
@@ -132,15 +148,13 @@ function clearJobFormEditState() {
 
 function saveJobCardJobs(jobRecords, groupKey = null) {
   const jobs = getJobs();
-  const remainingJobs = groupKey
-    ? jobs.filter(job => getJobGroupKey(job) !== groupKey)
-    : jobs;
-  const nextId = remainingJobs.length > 0 ? Math.max(...remainingJobs.map(j => j.id)) + 1 : 1;
+  const remainingJobs = groupKey ? jobs.filter((job) => getJobGroupKey(job) !== groupKey) : jobs;
+  const nextId = remainingJobs.length > 0 ? Math.max(...remainingJobs.map((j) => j.id)) + 1 : 1;
   const createdAt = new Date().toISOString();
   const savedJobs = jobRecords.map((job, index) => ({
     ...job,
     id: nextId + index,
-    createdAt
+    createdAt,
   }));
 
   localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify([...remainingJobs, ...savedJobs]));
@@ -205,7 +219,9 @@ function createJobLineMarkup(lineId) {
 function addJobLine() {
   jobLineCounter += 1;
   const container = document.getElementById('jobLinesContainer');
-  if (!container) return;
+  if (!container) {
+return;
+}
   container.insertAdjacentHTML('beforeend', createJobLineMarkup(jobLineCounter));
   setupJobLine(jobLineCounter);
   renumberJobLines();
@@ -225,13 +241,20 @@ function setupJobLine(lineId) {
   setupSearchableDropdown(
     workSearchId,
     workDropdownId,
-    () => [...getActiveWorkTypes()].sort((a, b) => {
-      if (a.category < b.category) return -1;
-      if (a.category > b.category) return 1;
-      return a.name.localeCompare(b.name);
-    }),
+    () =>
+      [...getActiveWorkTypes()].sort((a, b) => {
+        if (a.category < b.category) {
+return -1;
+}
+        if (a.category > b.category) {
+return 1;
+}
+        return a.name.localeCompare(b.name);
+      }),
     (workType) => {
-      if (!row) return;
+      if (!row) {
+return;
+}
       row._selectedWorkType = workType;
       document.getElementById(`jobLineWorkTypeId-${lineId}`).value = workType.id;
       document.getElementById(workSearchId).value = workType.name;
@@ -254,7 +277,9 @@ function setupJobLine(lineId) {
   document.getElementById(`jobLineCommission-${lineId}`).addEventListener('input', updateJobReview);
 
   document.querySelector(`[data-qty-minus="${lineId}"]`).addEventListener('click', () => {
-    if (!row) return;
+    if (!row) {
+return;
+}
     const qtyValue = document.getElementById(qtyValueId);
     const nextValue = Math.max(1, (parseInt(qtyValue.textContent, 10) || 1) - 1);
     qtyValue.textContent = String(nextValue);
@@ -263,7 +288,9 @@ function setupJobLine(lineId) {
   });
 
   document.querySelector(`[data-qty-plus="${lineId}"]`).addEventListener('click', () => {
-    if (!row) return;
+    if (!row) {
+return;
+}
     const qtyValue = document.getElementById(qtyValueId);
     const nextValue = (parseInt(qtyValue.textContent, 10) || 1) + 1;
     qtyValue.textContent = String(nextValue);
@@ -279,7 +306,9 @@ function setupJobLine(lineId) {
 
   document.querySelector(`[data-remove-line="${lineId}"]`).addEventListener('click', () => {
     const totalLines = document.querySelectorAll('.job-line').length;
-    if (totalLines <= 1) return;
+    if (totalLines <= 1) {
+return;
+}
     row.remove();
     renumberJobLines();
     updateJobReview();
@@ -291,15 +320,23 @@ function renumberJobLines() {
   lines.forEach((line, index) => {
     const title = line.querySelector('.job-line-title');
     const removeBtn = line.querySelector('.job-line-remove');
-    if (title) title.textContent = `Job ${index + 1}`;
-    if (removeBtn) removeBtn.disabled = lines.length === 1;
-    if (removeBtn) removeBtn.classList.toggle('is-disabled', lines.length === 1);
+    if (title) {
+title.textContent = `Job ${index + 1}`;
+}
+    if (removeBtn) {
+removeBtn.disabled = lines.length === 1;
+}
+    if (removeBtn) {
+removeBtn.classList.toggle('is-disabled', lines.length === 1);
+}
   });
 }
 
 function updateJobLineSuggestion(lineId) {
   const row = document.querySelector(`.job-line[data-line-id="${lineId}"]`);
-  if (!row) return;
+  if (!row) {
+return;
+}
   const workType = row._selectedWorkType;
   const qty = parseInt(document.getElementById(`jobLineQtyValue-${lineId}`).textContent, 10) || 1;
   const suggestion = document.getElementById(`jobLineSuggestion-${lineId}`);
@@ -318,7 +355,7 @@ function updateJobLineSuggestion(lineId) {
 }
 
 function getJobLineData() {
-  return [...document.querySelectorAll('.job-line')].map(row => {
+  return [...document.querySelectorAll('.job-line')].map((row) => {
     const lineId = row.dataset.lineId;
     return {
       row,
@@ -326,14 +363,17 @@ function getJobLineData() {
       workType: row._selectedWorkType || null,
       quantity: parseInt(document.getElementById(`jobLineQtyValue-${lineId}`).textContent, 10) || 1,
       amount: parseFloat(document.getElementById(`jobLineAmount-${lineId}`).value) || 0,
-      commissionInput: parseFloat(document.getElementById(`jobLineCommission-${lineId}`).value) || 0
+      commissionInput:
+        parseFloat(document.getElementById(`jobLineCommission-${lineId}`).value) || 0,
     };
   });
 }
 
 function loadJobLinesFromRecords(jobRecords) {
   const container = document.getElementById('jobLinesContainer');
-  if (!container) return;
+  if (!container) {
+return;
+}
 
   const records = jobRecords.length > 0 ? jobRecords : [{}];
   container.innerHTML = '';
@@ -344,23 +384,35 @@ function loadJobLinesFromRecords(jobRecords) {
   records.forEach((record, index) => {
     const lineId = index + 1;
     const row = document.querySelector(`.job-line[data-line-id="${lineId}"]`);
-    const workType = getWorkTypes().find(wt => wt.id === record.workTypeId) || getWorkTypes().find(wt => wt.name === record.workTypeName);
+    const workType =
+      getWorkTypes().find((wt) => wt.id === record.workTypeId) ||
+      getWorkTypes().find((wt) => wt.name === record.workTypeName);
     const workSearch = document.getElementById(`jobLineWorkSearch-${lineId}`);
     const workTypeHidden = document.getElementById(`jobLineWorkTypeId-${lineId}`);
 
     if (row && workType) {
       row._selectedWorkType = workType;
-      if (workSearch) workSearch.value = workType.name;
-      if (workTypeHidden) workTypeHidden.value = workType.id;
+      if (workSearch) {
+workSearch.value = workType.name;
+}
+      if (workTypeHidden) {
+workTypeHidden.value = workType.id;
+}
     }
 
     const qtyValue = document.getElementById(`jobLineQtyValue-${lineId}`);
     const amountInput = document.getElementById(`jobLineAmount-${lineId}`);
     const commissionInput = document.getElementById(`jobLineCommission-${lineId}`);
 
-    if (qtyValue) qtyValue.textContent = String(record.quantity || 1);
-    if (amountInput) amountInput.value = record.amount ?? '';
-    if (commissionInput) commissionInput.value = record.commissionInput ?? '';
+    if (qtyValue) {
+qtyValue.textContent = String(record.quantity || 1);
+}
+    if (amountInput) {
+amountInput.value = record.amount ?? '';
+}
+    if (commissionInput) {
+commissionInput.value = record.commissionInput ?? '';
+}
     updateJobLineSuggestion(lineId);
   });
 
@@ -375,10 +427,10 @@ function loadJobCardIntoForm(groupKey) {
   }
 
   const primaryJob = cardJobs[0];
-  const customer = getCustomers().find(c => c.id === primaryJob.customerId) || {
+  const customer = getCustomers().find((c) => c.id === primaryJob.customerId) || {
     id: primaryJob.customerId,
     name: primaryJob.customerName,
-    type: ''
+    type: '',
   };
 
   selectedCustomer = customer;
@@ -386,26 +438,36 @@ function loadJobCardIntoForm(groupKey) {
   document.getElementById('selectedCustomerId').value = customer.id || primaryJob.customerId || '';
 
   document.getElementById('jobDateInput').value = primaryJob.date || getLocalDateString();
-  document.getElementById('jobDate').textContent = formatDate(document.getElementById('jobDateInput').value);
+  document.getElementById('jobDate').textContent = formatDate(
+    document.getElementById('jobDateInput').value
+  );
   document.getElementById('spotWork').checked = getJobWorkMode(primaryJob) === 'Spot';
-  document.getElementById('cashPaid').checked = getJobPaymentStatus(primaryJob) === 'Paid' || getJobPaidAmount(primaryJob) > 0;
-  selectedJobPaymentMode = getJobPaymentMode(primaryJob) !== '-' ? getJobPaymentMode(primaryJob) : 'Cash';
+  document.getElementById('cashPaid').checked =
+    getJobPaymentStatus(primaryJob) === 'Paid' || getJobPaidAmount(primaryJob) > 0;
+  selectedJobPaymentMode =
+    getJobPaymentMode(primaryJob) !== '-' ? getJobPaymentMode(primaryJob) : 'Cash';
 
-  document.querySelectorAll('.job-payment-mode').forEach(btn => {
+  document.querySelectorAll('.job-payment-mode').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === selectedJobPaymentMode);
   });
 
   const dcVisible = customerNeedsDc(customer);
   setDcFieldVisibility(dcVisible);
   setDcApprovalVisibility(dcVisible);
-  document.getElementById('dcApproval').checked = dcVisible && !!primaryJob.dcApproval && !jobHasDcDetails(primaryJob);
+  document.getElementById('dcApproval').checked =
+    dcVisible && !!primaryJob.dcApproval && !jobHasDcDetails(primaryJob);
   document.getElementById('vehicleNo').value = primaryJob.vehicleNo || '';
   document.getElementById('dcNo').value = primaryJob.dcNo || '';
   document.getElementById('dcDate').value = primaryJob.dcDate || '';
   document.getElementById('jobNotes').value = primaryJob.notes || '';
 
   loadJobLinesFromRecords(cardJobs);
-  setJobFormEditState(true, groupKey, primaryJob.jobCardId || `JC-${primaryJob.id}`, cardJobs.length);
+  setJobFormEditState(
+    true,
+    groupKey,
+    primaryJob.jobCardId || `JC-${primaryJob.id}`,
+    cardJobs.length
+  );
   updateJobReview();
 }
 
@@ -438,9 +500,10 @@ function initJobEntry() {
     (customer) => {
       const typeClass = `type-${customer.type.toLowerCase().replace('-', '')}`;
       const balance = calculateCustomerBalance(customer.id);
-      const balanceHtml = balance !== 0
-        ? `<span class="customer-pending ${balance > 0 ? 'has-pending' : 'clear'}">${balance > 0 ? '₹' + balance.toLocaleString() : 'Clear'}</span>`
-        : '';
+      const balanceHtml =
+        balance !== 0
+          ? `<span class="customer-pending ${balance > 0 ? 'has-pending' : 'clear'}">${balance > 0 ? '₹' + balance.toLocaleString() : 'Clear'}</span>`
+          : '';
       return `
         <div class="dropdown-item" data-id="${customer.id}">
           <div>
@@ -467,9 +530,9 @@ function initJobEntry() {
     updateJobReview();
   });
 
-  document.querySelectorAll('.job-payment-mode').forEach(btn => {
+  document.querySelectorAll('.job-payment-mode').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.job-payment-mode').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.job-payment-mode').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       selectedJobPaymentMode = btn.dataset.mode;
       document.getElementById('cashPaid').checked = true;
@@ -477,7 +540,7 @@ function initJobEntry() {
     });
   });
 
-  ['jobDateInput', 'dcNo', 'vehicleNo', 'dcDate', 'jobNotes'].forEach(id => {
+  ['jobDateInput', 'dcNo', 'vehicleNo', 'dcDate', 'jobNotes'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener('input', updateJobReview);
@@ -505,30 +568,43 @@ function initJobEntry() {
 
 function updateJobReview() {
   const reviewGrid = document.getElementById('jobReviewGrid');
-  if (!reviewGrid) return;
+  if (!reviewGrid) {
+return;
+}
 
   const lines = getJobLineData();
   const cashPaid = document.getElementById('cashPaid').checked;
-  const paymentMode = cashPaid ? (selectedJobPaymentMode || 'Cash') : '-';
+  const paymentMode = cashPaid ? selectedJobPaymentMode || 'Cash' : '-';
   const workMode = document.getElementById('spotWork').checked ? 'Spot' : 'Workshop';
   const dcVisible = selectedCustomer ? customerNeedsDc(selectedCustomer) : false;
   const dcApproval = dcVisible ? document.getElementById('dcApproval').checked : false;
   const dcDetailsPresent = dcVisible
-    ? Boolean(document.getElementById('dcNo').value.trim() || document.getElementById('vehicleNo').value.trim() || document.getElementById('dcDate').value.trim())
+    ? Boolean(
+        document.getElementById('dcNo').value.trim() ||
+        document.getElementById('vehicleNo').value.trim() ||
+        document.getElementById('dcDate').value.trim()
+      )
     : false;
   const dcStatus = dcVisible
-    ? (dcDetailsPresent ? 'Completed' : (dcApproval ? 'Approved without DC' : 'Waiting for DC'))
+    ? dcDetailsPresent
+      ? 'Completed'
+      : dcApproval
+        ? 'Approved without DC'
+        : 'Waiting for DC'
     : 'Not Required';
 
-  const lineTotals = lines.map(line => {
-    const commissionAmount = line.commissionInput > 0
-      ? (line.commissionInput > 1 ? line.commissionInput : Math.round(line.amount * line.commissionInput))
-      : 0;
+  const lineTotals = lines.map((line) => {
+    const commissionAmount =
+      line.commissionInput > 0
+        ? line.commissionInput > 1
+          ? line.commissionInput
+          : Math.round(line.amount * line.commissionInput)
+        : 0;
     return {
       ...line,
       workName: line.workType ? line.workType.name : 'Select work name',
       commissionAmount,
-      netAmount: Math.max(0, line.amount - commissionAmount)
+      netAmount: Math.max(0, line.amount - commissionAmount),
     };
   });
 
@@ -538,18 +614,29 @@ function updateJobReview() {
   const totalQuantity = lineTotals.reduce((sum, line) => sum + line.quantity, 0);
 
   const paymentStatusBadge = `<span class="badge ${cashPaid ? 'badge-green' : 'badge-red'}">${cashPaid ? 'Paid' : 'Pending'}</span>`;
-  const dcStatusBadgeClass = dcStatus === 'Completed' ? 'badge-green' : dcStatus === 'Approved without DC' ? 'badge-orange' : dcStatus === 'Not Required' ? 'badge-blue' : 'badge-orange';
+  const dcStatusBadgeClass =
+    dcStatus === 'Completed'
+      ? 'badge-green'
+      : dcStatus === 'Approved without DC'
+        ? 'badge-orange'
+        : dcStatus === 'Not Required'
+          ? 'badge-blue'
+          : 'badge-orange';
   const dcStatusBadge = `<span class="badge ${dcStatusBadgeClass}">${dcStatus}</span>`;
 
   const lineHtml = lineTotals.length
-    ? lineTotals.map((line, index) => `
+    ? lineTotals
+        .map(
+          (line, index) => `
         <div class="review-line-item">
           <span>${index + 1}</span>
           <span>${line.workName}</span>
           <span>${line.quantity}</span>
           <span class="review-amount-warning">${formatCurrency(line.amount)}</span>
         </div>
-      `).join('')
+      `
+        )
+        .join('')
     : '<div class="review-item review-wide"><span>Job Details</span><strong>Add at least one job line</strong></div>';
 
   reviewGrid.innerHTML = `
@@ -570,9 +657,9 @@ function updateJobReview() {
     <div class="review-section-header">Amounts & Summary</div>
     <div class="review-item"><span>Total Billed</span><strong class="review-amount-warning">${formatCurrency(totalAmount)}</strong></div>
 
-    ${dcVisible ? `<div class="review-section-header">DC Information</div>` : ''}
+    ${dcVisible ? '<div class="review-section-header">DC Information</div>' : ''}
     ${dcVisible ? `<div class="review-item"><span>DC Status</span>${dcStatusBadge}</div>` : ''}
-    ${dcVisible && dcApproval && !dcDetailsPresent ? `<div class="review-item"><span>DC Notes</span><strong>⚠ Approved without DC details</strong></div>` : ''}
+    ${dcVisible && dcApproval && !dcDetailsPresent ? '<div class="review-item"><span>DC Notes</span><strong>⚠ Approved without DC details</strong></div>' : ''}
     ${dcVisible ? `<div class="review-item"><span>DC No</span><strong>${document.getElementById('dcNo').value || '-'}</strong></div>` : ''}
     ${dcVisible ? `<div class="review-item"><span>Vehicle No</span><strong>${document.getElementById('vehicleNo').value || '-'}</strong></div>` : ''}
     ${dcVisible ? `<div class="review-item"><span>DC Date</span><strong>${document.getElementById('dcDate').value || '-'}</strong></div>` : ''}
@@ -589,7 +676,7 @@ function handleJobSubmit(e) {
     return;
   }
 
-  const currentCustomer = getCustomers().find(customer => customer.id === selectedCustomer.id);
+  const currentCustomer = getCustomers().find((customer) => customer.id === selectedCustomer.id);
   if (!currentCustomer || (currentCustomer.isActive === false && !editingJobGroupKey)) {
     showToast('Error', 'Selected customer is inactive. Please choose an active customer.', 'error');
     return;
@@ -602,9 +689,16 @@ function handleJobSubmit(e) {
     return;
   }
 
-  const invalidLine = lines.find(line => {
-    const currentWorkType = line.workType ? getWorkTypes().find(workType => workType.id === line.workType.id) : null;
-    return !currentWorkType || !line.amount || line.amount <= 0 || (currentWorkType.isActive === false && !editingJobGroupKey);
+  const invalidLine = lines.find((line) => {
+    const currentWorkType = line.workType
+      ? getWorkTypes().find((workType) => workType.id === line.workType.id)
+      : null;
+    return (
+      !currentWorkType ||
+      !line.amount ||
+      line.amount <= 0 ||
+      (currentWorkType.isActive === false && !editingJobGroupKey)
+    );
   });
   if (invalidLine) {
     showToast('Error', 'Please complete every job line with a work name and amount', 'error');
@@ -624,17 +718,25 @@ function handleJobSubmit(e) {
 
   const cashPaid = document.getElementById('cashPaid').checked;
   const activePaymentMode = document.querySelector('#screen-jobs .job-payment-mode.active');
-  const paymentMode = cashPaid ? (activePaymentMode ? activePaymentMode.dataset.mode : selectedJobPaymentMode) : '';
+  const paymentMode = cashPaid
+    ? activePaymentMode
+      ? activePaymentMode.dataset.mode
+      : selectedJobPaymentMode
+    : '';
   const workMode = document.getElementById('spotWork').checked ? 'Spot' : 'Workshop';
   const jobCardId = editingJobCardId || `JC-${Date.now()}`;
   const notes = document.getElementById('jobNotes').value || '';
   const dcStatus = dcRequired ? (hasDcDetails ? 'Completed' : 'Pending DC') : 'Not Required';
 
   const jobRecords = lines.map((line, index) => {
-    const currentWorkType = getWorkTypes().find(workType => workType.id === line.workType.id) || line.workType;
-    const commissionAmount = line.commissionInput > 0
-      ? (line.commissionInput > 1 ? line.commissionInput : Math.round(line.amount * line.commissionInput))
-      : 0;
+    const currentWorkType =
+      getWorkTypes().find((workType) => workType.id === line.workType.id) || line.workType;
+    const commissionAmount =
+      line.commissionInput > 0
+        ? line.commissionInput > 1
+          ? line.commissionInput
+          : Math.round(line.amount * line.commissionInput)
+        : 0;
     const netAmount = Math.max(0, line.amount - commissionAmount);
     return {
       date: document.getElementById('jobDateInput').value,
@@ -656,19 +758,22 @@ function handleJobSubmit(e) {
       vehicleNo: vehicleNo,
       dcNo: dcNo,
       dcDate: dcDate,
-      dcApproval: dcRequired ? (!hasDcDetails && dcApproval) : false,
+      dcApproval: dcRequired ? !hasDcDetails && dcApproval : false,
       dcRequired: dcRequired,
       dcStatus: dcStatus,
       notes: notes,
       jobCardId: jobCardId,
       jobCardLine: index + 1,
-      jobCardCount: lines.length
+      jobCardCount: lines.length,
     };
   });
 
   const savedJobs = saveJobCardJobs(jobRecords, editingJobGroupKey);
   const totalNet = savedJobs.reduce((sum, job) => sum + job.netAmount, 0);
-  showToast(editingJobGroupKey ? 'Job Updated' : 'Job Saved', `${savedJobs.length} job${savedJobs.length !== 1 ? 's' : ''} saved for ${selectedCustomer.name} - ${formatCurrency(totalNet)}`);
+  showToast(
+    editingJobGroupKey ? 'Job Updated' : 'Job Saved',
+    `${savedJobs.length} job${savedJobs.length !== 1 ? 's' : ''} saved for ${selectedCustomer.name} - ${formatCurrency(totalNet)}`
+  );
 
   resetJobForm();
   refreshTodaysJobs();
@@ -696,7 +801,7 @@ function resetJobForm() {
   document.getElementById('dcDate').value = today;
   document.getElementById('jobNotes').value = '';
   document.getElementById('dcApproval').checked = false;
-  document.querySelectorAll('.job-payment-mode').forEach(btn => {
+  document.querySelectorAll('.job-payment-mode').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === 'Cash');
   });
 
@@ -713,10 +818,12 @@ function resetJobForm() {
 
 function refreshTodaysJobs() {
   const today = getLocalDateString();
-  const jobs = getJobs().filter(j => j.date === today).reverse();
-  
+  const jobs = getJobs()
+    .filter((j) => j.date === today)
+    .reverse();
+
   const container = document.getElementById('recentJobsList');
-  
+
   if (jobs.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
@@ -729,8 +836,10 @@ function refreshTodaysJobs() {
     `;
     return;
   }
-  
-  container.innerHTML = jobs.map(job => `
+
+  container.innerHTML = jobs
+    .map(
+      (job) => `
     <div class="job-item">
       <span class="job-number">#${job.id}</span>
       <div class="job-details">
@@ -745,17 +854,20 @@ function refreshTodaysJobs() {
         <div class="job-net">${getJobPaymentStatus(job)}${getJobPaidAmount(job) > 0 ? ` · ${getJobPaymentMode(job)}` : ''}</div>
       </div>
     </div>
-  `).join('');
+  `
+    )
+    .join('');
 }
 
 function updateTodayStats() {
   const today = getLocalDateString();
-  const jobs = getJobs().filter(j => j.date === today);
+  const jobs = getJobs().filter((j) => j.date === today);
   const jobCards = groupJobsByCard(jobs);
-  
+
   const totalJobs = jobCards.length;
   const totalAmount = jobs.reduce((sum, j) => sum + j.netAmount, 0);
-  
-  document.getElementById('todayJobs').textContent = `${totalJobs} jobcard${totalJobs !== 1 ? 's' : ''}`;
+
+  document.getElementById('todayJobs').textContent =
+    `${totalJobs} jobcard${totalJobs !== 1 ? 's' : ''}`;
   document.getElementById('todayAmount').textContent = formatCurrency(totalAmount);
 }

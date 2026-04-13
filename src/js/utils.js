@@ -14,9 +14,11 @@ function showToast(title, message, type = 'success') {
   toast.className = `toast ${type}`;
   toast.innerHTML = `
     <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="${type === 'success' ? 'var(--accent-green)' : 'var(--accent-red)'}" stroke-width="2">
-      ${type === 'success' 
-        ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>' 
-        : '<circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/>'}
+      ${
+        type === 'success'
+          ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'
+          : '<circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/>'
+      }
     </svg>
     <div class="toast-content">
       <div class="toast-title">${title}</div>
@@ -59,7 +61,7 @@ function getReportRange(period) {
   }
   return {
     from: getMonthStartDate(today),
-    to: getLocalDateString(today)
+    to: getLocalDateString(today),
   };
 }
 
@@ -72,31 +74,37 @@ function setReportPeriod(period) {
 
 function populateReportCustomers() {
   const select = document.getElementById('reportCustomer');
-  if (!select) return;
+  if (!select) {
+return;
+}
 
   const customers = getActiveCustomers();
-  select.innerHTML = '<option value="">All Clients</option>' +
-    customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  select.innerHTML =
+    '<option value="">All Clients</option>' +
+    customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
 }
 
 function getFilteredReportGroups() {
   const period = document.getElementById('reportPeriod').value;
   const reportMode = document.getElementById('reportMode').value;
   const reportCustomer = document.getElementById('reportCustomer').value
-    ? getCustomers().find(c => c.id === parseInt(document.getElementById('reportCustomer').value, 10))
+    ? getCustomers().find(
+        (c) => c.id === parseInt(document.getElementById('reportCustomer').value, 10)
+      )
     : null;
 
-  const range = period === 'custom'
-    ? {
-        from: document.getElementById('reportFromDate').value,
-        to: document.getElementById('reportToDate').value
-      }
-    : getReportRange(period);
+  const range =
+    period === 'custom'
+      ? {
+          from: document.getElementById('reportFromDate').value,
+          to: document.getElementById('reportToDate').value,
+        }
+      : getReportRange(period);
 
   let jobs = getJobsInRange(getJobs(), range.from, range.to);
 
   if (reportCustomer) {
-    jobs = jobs.filter(j => j.customerId === reportCustomer.id);
+    jobs = jobs.filter((j) => j.customerId === reportCustomer.id);
   }
 
   const groups = groupJobsByCard(jobs);
@@ -105,12 +113,18 @@ function getFilteredReportGroups() {
 }
 
 function getJobDcStatus(job) {
-  const customer = getCustomers().find(c => c.id === job.customerId);
-  if (!customer || !customer.requiresDc) return 'Not Required';
+  const customer = getCustomers().find((c) => c.id === job.customerId);
+  if (!customer || !customer.requiresDc) {
+return 'Not Required';
+}
 
   const hasDcDetails = job.dcNo || job.vehicleNo || job.dcDate;
-  if (hasDcDetails) return 'Completed';
-  if (job.dcApproval === false) return 'Approved without DC';
+  if (hasDcDetails) {
+return 'Completed';
+}
+  if (job.dcApproval === false) {
+return 'Approved without DC';
+}
   return 'Pending DC';
 }
 

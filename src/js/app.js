@@ -10,10 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
   // Navigation handlers
-  document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(item => {
+  document.querySelectorAll('.nav-item, .mobile-nav-item').forEach((item) => {
     item.addEventListener('click', () => {
       const screen = item.dataset.screen;
-      if (screen) switchScreen(screen);
+      if (screen) {
+switchScreen(screen);
+}
     });
   });
 
@@ -30,11 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Dashboard filter
   document.getElementById('dashFilterType').addEventListener('change', () => {
-    refreshCustomerBalances(
-      getActiveCustomers(),
-      getJobs(),
-      getPayments()
-    );
+    refreshCustomerBalances(getActiveCustomers(), getJobs(), getPayments());
   });
 
   // History filter

@@ -1,15 +1,16 @@
 // ===== CUSTOMER & WORK TYPE LISTS =====
 function refreshCustomerList() {
   const showInactive = document.getElementById('showInactiveCustomers')?.checked;
-  const customers = getCustomers().filter(c => showInactive ? true : c.isActive !== false);
+  const customers = getCustomers().filter((c) => (showInactive ? true : c.isActive !== false));
   const tbody = document.getElementById('customerListTable');
 
-  tbody.innerHTML = customers.map(c => {
-    const typeClass = `type-${c.type.toLowerCase().replace('-', '')}`;
-    const balance = calculateCustomerBalance(c.id);
-    const isInactive = c.isActive === false;
+  tbody.innerHTML = customers
+    .map((c) => {
+      const typeClass = `type-${c.type.toLowerCase().replace('-', '')}`;
+      const balance = calculateCustomerBalance(c.id);
+      const isInactive = c.isActive === false;
 
-    return `
+      return `
       <tr class="${isInactive ? 'table-row-inactive' : ''}">
         <td><strong>${c.name}</strong></td>
         <td>${c.shortCode || '-'}</td>
@@ -28,7 +29,8 @@ function refreshCustomerList() {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   populateReportCustomers();
 }

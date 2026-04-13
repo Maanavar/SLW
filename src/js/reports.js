@@ -22,7 +22,7 @@ function getReportRange(period) {
   }
   return {
     from: getMonthStartDate(today),
-    to: getLocalDateString(today)
+    to: getLocalDateString(today),
   };
 }
 
@@ -35,25 +35,37 @@ function setReportPeriod(period) {
 
 function populateReportCustomers() {
   const select = document.getElementById('reportCustomer');
-  if (!select) return;
+  if (!select) {
+return;
+}
 
   const customers = getCustomers();
-  select.innerHTML = '<option value="">All Clients</option>' +
-    customers.map(customer => `<option value="${customer.id}">${customer.name}${customer.isActive === false ? ' (Inactive)' : ''}</option>`).join('');
+  select.innerHTML =
+    '<option value="">All Clients</option>' +
+    customers
+      .map(
+        (customer) =>
+          `<option value="${customer.id}">${customer.name}${customer.isActive === false ? ' (Inactive)' : ''}</option>`
+      )
+      .join('');
 }
 
 function updateReportModeState() {
   const mode = document.getElementById('reportMode').value;
   const customerSelect = document.getElementById('reportCustomer');
-  if (!customerSelect) return;
+  if (!customerSelect) {
+return;
+}
   customerSelect.disabled = mode !== 'client';
   customerSelect.style.opacity = mode === 'client' ? '1' : '0.6';
 }
 
 function getReportCustomer() {
   const customerId = document.getElementById('reportCustomer').value;
-  if (!customerId) return null;
-  return getCustomers().find(customer => customer.id === parseInt(customerId, 10)) || null;
+  if (!customerId) {
+return null;
+}
+  return getCustomers().find((customer) => customer.id === parseInt(customerId, 10)) || null;
 }
 
 function getFilteredReportGroups() {
@@ -65,10 +77,10 @@ function getFilteredReportGroups() {
   const fallbackRange = getReportRange(period);
   const fromDate = fromDateInput || fallbackRange.from;
   const toDate = toDateInput || fallbackRange.to;
-  let filteredJobs = getJobs().filter(job => isDateInRange(job.date, fromDate, toDate));
+  let filteredJobs = getJobs().filter((job) => isDateInRange(job.date, fromDate, toDate));
 
   if (reportMode === 'client' && reportCustomer) {
-    filteredJobs = filteredJobs.filter(job => job.customerId === reportCustomer.id);
+    filteredJobs = filteredJobs.filter((job) => job.customerId === reportCustomer.id);
   }
 
   const groups = groupJobsByCard(filteredJobs);
@@ -78,18 +90,24 @@ function getFilteredReportGroups() {
 function refreshJobReports() {
   const summaryGrid = document.getElementById('reportSummaryGrid');
   const tableBody = document.getElementById('reportTableBody');
-  if (!summaryGrid || !tableBody) return;
+  if (!summaryGrid || !tableBody) {
+return;
+}
 
-  const { groups, fromDate, toDate, period, reportMode, reportCustomer } = getFilteredReportGroups();
-  const jobs = groups.flatMap(group => group.jobs);
+  const { groups, fromDate, toDate, period, reportMode, reportCustomer } =
+    getFilteredReportGroups();
+  const jobs = groups.flatMap((group) => group.jobs);
   const totalAmount = groups.reduce((sum, group) => sum + group.totalAmount, 0);
   const totalNet = groups.reduce((sum, group) => sum + group.totalNet, 0);
   const totalCommission = groups.reduce((sum, group) => sum + group.totalCommission, 0);
   const paid = jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
   const pending = totalNet - paid;
-  const clientLabel = reportMode === 'client'
-    ? (reportCustomer ? reportCustomer.name : 'Select client')
-    : 'All Clients';
+  const clientLabel =
+    reportMode === 'client'
+      ? reportCustomer
+        ? reportCustomer.name
+        : 'Select client'
+      : 'All Clients';
 
   summaryGrid.innerHTML = `
     <div class="report-summary-card">
@@ -138,14 +156,17 @@ function refreshJobReports() {
   }
 
   const sortedGroups = groups.sort((a, b) => new Date(b.primary.date) - new Date(a.primary.date));
-  tableBody.innerHTML = sortedGroups.map(group => {
-    const job = group.primary;
-    const dcStatus = getJobDcStatus(job);
-    const lineNames = group.jobs.map(line => line.workTypeName || line.workName || 'Job').join(', ');
-    const payment = `${getJobPaymentStatus(job)}${getJobPaidAmount(job) > 0 ? ` / ${getJobPaymentMode(job)}` : ''}`;
-    const groupKey = `group-${group.key}`.replace(/[^a-z0-9\-]/gi, '_');
+  tableBody.innerHTML = sortedGroups
+    .map((group) => {
+      const job = group.primary;
+      const dcStatus = getJobDcStatus(job);
+      const lineNames = group.jobs
+        .map((line) => line.workTypeName || line.workName || 'Job')
+        .join(', ');
+      const payment = `${getJobPaymentStatus(job)}${getJobPaidAmount(job) > 0 ? ` / ${getJobPaymentMode(job)}` : ''}`;
+      const groupKey = `group-${group.key}`.replace(/[^a-z0-9\-]/gi, '_');
 
-    const mainRow = `
+      const mainRow = `
       <tr class="report-main-row" data-group-key="${groupKey}">
         <td><strong>${job.jobCardId || group.key}</strong></td>
         <td>${formatDate(job.date)}</td>
@@ -162,13 +183,17 @@ function refreshJobReports() {
       </tr>
     `;
 
-    const subRows = group.jobs.map((line, idx) => {
-      const lineCommission = line.commissionInput > 0
-        ? (line.commissionInput > 1 ? line.commissionInput : Math.round(line.amount * line.commissionInput))
-        : 0;
-      const lineNet = Math.max(0, line.amount - lineCommission);
+      const subRows = group.jobs
+        .map((line, idx) => {
+          const lineCommission =
+            line.commissionInput > 0
+              ? line.commissionInput > 1
+                ? line.commissionInput
+                : Math.round(line.amount * line.commissionInput)
+              : 0;
+          const lineNet = Math.max(0, line.amount - lineCommission);
 
-      return `
+          return `
         <tr class="report-sub-row" data-group-key="${groupKey}" style="display: none; background: var(--bg-tertiary);">
           <td style="color: var(--text-muted); font-size: 12px;">└─ Line ${idx + 1}</td>
           <td colspan="2">${line.workTypeName || line.workName || 'Job'}</td>
@@ -179,13 +204,15 @@ function refreshJobReports() {
           <td colspan="2"></td>
         </tr>
       `;
-    }).join('');
+        })
+        .join('');
 
-    return mainRow + subRows;
-  }).join('');
+      return mainRow + subRows;
+    })
+    .join('');
 
   // Wire up expand buttons
-  tableBody.querySelectorAll('.expand-group-btn').forEach(btn => {
+  tableBody.querySelectorAll('.expand-group-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -193,7 +220,7 @@ function refreshJobReports() {
       const subRows = tableBody.querySelectorAll(`.report-sub-row[data-group-key="${groupKey}"]`);
       const isExpanded = subRows[0]?.style.display !== 'none';
 
-      subRows.forEach(row => {
+      subRows.forEach((row) => {
         row.style.display = isExpanded ? 'none' : 'table-row';
       });
 
@@ -203,36 +230,41 @@ function refreshJobReports() {
 }
 
 function exportJobReportsAsExcel() {
-  const { groups, fromDate, toDate, period, reportMode, reportCustomer } = getFilteredReportGroups();
+  const { groups, fromDate, toDate, period, reportMode, reportCustomer } =
+    getFilteredReportGroups();
   if (reportMode === 'client' && !reportCustomer) {
     showToast('Report', 'Select a client first', 'error');
     return;
   }
   const rows = [
-    ['Jobcard', 'Date', 'Customer', 'Lines', 'Jobs', 'Amount', 'Net', 'Payment', 'DC Status']
+    ['Jobcard', 'Date', 'Customer', 'Lines', 'Jobs', 'Amount', 'Net', 'Payment', 'DC Status'],
   ];
 
-  groups.forEach(group => {
+  groups.forEach((group) => {
     const job = group.primary;
     rows.push([
       job.jobCardId || group.key,
       job.date,
       job.customerName,
       String(group.lineCount),
-      group.jobs.map(line => line.workTypeName || line.workName || 'Job').join(' | '),
+      group.jobs.map((line) => line.workTypeName || line.workName || 'Job').join(' | '),
       String(group.totalAmount),
       String(group.totalNet),
       `${getJobPaymentStatus(job)}${getJobPaidAmount(job) > 0 ? ` / ${getJobPaymentMode(job)}` : ''}`,
-      getJobDcStatus(job)
+      getJobDcStatus(job),
     ]);
   });
 
-  const csv = rows.map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join('\t')).join('\n');
+  const csv = rows
+    .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join('\t'))
+    .join('\n');
   const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  const clientSlug = reportCustomer ? reportCustomer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'all-clients';
+  const clientSlug = reportCustomer
+    ? reportCustomer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    : 'all-clients';
   link.download = `job-report-${period}-${clientSlug}-${fromDate}-to-${toDate}.xls`;
   document.body.appendChild(link);
   link.click();
@@ -246,7 +278,8 @@ function exportJobReportsAsPdf() {
 }
 
 function shareJobReportsToWhatsApp() {
-  const { groups, fromDate, toDate, period, reportMode, reportCustomer } = getFilteredReportGroups();
+  const { groups, fromDate, toDate, period, reportMode, reportCustomer } =
+    getFilteredReportGroups();
   if (reportMode === 'client' && !reportCustomer) {
     showToast('Report', 'Select a client first', 'error');
     return;
@@ -254,19 +287,23 @@ function shareJobReportsToWhatsApp() {
   const totalAmount = groups.reduce((sum, group) => sum + group.totalAmount, 0);
   const totalNet = groups.reduce((sum, group) => sum + group.totalNet, 0);
   const message = [
-    `Siva Lathe Works Job Report`,
+    'Siva Lathe Works Job Report',
     `Period: ${period.toUpperCase()} (${fromDate} to ${toDate})`,
     `Scope: ${reportMode === 'client' && reportCustomer ? reportCustomer.name : 'All Clients'}`,
     `Jobcards: ${groups.length}`,
     `Billed: ${formatCurrency(totalAmount)}`,
-    `Net: ${formatCurrency(totalNet)}`
+    `Net: ${formatCurrency(totalNet)}`,
   ].join('\n');
   window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
 }
 
 function clearAllJobCards() {
-  const confirmed = window.confirm('Clear all saved job cards? This will remove every job entry but keep customers, work types, and payments.');
-  if (!confirmed) return;
+  const confirmed = window.confirm(
+    'Clear all saved job cards? This will remove every job entry but keep customers, work types, and payments.'
+  );
+  if (!confirmed) {
+return;
+}
 
   localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify([]));
   refreshTodaysJobs();
@@ -282,19 +319,24 @@ function refreshPaymentReport() {
   const summaryGrid = document.getElementById('paymentSummaryGrid');
   const tableBody = document.getElementById('paymentReportTable');
   const customerSelect = document.getElementById('paymentReportCustomer');
-  if (!summaryGrid || !tableBody || !customerSelect) return;
+  if (!summaryGrid || !tableBody || !customerSelect) {
+return;
+}
 
   const customers = getCustomers();
-  customerSelect.innerHTML = '<option value="">All Customers</option>' +
-    customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  customerSelect.innerHTML =
+    '<option value="">All Customers</option>' +
+    customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
 
-  const fromDate = document.getElementById('paymentReportFromDate').value || getLocalDateString(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const fromDate =
+    document.getElementById('paymentReportFromDate').value ||
+    getLocalDateString(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
   const toDate = document.getElementById('paymentReportToDate').value || getLocalDateString();
   const customerId = customerSelect.value;
 
-  let payments = getPayments().filter(p => p.date >= fromDate && p.date <= toDate);
+  let payments = getPayments().filter((p) => p.date >= fromDate && p.date <= toDate);
   if (customerId) {
-    payments = payments.filter(p => p.customerId === parseInt(customerId, 10));
+    payments = payments.filter((p) => p.customerId === parseInt(customerId, 10));
   }
 
   payments = payments.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -302,7 +344,7 @@ function refreshPaymentReport() {
   // Calculate summary
   const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
   const byMode = {};
-  payments.forEach(p => {
+  payments.forEach((p) => {
     byMode[p.paymentMode] = (byMode[p.paymentMode] || 0) + p.amount;
   });
 
@@ -312,13 +354,17 @@ function refreshPaymentReport() {
       <strong class="report-summary-value">${formatCurrency(totalAmount)}</strong>
       <span class="report-summary-meta">${payments.length} payments</span>
     </div>
-    ${Object.entries(byMode).map(([mode, amount]) => `
+    ${Object.entries(byMode)
+      .map(
+        ([mode, amount]) => `
       <div class="report-summary-card">
         <span class="report-summary-label">${mode}</span>
         <strong class="report-summary-value">${formatCurrency(amount)}</strong>
         <span class="report-summary-meta">${mode}</span>
       </div>
-    `).join('')}
+    `
+      )
+      .join('')}
   `;
 
   if (payments.length === 0) {
@@ -332,16 +378,18 @@ function refreshPaymentReport() {
     return;
   }
 
-  tableBody.innerHTML = payments.map(payment => {
-    const coverageLabel = payment.paymentCoverageType === 'single'
-      ? `${formatDate(payment.paymentForDate)}`
-      : payment.paymentCoverageType === 'range'
-        ? `${formatDate(payment.paymentForFromDate)} to ${formatDate(payment.paymentForToDate)}`
-        : payment.paymentCoverageType === 'month'
-          ? payment.paymentForMonth
-          : '-';
+  tableBody.innerHTML = payments
+    .map((payment) => {
+      const coverageLabel =
+        payment.paymentCoverageType === 'single'
+          ? `${formatDate(payment.paymentForDate)}`
+          : payment.paymentCoverageType === 'range'
+            ? `${formatDate(payment.paymentForFromDate)} to ${formatDate(payment.paymentForToDate)}`
+            : payment.paymentCoverageType === 'month'
+              ? payment.paymentForMonth
+              : '-';
 
-    return `
+      return `
       <tr>
         <td>${formatDate(payment.date)}</td>
         <td><strong>${payment.customerName}</strong></td>
@@ -354,9 +402,10 @@ function refreshPaymentReport() {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
-  tableBody.querySelectorAll('[data-delete-payment]').forEach(btn => {
+  tableBody.querySelectorAll('[data-delete-payment]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const paymentId = parseInt(btn.dataset.deletePayment, 10);
       deletePayment(paymentId);
@@ -366,9 +415,11 @@ function refreshPaymentReport() {
 
 function deletePayment(paymentId) {
   const confirmed = window.confirm('Delete this payment record?');
-  if (!confirmed) return;
+  if (!confirmed) {
+return;
+}
 
-  const payments = getPayments().filter(p => p.id !== paymentId);
+  const payments = getPayments().filter((p) => p.id !== paymentId);
   localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
   refreshPaymentReport();
   updatePendingBadge();
@@ -378,7 +429,9 @@ function deletePayment(paymentId) {
 
 function refreshRecentPayments() {
   const container = document.getElementById('recentPaymentsList');
-  if (!container) return;
+  if (!container) {
+return;
+}
 
   const payments = getPayments().slice(-10).reverse(); // Last 10 payments, newest first
 
@@ -409,13 +462,18 @@ function refreshRecentPayments() {
           </tr>
         </thead>
         <tbody>
-          ${payments.map(payment => {
-            const coverageLabel = payment.paymentCoverageType === 'single' ? formatDate(payment.paymentForDate)
-              : payment.paymentCoverageType === 'range' ? `${formatDate(payment.paymentForFromDate)} to ${formatDate(payment.paymentForToDate)}`
-              : payment.paymentCoverageType === 'month' ? payment.paymentForMonth
-              : '-';
+          ${payments
+            .map((payment) => {
+              const coverageLabel =
+                payment.paymentCoverageType === 'single'
+                  ? formatDate(payment.paymentForDate)
+                  : payment.paymentCoverageType === 'range'
+                    ? `${formatDate(payment.paymentForFromDate)} to ${formatDate(payment.paymentForToDate)}`
+                    : payment.paymentCoverageType === 'month'
+                      ? payment.paymentForMonth
+                      : '-';
 
-            return `
+              return `
               <tr>
                 <td>${formatDate(payment.date)}</td>
                 <td><strong>${payment.customerName}</strong></td>
@@ -424,7 +482,8 @@ function refreshRecentPayments() {
                 <td>${coverageLabel}</td>
               </tr>
             `;
-          }).join('')}
+            })
+            .join('')}
         </tbody>
       </table>
     </div>

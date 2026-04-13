@@ -5,9 +5,13 @@ function refreshJobHistory() {
 
   // Populate customer filter
   const customerFilter = document.getElementById('historyCustomer');
-  customerFilter.innerHTML = '<option value="">All Customers</option>' +
+  customerFilter.innerHTML =
+    '<option value="">All Customers</option>' +
     customers
-      .map(c => `<option value="${c.id}">${c.name}${c.isActive === false ? ' (Inactive)' : ''}</option>`)
+      .map(
+        (c) =>
+          `<option value="${c.id}">${c.name}${c.isActive === false ? ' (Inactive)' : ''}</option>`
+      )
       .join('');
 
   // Set default dates (last 30 days) only if inputs are empty
@@ -30,8 +34,12 @@ function refreshJobHistory() {
   const currentMonth = getMonthInputString();
   fromDateInput.max = today;
   toDateInput.max = today;
-  if (fromMonthInput) fromMonthInput.max = currentMonth;
-  if (toMonthInput) toMonthInput.max = currentMonth;
+  if (fromMonthInput) {
+fromMonthInput.max = currentMonth;
+}
+  if (toMonthInput) {
+toMonthInput.max = currentMonth;
+}
 
   renderJobHistory(jobs);
 }
@@ -44,13 +52,13 @@ function renderJobHistory(jobs) {
   let filtered = jobs;
 
   if (fromDate) {
-    filtered = filtered.filter(j => j.date >= fromDate);
+    filtered = filtered.filter((j) => j.date >= fromDate);
   }
   if (toDate) {
-    filtered = filtered.filter(j => j.date <= toDate);
+    filtered = filtered.filter((j) => j.date <= toDate);
   }
   if (customerId) {
-    filtered = filtered.filter(j => j.customerId === parseInt(customerId));
+    filtered = filtered.filter((j) => j.customerId === parseInt(customerId));
   }
 
   filtered = filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -68,7 +76,9 @@ function renderJobHistory(jobs) {
     return;
   }
 
-  tbody.innerHTML = filtered.map(j => `
+  tbody.innerHTML = filtered
+    .map(
+      (j) => `
     <tr>
       <td class="amount">#${j.id}</td>
       <td>${formatDate(j.date)}</td>
@@ -88,5 +98,7 @@ function renderJobHistory(jobs) {
         <div class="table-subtext">${j.dcDate ? formatDate(j.dcDate) : '-'}</div>
       </td>
     </tr>
-  `).join('');
+  `
+    )
+    .join('');
 }

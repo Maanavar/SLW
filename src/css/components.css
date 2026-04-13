@@ -154,10 +154,22 @@
   justify-content: center;
 }
 
-.stat-card-icon.blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
-.stat-card-icon.green { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
-.stat-card-icon.orange { background: rgba(255, 107, 53, 0.15); color: var(--accent-primary); }
-.stat-card-icon.red { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+.stat-card-icon.blue {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-blue);
+}
+.stat-card-icon.green {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
+}
+.stat-card-icon.orange {
+  background: rgba(255, 107, 53, 0.15);
+  color: var(--accent-primary);
+}
+.stat-card-icon.red {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-red);
+}
 
 .stat-card-value {
   font-family: var(--font-mono);
@@ -166,8 +178,12 @@
   letter-spacing: -1px;
 }
 
-.stat-card-value.green { color: var(--accent-green); }
-.stat-card-value.red { color: var(--accent-red); }
+.stat-card-value.green {
+  color: var(--accent-green);
+}
+.stat-card-value.red {
+  color: var(--accent-red);
+}
 
 .stat-card-change {
   font-size: 12px;
@@ -256,8 +272,12 @@
   font-weight: 600;
 }
 
-.data-table .amount.positive { color: var(--accent-green); }
-.data-table .amount.negative { color: var(--accent-red); }
+.data-table .amount.positive {
+  color: var(--accent-green);
+}
+.data-table .amount.negative {
+  color: var(--accent-red);
+}
 
 .table-action-cell {
   text-align: center;
@@ -406,11 +426,26 @@
   font-weight: 600;
 }
 
-.badge-green { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
-.badge-red { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
-.badge-orange { background: rgba(255, 107, 53, 0.15); color: var(--accent-primary); }
-.badge-blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
-.badge-yellow { background: rgba(255, 184, 0, 0.15); color: var(--accent-secondary); }
+.badge-green {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
+}
+.badge-red {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-red);
+}
+.badge-orange {
+  background: rgba(255, 107, 53, 0.15);
+  color: var(--accent-primary);
+}
+.badge-blue {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-blue);
+}
+.badge-yellow {
+  background: rgba(255, 184, 0, 0.15);
+  color: var(--accent-secondary);
+}
 
 /* Customer type badges */
 .type-badge {
@@ -422,10 +457,22 @@
   letter-spacing: 0.3px;
 }
 
-.type-monthly { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
-.type-invoice { background: rgba(255, 184, 0, 0.15); color: var(--accent-secondary); }
-.type-party { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
-.type-cash { background: rgba(136, 153, 168, 0.15); color: var(--text-secondary); }
+.type-monthly {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-blue);
+}
+.type-invoice {
+  background: rgba(255, 184, 0, 0.15);
+  color: var(--accent-secondary);
+}
+.type-party {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
+}
+.type-cash {
+  background: rgba(136, 153, 168, 0.15);
+  color: var(--text-secondary);
+}
 
 /* Spot Work Badge */
 .spot-badge {
@@ -465,12 +512,22 @@
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(100px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.toast.success { border-left: 4px solid var(--accent-green); }
-.toast.error { border-left: 4px solid var(--accent-red); }
+.toast.success {
+  border-left: 4px solid var(--accent-green);
+}
+.toast.error {
+  border-left: 4px solid var(--accent-red);
+}
 
 .toast-icon {
   width: 24px;
@@ -716,7 +773,7 @@
   gap: 6px;
 }
 
-.dc-approval-field[style*="display: block"] {
+.dc-approval-field[style*='display: block'] {
   display: flex;
 }
 
@@ -754,7 +811,7 @@
   display: block;
 }
 
-.payment-coverage-group[data-coverage="range"].visible {
+.payment-coverage-group[data-coverage='range'].visible {
   display: grid;
 }
 
