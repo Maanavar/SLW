@@ -1,0 +1,349 @@
+.payment-form-container {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+  max-width: 1320px;
+}
+
+.form-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: 14px;
+}
+
+.form-title {
+  font-size: var(--text-2xl);
+  margin-bottom: 12px;
+}
+
+.payment-form {
+  display: grid;
+  gap: 10px;
+}
+
+.form-group {
+  display: grid;
+  gap: 4px;
+}
+
+.form-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  color: var(--text-muted);
+}
+
+.form-input,
+.form-textarea {
+  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--bg-input);
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: rgba(11, 102, 228, 0.5);
+}
+
+.form-textarea {
+  resize: vertical;
+}
+
+.balance-info {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  padding: 10px;
+}
+
+.balance-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.scoped-balance-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.balance-label {
+  color: var(--text-secondary);
+}
+
+.balance-amount {
+  font-weight: 700;
+  color: var(--accent-red);
+}
+
+.balance-amount.positive {
+  color: var(--accent-green);
+}
+
+.scope-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.scope-btn {
+  min-height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scope-btn.active {
+  border-color: rgba(11, 102, 228, 0.45);
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+.scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.btn {
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  padding: 0 12px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-primary), #3a7def);
+}
+
+.btn-submit {
+  width: fit-content;
+}
+
+.recent-payments-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: 14px;
+}
+
+.section-title {
+  font-size: var(--text-lg);
+  margin-bottom: 8px;
+}
+
+.recent-payments-list {
+  display: grid;
+  gap: 8px;
+}
+
+.payment-item {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.payment-info {
+  display: grid;
+  gap: 2px;
+}
+
+.payment-date {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.payment-mode {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.payment-for {
+  font-size: var(--text-sm);
+  color: var(--accent-primary);
+}
+
+.payment-notes {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.payment-amount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent-green);
+}
+
+.payment-history-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: 14px;
+}
+
+.payment-report-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: 14px;
+}
+
+.report-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+.report-controls > div {
+  flex: 1;
+  min-width: 200px;
+}
+
+.payment-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.payment-summary-item {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.payment-summary-item h3 {
+  margin: 0 0 8px 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.payment-summary-item p {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: bold;
+}
+
+.payment-jobcards {
+  margin-top: 20px;
+}
+
+.payment-jobcards-title {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: var(--text-lg);
+}
+
+.payment-jobcards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.payment-jobcard {
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.payment-jobcard:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.payment-jobcard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.payment-jobcard-id {
+  font-weight: bold;
+}
+
+.payment-jobcard-body {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payment-jobcard-body > div:first-child {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.payment-jobcard-body > div {
+  font-size: var(--text-sm);
+}
+
+.jobcard-link-btn {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+}
+
+.jobcard-link-btn:hover {
+  opacity: 0.8;
+}
+
+@media (max-width: 1080px) {
+  .payment-form-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .scope-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .scope-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-submit {
+    width: 100%;
+  }
+
+  .payment-item {
+    flex-direction: column;
+  }
+}
