@@ -1,9 +1,28 @@
 .payment-form-container {
   display: grid;
   gap: 32px;
-  max-width: 800px;
-  margin: 0 auto;
   padding: 24px;
+}
+
+.payment-report-container {
+  display: grid;
+  gap: 20px;
+}
+
+.payment-report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.payment-report-header .form-title {
+  margin: 0;
+}
+
+.btn-record-payment {
+  white-space: nowrap;
+  height: 44px;
 }
 
 .form-section {
