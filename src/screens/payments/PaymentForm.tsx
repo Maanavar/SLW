@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
+import { DataTable, Column } from '@/components/ui/DataTable';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { PaymentModeGroup } from '@/components/ui/PaymentModeGroup';
 import { formatCurrency } from '@/lib/currencyUtils';
@@ -12,7 +13,7 @@ import {
   isDateInRange,
 } from '@/lib/dateUtils';
 import { calculateCustomerBalance, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
-import { Customer, Job, Payment } from '@/types';
+import type { Customer, Job, Payment } from '@/types';
 import './PaymentForm.css';
 
 type PaymentMode = 'cash' | 'upi' | 'bank' | 'cheque';
@@ -98,12 +99,11 @@ export function PaymentForm() {
     }
   }, [paymentScope, scopedPendingAmount]);
 
-  const recentPayments = useMemo(() => {
+  const allPayments = useMemo(() => {
     if (!selectedCustomer) return [];
     return payments
       .filter((p) => p.customerId === selectedCustomer.id)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [selectedCustomer, payments]);
 
   const handleSubmit = (e: FormEvent) => {
@@ -454,29 +454,37 @@ export function PaymentForm() {
         </form>
       </div>
 
-      {selectedCustomer && recentPayments.length > 0 ? (
-        <div className="recent-payments-section">
-          <h3 className="section-title">Recent Payments</h3>
-          <div className="recent-payments-list">
-            {recentPayments.map((payment) => (
-              <div key={payment.id} className="payment-item">
-                <div className="payment-info">
-                  <div className="payment-date">{payment.date}</div>
-                  <div className="payment-mode">{payment.paymentMode}</div>
-                  {payment.paymentForMonth ? (
-                    <div className="payment-for">For month {payment.paymentForMonth}</div>
-                  ) : null}
-                  {payment.paymentForFromDate && payment.paymentForDate ? (
-                    <div className="payment-for">
-                      For range {payment.paymentForFromDate} to {payment.paymentForDate}
-                    </div>
-                  ) : null}
-                  {payment.notes ? <div className="payment-notes">{payment.notes}</div> : null}
-                </div>
-                <div className="payment-amount">{formatCurrency(payment.amount)}</div>
-              </div>
-            ))}
-          </div>
+      {selectedCustomer && allPayments.length > 0 ? (
+        <div className="payment-history-section">
+          <h3 className="section-title">Payment History</h3>
+          <DataTable<Payment>
+            columns={[
+              { key: 'date', label: 'Date', sortable: true },
+              {
+                key: 'amount',
+                label: 'Amount',
+                render: (value) => formatCurrency(value as number),
+              },
+              { key: 'paymentMode', label: 'Mode', sortable: true },
+              {
+                key: 'paymentForMonth',
+                label: 'Period',
+                render: (value, row) => {
+                  if (row.paymentForMonth) return `Month: ${row.paymentForMonth}`;
+                  if (row.paymentForFromDate && row.paymentForDate) {
+                    return `Range: ${row.paymentForFromDate} to ${row.paymentForDate}`;
+                  }
+                  return 'Manual';
+                },
+              },
+              { key: 'notes', label: 'Notes' },
+            ]}
+            data={allPayments}
+            keyFn={(item) => item.id}
+            sortBy="date"
+            sortOrder="desc"
+            emptyMessage="No payments recorded for this customer"
+          />
         </div>
       ) : null}
     </div>

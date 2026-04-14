@@ -67,10 +67,6 @@ export function JobCardDetailsModal({
               <strong>{primary.date}</strong>
             </div>
             <div>
-              <span className="job-card-detail-label">Lines</span>
-              <strong>{sortedJobs.length}</strong>
-            </div>
-            <div>
               <span className="job-card-detail-label">Payment Status</span>
               <StatusBadge status={payment.status} />
             </div>

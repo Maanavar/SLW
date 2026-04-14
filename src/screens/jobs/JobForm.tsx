@@ -332,7 +332,7 @@ export function JobForm() {
                 items={customers}
                 value={selectedCustomer}
                 onChange={setSelectedCustomer}
-                getLabel={(c) => `${c.name} (${c.shortCode})`}
+                getLabel={(c) => (c.shortCode ? `${c.name} (${c.shortCode})` : c.name)}
                 getKey={(c) => String(c.id)}
                 placeholder="Select customer..."
               />

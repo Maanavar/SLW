@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useToast } from '@/hooks/useToast';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { formatCurrency } from '@/lib/currencyUtils';
@@ -33,7 +34,8 @@ function shiftDate(value: string, days: number) {
 }
 
 export function HistoryScreen() {
-  const { jobs, getCustomer } = useDataStore();
+  const { jobs, getCustomer, deleteJob } = useDataStore();
+  const toast = useToast();
   const today = getLocalDateString(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -77,6 +79,30 @@ export function HistoryScreen() {
     () => groups.find((group) => group.key === selectedCardId) || null,
     [groups, selectedCardId]
   );
+
+  const handleDeleteCard = () => {
+    if (!selectedGroup) return;
+
+    const cardId = selectedGroup.primary.jobCardId || `LEGACY-${selectedGroup.primary.id}`;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete JobCard ${cardId}?\n\nThis will remove ${selectedGroup.jobs.length} job line(s) and cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      selectedGroup.jobs.forEach((job) => {
+        deleteJob(job.id);
+      });
+      toast.success('Success', `JobCard ${cardId} deleted`);
+      setSelectedCardId(null);
+    } catch (error) {
+      console.error('Error deleting job card:', error);
+      toast.error('Error', 'Failed to delete job card');
+    }
+  };
 
   const columns: Column<CardHistoryRow>[] = [
     { key: 'date', label: 'Date', sortable: true },
@@ -210,8 +236,7 @@ export function HistoryScreen() {
         jobs={selectedGroup?.jobs || null}
         onClose={() => setSelectedCardId(null)}
         getCustomer={getCustomer}
-        onEdit={undefined}
-        onDelete={undefined}
+        onDelete={handleDeleteCard}
       />
     </div>
   );
