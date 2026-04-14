@@ -723,46 +723,6 @@ export function PaymentForm() {
           emptyMessage="No payment data found in this period"
         />
 
-        {groupedJobCards.length > 0 ? (
-          <div className="payment-jobcards">
-            <h3 className="payment-jobcards-title">Job Cards</h3>
-            <div className="payment-jobcards-grid">
-              {groupedJobCards.map((group) => {
-                const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-                const cardCustomerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
-                const payment = getJobCardPaymentSummary(group.jobs);
-
-                return (
-                  <div
-                    key={group.key}
-                    onClick={() => setSelectedCardKey(group.key)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setSelectedCardKey(group.key);
-                      }
-                    }}
-                    className="payment-jobcard"
-                  >
-                    <div className="payment-jobcard-header">
-                      <span className="payment-jobcard-id">{cardId}</span>
-                      <StatusBadge status={payment.status} />
-                    </div>
-                    <div className="payment-jobcard-body">
-                      <div>{cardCustomerName}</div>
-                      <div>{group.lineCount} lines</div>
-                      <div>Net: {formatCurrency(payment.net)}</div>
-                      <div>Paid: {formatCurrency(payment.paid)}</div>
-                      <div>Pending: {formatCurrency(payment.pending)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <JobCardDetailsModal
