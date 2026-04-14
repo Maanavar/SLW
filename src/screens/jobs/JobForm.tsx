@@ -34,6 +34,12 @@ function generateJobCardId(jobDate: string, existingJobs: Job[]) {
   return `${prefix}${String(maxSerial + 1).padStart(3, '0')}`;
 }
 
+function isCommissionApplicableCustomer(customer: Customer | null): boolean {
+  if (!customer) return false;
+  const commissionCustomers = ['RMP', 'WW', 'NM'];
+  return commissionCustomers.includes(customer.shortCode);
+}
+
 export function JobForm() {
   const { getActiveCustomers, getCustomer, jobs, addJob, deleteJob, clearAllJobs } = useDataStore();
   const toast = useToast();
@@ -64,6 +70,7 @@ export function JobForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
+  const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
 
   const summary = {
     totalAmount: jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0),
@@ -115,7 +122,9 @@ export function JobForm() {
   };
 
   const handleLineChange = (updatedLine: JobLineState) => {
-    setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? updatedLine : line)));
+    // If commission is not applicable, set it to 0
+    const finalLine = showCommissionFields ? updatedLine : { ...updatedLine, commission: '0' };
+    setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -151,7 +160,7 @@ export function JobForm() {
       return;
     }
 
-    if (jobLines.some((line) => line.commission === '' || parseFloat(line.commission) < 0)) {
+    if (showCommissionFields && jobLines.some((line) => line.commission === '' || parseFloat(line.commission) < 0)) {
       toast.error('Error', 'All job lines must include commission value');
       return;
     }
@@ -391,6 +400,7 @@ export function JobForm() {
                 onChange={handleLineChange}
                 onRemove={() => handleRemoveLine(line.id)}
                 lineNumber={index + 1}
+                showCommission={showCommissionFields}
               />
             ))}
           </div>
@@ -400,17 +410,21 @@ export function JobForm() {
               <span className="summary-label">Total Amount</span>
               <span className="summary-value">{formatCurrency(summary.totalAmount)}</span>
             </div>
+            {showCommissionFields && (
+              <>
+                <div className="summary-item">
+                  <span className="summary-label">Commission (Extra)</span>
+                  <span className="summary-value">{formatCurrency(summary.totalCommission)}</span>
+                </div>
+                <div className="summary-item">
+                  <span className="summary-label">Final Bill (Amt + Comm)</span>
+                  <span className="summary-value">{formatCurrency(summary.finalValue)}</span>
+                </div>
+              </>
+            )}
             <div className="summary-item">
-              <span className="summary-label">Commission (Extra)</span>
-              <span className="summary-value">{formatCurrency(summary.totalCommission)}</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Net Value</span>
+              <span className="summary-label">{showCommissionFields ? 'Net Value' : 'Total Value'}</span>
               <span className="summary-value highlight">{formatCurrency(summary.netValue)}</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Final Bill (Amt + Comm)</span>
-              <span className="summary-value">{formatCurrency(summary.finalValue)}</span>
             </div>
           </div>
         </div>

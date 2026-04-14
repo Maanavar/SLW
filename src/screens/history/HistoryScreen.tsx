@@ -80,6 +80,12 @@ export function HistoryScreen() {
     [groups, selectedCardId]
   );
 
+  const handleEditCard = () => {
+    if (!selectedGroup) return;
+    toast.info('Info', 'Edit functionality coming soon');
+    setSelectedCardId(null);
+  };
+
   const handleDeleteCard = () => {
     if (!selectedGroup) return;
 
@@ -236,6 +242,7 @@ export function HistoryScreen() {
         jobs={selectedGroup?.jobs || null}
         onClose={() => setSelectedCardId(null)}
         getCustomer={getCustomer}
+        onEdit={handleEditCard}
         onDelete={handleDeleteCard}
       />
     </div>
