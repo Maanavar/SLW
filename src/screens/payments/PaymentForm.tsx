@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
-import { DataTable, Column } from '@/components/ui/DataTable';
-import { StatusBadge } from '@/components/ui/Badge';
+import { useToast } from '@/hooks/useToast';
+import { DataTable } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
-import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
+import { getPaymentDisplayId, formatPaymentBreakdown } from '@/lib/paymentUtils';
 import { getReportRange, getPaymentsInRange, getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobCardPaymentSummary, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobPaidAmount } from '@/lib/jobUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import type { Payment } from '@/types';
 import { RecordPaymentModal } from './RecordPaymentModal';
+import { PaymentEditModal } from './PaymentEditModal';
 import './PaymentForm.css';
 
 type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'halfyear' | 'year' | 'range' | 'all';
@@ -22,7 +23,8 @@ interface PaymentDisplay extends Payment {
 }
 
 export function PaymentForm() {
-  const { payments, jobs, getCustomer } = useDataStore();
+  const { payments, jobs, getCustomer, deletePayment } = useDataStore();
+  const toast = useToast();
   const today = getLocalDateString(new Date());
 
   // Payment Report state
@@ -31,6 +33,7 @@ export function PaymentForm() {
   const [reportRangeTo, setReportRangeTo] = useState(today);
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentDisplay | null>(null);
 
   // Payment Report calculations
   const reportRange = useMemo(() => {
@@ -70,6 +73,32 @@ export function PaymentForm() {
     () => groupedJobCards.find((group) => group.key === selectedCardKey) || null,
     [groupedJobCards, selectedCardKey]
   );
+
+  const handleDeletePayment = async (payment: PaymentDisplay) => {
+    if (payment.id <= 0) {
+      toast.error('Error', 'Invalid payment ID');
+      return;
+    }
+
+    const isJobPayment = payment.source === 'Job Paid Entry';
+    const jobPaymentWarning = isJobPayment
+      ? '\n\nNote: This only removes the payment record. Edit the job if you need to change the job amount.'
+      : '';
+
+    const confirmed = window.confirm(
+      `Delete payment of ${formatCurrency(payment.amount)}?${jobPaymentWarning}\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deletePayment(payment.id);
+      toast.success('Success', 'Payment deleted successfully');
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Error', 'Failed to delete payment');
+    }
+  };
 
   const filteredReportPayments = useMemo(() => {
     const inRange = getPaymentsInRange(payments, reportRange.from, reportRange.to);
@@ -121,7 +150,7 @@ export function PaymentForm() {
   }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
 
   const reportSummary = useMemo(() => {
-    const total = reportPaymentsWithNames.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalReceived = reportPaymentsWithNames.reduce((sum, p) => sum + (p.amount || 0), 0);
     const byCash = reportPaymentsWithNames
       .filter((p) => p.paymentMode === 'Cash')
       .reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -135,8 +164,15 @@ export function PaymentForm() {
       .filter((p) => p.paymentMode === 'Cheque')
       .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-    return { total, byCash, byBank, byUPI, byCheque };
-  }, [reportPaymentsWithNames]);
+    // Calculate total work amount from jobs in range
+    const totalWorkAmount = groupedJobCards.reduce((sum, group) => {
+      return sum + group.jobs.reduce((jobSum, job) => jobSum + (job.amount || 0), 0);
+    }, 0);
+
+    const balanceToReceive = totalWorkAmount - totalReceived;
+
+    return { totalReceived, byCash, byBank, byUPI, byCheque, totalWorkAmount, balanceToReceive };
+  }, [reportPaymentsWithNames, groupedJobCards]);
 
   return (
     <div className="payment-form-container">
@@ -202,8 +238,16 @@ export function PaymentForm() {
 
         <div className="payment-summary">
           <div className="payment-summary-item">
+            <h3>Total Work</h3>
+            <p>{formatCurrency(reportSummary.totalWorkAmount)}</p>
+          </div>
+          <div className="payment-summary-item">
             <h3>Total Received</h3>
-            <p>{formatCurrency(reportSummary.total)}</p>
+            <p>{formatCurrency(reportSummary.totalReceived)}</p>
+          </div>
+          <div className="payment-summary-item highlight">
+            <h3>Balance to Receive</h3>
+            <p>{formatCurrency(reportSummary.balanceToReceive)}</p>
           </div>
           <div className="payment-summary-item">
             <h3>Cash</h3>
@@ -226,6 +270,11 @@ export function PaymentForm() {
         <DataTable<PaymentDisplay>
           columns={[
             { key: 'date', label: 'Date', sortable: true },
+            {
+              key: 'id',
+              label: 'Payment ID',
+              render: (_, row) => getPaymentDisplayId(row),
+            },
             {
               key: 'jobCardId',
               label: 'JobCard',
@@ -251,9 +300,51 @@ export function PaymentForm() {
               label: 'Amount',
               render: (value) => formatCurrency(value as number),
             },
-            { key: 'paymentMode', label: 'Mode', sortable: true },
+            {
+              key: 'paymentMode',
+              label: 'Mode / Breakdown',
+              render: (_, row) => formatPaymentBreakdown(row),
+              sortable: true,
+            },
             { key: 'source', label: 'Source', sortable: true },
             { key: 'notes', label: 'Notes' },
+            {
+              key: 'id',
+              label: 'Actions',
+              render: (_, row) => {
+                const isJobPayment = row.source !== 'Payment Voucher';
+                return (
+                  <div className="payment-table-actions">
+                    {!isJobPayment && (
+                      <button
+                        type="button"
+                        className="icon-btn icon-edit"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedPayment(row);
+                        }}
+                        title="Edit payment"
+                        aria-label="Edit"
+                      >
+                        ✎
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="icon-btn icon-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePayment(row);
+                      }}
+                      title="Delete payment"
+                      aria-label="Delete"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                );
+              },
+            },
           ]}
           data={reportPaymentsWithNames}
           keyFn={(item) => item.id}
@@ -266,6 +357,13 @@ export function PaymentForm() {
       <RecordPaymentModal
         isOpen={isRecordPaymentOpen}
         onClose={() => setIsRecordPaymentOpen(false)}
+      />
+
+      <PaymentEditModal
+        isOpen={selectedPayment !== null}
+        payment={selectedPayment}
+        customerName={selectedPayment?.customerName || ''}
+        onClose={() => setSelectedPayment(null)}
       />
 
       <JobCardDetailsModal

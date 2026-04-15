@@ -1,0 +1,25 @@
+
+
+**Apps/services that should be running on laptop**
+1. Docker Desktop app
+2. PostgreSQL container (`slw-postgres`) via Docker
+3. Backend dev server (port `3000`)
+4. Frontend Vite dev server (port `5173`)
+5. Optional: Adminer UI (port `8081`)
+
+
+**URLs to use**
+1. Frontend: `http://localhost:5173`
+2. Backend health: `http://localhost:3000/api/health`
+3. Backend DB health: `http://localhost:3000/api/health/db`
+4. Adminer: `http://localhost:8081`
+
+**What else to ensure**
+1. `VITE_ADMIN_API_KEY` (frontend) and `ADMIN_API_KEY` (backend) should match (your default is `slw-local-admin-key`).
+2. Ports `5173`, `3000`, `5432`, `8081` must be free.
+3. To stop everything:
+
+
+
+npm run dev:backend
+npm run dev

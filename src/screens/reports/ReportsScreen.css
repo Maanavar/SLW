@@ -1,0 +1,357 @@
+.period-select,
+.customer-select {
+  display: grid;
+  gap: 4px;
+}
+
+.customer-select {
+  min-width: 250px;
+}
+
+.commission-checkbox {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.checkbox-label input[type='checkbox'] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-primary);
+}
+
+.commission-note {
+  display: block;
+  margin-top: 4px;
+  color: #666;
+  font-size: 12px;
+}
+
+.range-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 12px 0;
+}
+
+.report-actions .btn {
+  min-height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 0 12px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-actions .btn:hover {
+  border-color: rgba(11, 102, 228, 0.45);
+  color: var(--accent-primary);
+}
+
+.reports-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 12px;
+}
+
+.summary-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.summary-card-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+}
+
+.summary-card-value {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.reports-details {
+  padding: 0 12px 12px;
+}
+
+.details-title {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.job-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 10px;
+}
+
+.job-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-card);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.job-card-clickable {
+  cursor: pointer;
+}
+
+.job-card-clickable:hover {
+  border-color: rgba(11, 102, 228, 0.45);
+}
+
+.job-card .card-header,
+.job-card .card-footer {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+}
+
+.job-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-card .card-title {
+  font-size: var(--text-base);
+}
+
+.card-subtitle {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.card-header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-count,
+.footer-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.job-card .card-body {
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
+.job-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.job-line:last-child {
+  border-bottom: none;
+}
+
+.job-work {
+  color: var(--text-primary);
+}
+
+.job-amount,
+.footer-value {
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.job-card .card-footer {
+  display: grid;
+  grid-template-columns: repeat(3, auto 1fr);
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.empty-state {
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.history-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.history-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.history-detail-meta > div {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  padding: 8px;
+}
+
+.history-detail-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+}
+
+.history-detail-table {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.history-detail-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.history-detail-table th,
+.history-detail-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+  font-size: var(--text-sm);
+}
+
+.history-detail-table th {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  font-size: var(--text-xs);
+}
+
+.history-detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.export-fields-selector {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.fields-selector-title {
+  font-size: var(--text-lg);
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.fields-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.field-group-title {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.field-group-items {
+  display: grid;
+  gap: 6px;
+}
+
+.field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.field-checkbox:hover {
+  background-color: var(--bg-card);
+}
+
+.field-checkbox input[type='checkbox'] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .customer-select {
+    min-width: 0;
+  }
+
+  .range-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .job-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}

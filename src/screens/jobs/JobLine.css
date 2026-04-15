@@ -1,0 +1,117 @@
+.job-line-container {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  display: grid;
+  grid-template-columns: 34px minmax(200px, 1.8fr) minmax(120px, 0.8fr) minmax(140px, 1fr) minmax(160px, 1fr) 34px;
+  gap: 10px;
+  align-items: end;
+}
+
+.line-number {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.line-field {
+  display: grid;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.35px;
+}
+
+.line-input {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  padding: 0 10px;
+  background: var(--bg-input);
+}
+
+.line-input:focus {
+  outline: none;
+  border-color: rgba(11, 102, 228, 0.48);
+}
+
+.amount-field,
+.commission-field {
+  position: relative;
+}
+
+.suggestion-chip {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 10px;
+  color: var(--accent-primary);
+  border: 1px dashed rgba(11, 102, 228, 0.4);
+  border-radius: 8px;
+  padding: 3px 8px;
+  background: rgba(11, 102, 228, 0.08);
+}
+
+.suggestion-chip-action {
+  cursor: pointer;
+}
+
+.suggestion-chip-action:hover {
+  background: rgba(11, 102, 228, 0.14);
+}
+
+.btn-remove {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--accent-red);
+  cursor: pointer;
+}
+
+.btn-remove:hover {
+  border-color: var(--accent-red);
+}
+
+@media (max-width: 1180px) {
+  .job-line-container {
+    grid-template-columns: 30px 1fr 1fr;
+  }
+
+  .work-type-field,
+  .quantity-field,
+  .amount-field,
+  .commission-field {
+    grid-column: span 1;
+  }
+
+  .btn-remove {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 768px) {
+  .job-line-container {
+    grid-template-columns: 1fr;
+  }
+
+  .line-number {
+    margin-bottom: 2px;
+  }
+
+  .suggestion-chip {
+    margin-top: 3px;
+  }
+}

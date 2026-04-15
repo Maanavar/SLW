@@ -1,0 +1,117 @@
+.payment-edit-form {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.form-group {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.form-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+.form-input,
+.form-textarea {
+  min-height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px var(--space-md);
+  background: var(--bg-input);
+  font-size: var(--text-base);
+  font-family: var(--font-main);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 88px;
+}
+
+.form-display {
+  min-height: 40px;
+  padding: 10px var(--space-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.payment-edit-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-color);
+  margin-top: var(--space-md);
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-height: 36px;
+}
+
+.btn:hover {
+  background: var(--border-color);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(11, 102, 228, 0.24);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 16px rgba(11, 102, 228, 0.32);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: rgba(201, 55, 44, 0.1);
+  color: var(--accent-red);
+  border: 1px solid rgba(201, 55, 44, 0.2);
+}
+
+.btn-danger:hover {
+  background: rgba(201, 55, 44, 0.16);
+  border-color: rgba(201, 55, 44, 0.35);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

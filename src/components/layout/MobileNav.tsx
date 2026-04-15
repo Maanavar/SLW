@@ -76,6 +76,51 @@ const navItems: MobileNavItem[] = [
       </svg>
     ),
   },
+  {
+    path: '/finance',
+    label: 'Finance',
+    icon: (
+      <svg {...iconProps}>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M7 11h10" />
+        <path d="M7 15h10" />
+        <path d="M7 7h10" />
+      </svg>
+    ),
+  },
+  {
+    path: '/expenses',
+    label: 'Expenses',
+    icon: (
+      <svg {...iconProps}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v10M7 12h10" />
+      </svg>
+    ),
+  },
+  {
+    path: '/commission',
+    label: 'Commission',
+    icon: (
+      <svg {...iconProps}>
+        <circle cx="9" cy="8" r="2.5" />
+        <circle cx="15" cy="8" r="2.5" />
+        <path d="M9 12c0 1.8-1.5 3.5-3.5 3.5S2 13.8 2 12" />
+        <path d="M15 12c0 1.8 1.5 3.5 3.5 3.5S22 13.8 22 12" />
+        <path d="M12 14v4" />
+      </svg>
+    ),
+  },
+  {
+    path: '/logger',
+    label: 'Logger',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M4 4h16v16H4z" />
+        <path d="M8 8h8M8 12h8M8 16h5" />
+      </svg>
+    ),
+  },
 ];
 
 export function MobileNav() {

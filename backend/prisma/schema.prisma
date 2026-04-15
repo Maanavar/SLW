@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String        @db.VarChar(120)
+  email        String        @unique @db.VarChar(160)
+  role         String        @default("admin") @db.VarChar(20)
+  passwordHash String?       @db.VarChar(255)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  activityLogs ActivityLog[]
+
+  @@map("users")
+}
+
+model Customer {
+  id            Int       @id @default(autoincrement())
+  name          String    @db.VarChar(120)
+  shortCode     String    @db.VarChar(20)
+  type          String    @db.VarChar(20)
+  hasCommission Boolean   @default(false)
+  requiresDc    Boolean   @default(false)
+  notes         String    @default("")
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  jobs          Job[]
+  payments      Payment[]
+
+  @@index([name])
+  @@index([shortCode])
+  @@map("customers")
+}
+
+model WorkType {
+  id          Int      @id @default(autoincrement())
+  category    String   @db.VarChar(60)
+  name        String   @db.VarChar(120)
+  shortCode   String   @db.VarChar(20)
+  defaultUnit String   @db.VarChar(30)
+  defaultRate Float
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+  @@map("work_types")
+}
+
+model Job {
+  id               Int       @id @default(autoincrement())
+  customerId       Int
+  workTypeName     String    @db.VarChar(120)
+  workName         String?   @db.VarChar(60)
+  quantity         Float
+  amount           Float
+  commissionAmount Float     @default(0)
+  netAmount        Float?
+  date             String    @db.VarChar(10)
+  paymentStatus    String?   @db.VarChar(20)
+  paymentMode      String?   @db.VarChar(20)
+  paidAmount       Float?
+  workMode         String?   @db.VarChar(20)
+  isSpotWork       Boolean   @default(false)
+  jobCardId        String?   @db.VarChar(30)
+  jobCardLine      Int?
+  dcNo             String?   @db.VarChar(40)
+  vehicleNo        String?   @db.VarChar(40)
+  dcDate           String?   @db.VarChar(10)
+  dcApproval       Boolean?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([date])
+  @@index([customerId, date])
+  @@index([jobCardId])
+  @@map("jobs")
+}
+
+model Payment {
+  id                 Int      @id @default(autoincrement())
+  customerId         Int
+  amount             Float
+  date               String   @db.VarChar(10)
+  paymentMode        String   @db.VarChar(20)
+  referenceNumber    String?  @db.VarChar(60)
+  paymentForMonth    String?  @db.VarChar(20)
+  paymentForDate     String?  @db.VarChar(10)
+  paymentForFromDate String?  @db.VarChar(10)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([date])
+  @@index([customerId, date])
+  @@map("payments")
+}
+
+model Expense {
+  id           Int      @id @default(autoincrement())
+  category     String   @db.VarChar(20)
+  description  String   @db.VarChar(255)
+  amount       Float
+  date         String   @db.VarChar(10)
+  isRecurring  Boolean  @default(false)
+  recurringDay Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([date])
+  @@index([category, date])
+  @@index([isRecurring])
+  @@map("expenses")
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  actorUserId Int?
+  actorName   String?  @db.VarChar(120)
+  entityType  String   @db.VarChar(50)
+  entityId    String?  @db.VarChar(50)
+  action      String   @db.VarChar(50)
+  message     String?  @db.VarChar(500)
+  before      Json?
+  after       Json?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([createdAt])
+  @@index([entityType, createdAt])
+  @@map("activity_logs")
+}

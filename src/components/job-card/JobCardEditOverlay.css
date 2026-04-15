@@ -1,0 +1,425 @@
+.job-card-edit-modal {
+  max-width: 1200px;
+  width: 95vw;
+}
+
+.job-card-edit-modal .modal-header {
+  padding: var(--space-lg);
+  background:
+    linear-gradient(180deg, rgba(11, 102, 228, 0.08), transparent 68%),
+    var(--bg-card);
+}
+
+html[data-theme='dark'] .job-card-edit-modal .modal-header {
+  background:
+    linear-gradient(180deg, rgba(108, 168, 255, 0.14), transparent 68%),
+    var(--bg-card);
+}
+
+.job-card-edit-modal .modal-title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.job-card-edit-modal .modal-body {
+  padding: var(--space-lg);
+}
+
+.edit-card-form {
+  display: grid;
+  gap: var(--space-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+}
+
+.edit-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: var(--space-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.edit-header-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.edit-field-group {
+  display: grid;
+  gap: 4px;
+}
+
+.edit-field-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  font-weight: 600;
+}
+
+.edit-field-display {
+  min-height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+
+.edit-mode-buttons {
+  min-height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.edit-mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-height: 32px;
+}
+
+.edit-mode-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px rgba(11, 102, 228, 0.32);
+}
+
+html[data-theme='dark'] .edit-mode-btn.active {
+  box-shadow: inset 0 0 0 1px rgba(108, 168, 255, 0.44);
+}
+
+.edit-mode-btn:hover:not(.active) {
+  background: var(--bg-input);
+}
+
+.edit-job-details {
+  display: grid;
+  gap: 6px;
+}
+
+.edit-job-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-section-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.35px;
+  font-weight: 700;
+}
+
+.edit-add-line-btn {
+  min-height: 32px;
+  border: 1px solid rgba(11, 102, 228, 0.35);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  padding: 0 12px;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.edit-add-line-btn:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.edit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  background:
+    linear-gradient(180deg, rgba(11, 102, 228, 0.03), transparent 55%),
+    var(--bg-card);
+}
+
+html[data-theme='dark'] .edit-summary-grid {
+  background:
+    linear-gradient(180deg, rgba(108, 168, 255, 0.09), transparent 55%),
+    var(--bg-card);
+}
+
+.edit-summary-grid.two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.edit-summary-item {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  padding: 10px;
+}
+
+.edit-summary-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  font-weight: 600;
+}
+
+.edit-summary-value {
+  margin-top: 2px;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.edit-summary-item:last-child .edit-summary-value {
+  color: var(--accent-primary);
+}
+
+.edit-dc-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.edit-dc-checkbox-wrapper {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+}
+
+.edit-dc-checkbox-wrapper input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.edit-dc-checkbox-wrapper label {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.edit-payment-section {
+  display: grid;
+  gap: 8px;
+}
+
+.edit-payment-label {
+  margin-bottom: 2px;
+}
+
+.edit-payment-status-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.edit-payment-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--text-base);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.edit-payment-btn.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: #fff;
+}
+
+html[data-theme='dark'] .edit-payment-btn.active {
+  color: #091321;
+}
+
+.edit-payment-btn:hover:not(.active) {
+  background: var(--bg-input);
+}
+
+.edit-paid-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.edit-input,
+.edit-select,
+.edit-textarea {
+  min-height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px var(--space-md);
+  font-size: var(--text-base);
+  font-family: var(--font-main);
+  font-weight: 500;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.edit-textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.edit-input::placeholder,
+.edit-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.edit-input:focus,
+.edit-select:focus,
+.edit-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.edit-notes-section {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.edit-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.edit-btn-save,
+.edit-btn-cancel {
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  border: none;
+  cursor: pointer;
+}
+
+.edit-btn-save {
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(11, 102, 228, 0.24);
+}
+
+.edit-btn-save:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 16px rgba(11, 102, 228, 0.32);
+}
+
+.edit-btn-save:active:not(:disabled) {
+  filter: brightness(0.96);
+  box-shadow: 0 2px 8px rgba(11, 102, 228, 0.16);
+}
+
+.edit-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-btn-cancel {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.edit-btn-cancel:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.edit-btn-cancel:active:not(:disabled) {
+  background: var(--border-color);
+}
+
+.edit-btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-job-details .job-line-container {
+  background: var(--bg-secondary);
+}
+
+@media (max-width: 1024px) {
+  .edit-header-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 840px) {
+  .edit-summary-grid,
+  .edit-summary-grid.two-column,
+  .edit-dc-fields,
+  .edit-paid-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .job-card-edit-modal .modal-title {
+    font-size: var(--text-lg);
+  }
+
+  .job-card-edit-modal .modal-body {
+    padding: 12px;
+  }
+
+  .edit-card-form {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .edit-header-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-actions {
+    justify-content: stretch;
+  }
+
+  .edit-btn-save,
+  .edit-btn-cancel {
+    flex: 1;
+  }
+}

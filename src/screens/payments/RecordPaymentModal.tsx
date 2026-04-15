@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { PaymentModeGroup } from '@/components/ui/PaymentModeGroup';
 import { formatCurrency } from '@/lib/currencyUtils';
+import { generateMeaningfulPaymentId } from '@/lib/paymentUtils';
 import {
   getLocalDateString,
   getMonthInputString,
@@ -41,13 +42,18 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
   const { getActiveCustomers, payments, addPayment, jobs, updateJob } = useDataStore();
   const toast = useToast();
 
-  const customers = getActiveCustomers();
+  const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
   const today = getLocalDateString(new Date());
   const currentMonth = getMonthInputString(new Date());
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [amount, setAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
+  const [useBreakdown, setUseBreakdown] = useState(false);
+  const [breakdownCash, setBreakdownCash] = useState('');
+  const [breakdownUPI, setBreakdownUPI] = useState('');
+  const [breakdownBank, setBreakdownBank] = useState('');
+  const [breakdownCheque, setBreakdownCheque] = useState('');
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentScope, setPaymentScope] = useState<PaymentScope>('manual');
   const [weekFrom, setWeekFrom] = useState(getWeekStartDate(new Date()));
@@ -112,7 +118,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
     }
   }, [paymentScope, scopedPendingAmount]);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!selectedCustomer) {
@@ -120,9 +126,31 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
       return;
     }
 
-    if (!amount || parseFloat(amount) <= 0) {
-      toast.error('Error', 'Please enter a valid amount');
-      return;
+    let totalAmount = 0;
+    let paymentModeToUse: PaymentMode = paymentMode;
+
+    if (useBreakdown) {
+      const cash = parseFloat(breakdownCash) || 0;
+      const upi = parseFloat(breakdownUPI) || 0;
+      const bank = parseFloat(breakdownBank) || 0;
+      const cheque = parseFloat(breakdownCheque) || 0;
+
+      totalAmount = cash + upi + bank + cheque;
+
+      if (totalAmount <= 0) {
+        toast.error('Error', 'Please enter valid amounts for at least one payment mode');
+        return;
+      }
+
+      if ((cash > 0 ? 1 : 0) + (upi > 0 ? 1 : 0) + (bank > 0 ? 1 : 0) + (cheque > 0 ? 1 : 0) > 1) {
+        paymentModeToUse = 'cash'; // Will use 'Mixed' in the payment
+      }
+    } else {
+      totalAmount = parseFloat(amount) || 0;
+      if (totalAmount <= 0) {
+        toast.error('Error', 'Please enter a valid amount');
+        return;
+      }
     }
 
     if (paymentDate > today) {
@@ -151,7 +179,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         return;
       }
 
-      if (parseFloat(amount) < scopedPendingAmount) {
+      if (totalAmount < scopedPendingAmount) {
         toast.error('Error', 'Amount must cover full selected scope balance');
         return;
       }
@@ -165,12 +193,45 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         cheque: 'Cheque',
       };
 
-      const newPayment: Payment = {
-        id: Date.now(),
+      let breakdown;
+      let finalPaymentMode: 'Cash' | 'UPI' | 'Bank' | 'Cheque' | 'Mixed' = modeMap[paymentMode];
+
+      if (useBreakdown) {
+        const cash = parseFloat(breakdownCash) || 0;
+        const upi = parseFloat(breakdownUPI) || 0;
+        const bank = parseFloat(breakdownBank) || 0;
+        const cheque = parseFloat(breakdownCheque) || 0;
+
+        breakdown = {
+          ...(cash > 0 && { cash }),
+          ...(upi > 0 && { upi }),
+          ...(bank > 0 && { bank }),
+          ...(cheque > 0 && { cheque }),
+        };
+
+        if (Object.keys(breakdown).length > 1) {
+          finalPaymentMode = 'Mixed';
+        } else if (cash > 0) {
+          finalPaymentMode = 'Cash';
+        } else if (upi > 0) {
+          finalPaymentMode = 'UPI';
+        } else if (bank > 0) {
+          finalPaymentMode = 'Bank';
+        } else if (cheque > 0) {
+          finalPaymentMode = 'Cheque';
+        }
+      }
+
+      // Count payments on the same date for sequence
+      const paymentCount = payments.filter((p) => p.date === paymentDate && p.customerId === selectedCustomer.id).length;
+
+      const newPayment: Omit<Payment, 'id' | 'createdAt'> = {
         customerId: selectedCustomer.id,
-        amount: parseFloat(amount),
-        paymentMode: modeMap[paymentMode],
+        amount: totalAmount,
+        paymentMode: finalPaymentMode,
+        breakdown,
         date: paymentDate,
+        referenceNumber: generateMeaningfulPaymentId(selectedCustomer, paymentDate, paymentCount + 1),
         paymentForMonth: paymentScope === 'month' ? selectedMonth : undefined,
         paymentForFromDate:
           paymentScope === 'week' || paymentScope === 'range'
@@ -183,34 +244,38 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         notes: notes || undefined,
       };
 
-      addPayment(newPayment);
+      await addPayment(newPayment);
 
       // Handle settled or scope-based payments
       if (isSettled) {
         // Mark all jobs of this customer as fully paid
-        jobs
-          .filter((job) => job.customerId === selectedCustomer.id)
-          .forEach((job) => {
-            const net = getJobNetValue(job);
-            updateJob(job.id, {
-              paidAmount: net,
-              paymentStatus: 'Paid',
-              paymentMode: modeMap[paymentMode],
-            });
-          });
+        await Promise.all(
+          jobs
+            .filter((job) => job.customerId === selectedCustomer.id)
+            .map((job) => {
+              const net = getJobNetValue(job);
+              return updateJob(job.id, {
+                paidAmount: net,
+                paymentStatus: 'Paid',
+                paymentMode: finalPaymentMode as any,
+              });
+            })
+        );
       } else if (paymentScope !== 'manual') {
         // Mark scoped jobs as fully paid
-        scopedJobs.forEach((job) => {
-          const currentPaid = getJobPaidAmount(job);
-          const net = getJobNetValue(job);
-          const pending = Math.max(0, net - currentPaid);
+        await Promise.all(
+          scopedJobs.map((job) => {
+            const currentPaid = getJobPaidAmount(job);
+            const net = getJobNetValue(job);
+            const pending = Math.max(0, net - currentPaid);
 
-          updateJob(job.id, {
-            paidAmount: currentPaid + pending,
-            paymentStatus: 'Paid',
-            paymentMode: modeMap[paymentMode],
-          });
-        });
+            return updateJob(job.id, {
+              paidAmount: currentPaid + pending,
+              paymentStatus: 'Paid',
+              paymentMode: finalPaymentMode as any,
+            });
+          })
+        );
       } else {
         // Manual scope - allocate to outstanding jobs
         const customerOutstandingJobs = jobs.filter(
@@ -234,10 +299,10 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           const newPaidAmount = currentPaid + paymentAllocation;
           const isFullyPaid = Math.abs(newPaidAmount - net) < 0.01;
 
-          updateJob(job.id, {
+          await updateJob(job.id, {
             paidAmount: newPaidAmount,
             paymentStatus: isFullyPaid ? 'Paid' : 'Partially Paid',
-            paymentMode: modeMap[paymentMode],
+            paymentMode: finalPaymentMode as any,
           });
 
           remainingAmount -= paymentAllocation;
@@ -254,6 +319,11 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
       // Reset form
       setAmount('');
       setPaymentMode('cash');
+      setUseBreakdown(false);
+      setBreakdownCash('');
+      setBreakdownUPI('');
+      setBreakdownBank('');
+      setBreakdownCheque('');
       setPaymentDate(today);
       setPaymentScope('manual');
       setWeekFrom(getWeekStartDate(new Date()));
@@ -274,6 +344,11 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
     setSelectedCustomer(null);
     setAmount('');
     setPaymentMode('cash');
+    setUseBreakdown(false);
+    setBreakdownCash('');
+    setBreakdownUPI('');
+    setBreakdownBank('');
+    setBreakdownCheque('');
     setPaymentDate(today);
     setPaymentScope('manual');
     setNotes('');
@@ -311,14 +386,13 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label">
+        <div className="form-group checkbox-group">
+          <label className="checkbox-label">
             <input
               type="checkbox"
               checked={isSettled}
               onChange={(e) => setIsSettled(e.target.checked)}
               disabled={!selectedCustomer}
-              style={{ marginRight: '8px' }}
             />
             Mark as Settled (Pay entire balance)
           </label>
@@ -438,27 +512,108 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label" htmlFor="amount">
-            Amount (INR)
+        <div className="form-group checkbox-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={useBreakdown}
+              onChange={(e) => setUseBreakdown(e.target.checked)}
+            />
+            Split Payment by Mode
           </label>
-          <input
-            id="amount"
-            type="number"
-            className="form-input"
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            step="0.01"
-            min="0"
-            required
-          />
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Payment Mode</label>
-          <PaymentModeGroup value={paymentMode} onChange={setPaymentMode} />
-        </div>
+        {useBreakdown ? (
+          <>
+            <div className="form-group">
+              <label className="form-label" htmlFor="breakdown-cash">
+                Cash (INR)
+              </label>
+              <input
+                id="breakdown-cash"
+                type="number"
+                className="form-input"
+                placeholder="0.00"
+                value={breakdownCash}
+                onChange={(e) => setBreakdownCash(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="breakdown-upi">
+                UPI (INR)
+              </label>
+              <input
+                id="breakdown-upi"
+                type="number"
+                className="form-input"
+                placeholder="0.00"
+                value={breakdownUPI}
+                onChange={(e) => setBreakdownUPI(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="breakdown-bank">
+                Bank (INR)
+              </label>
+              <input
+                id="breakdown-bank"
+                type="number"
+                className="form-input"
+                placeholder="0.00"
+                value={breakdownBank}
+                onChange={(e) => setBreakdownBank(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="breakdown-cheque">
+                Cheque (INR)
+              </label>
+              <input
+                id="breakdown-cheque"
+                type="number"
+                className="form-input"
+                placeholder="0.00"
+                value={breakdownCheque}
+                onChange={(e) => setBreakdownCheque(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="form-group">
+              <label className="form-label" htmlFor="amount">
+                Amount (INR)
+              </label>
+              <input
+                id="amount"
+                type="number"
+                className="form-input"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                step="0.01"
+                min="0"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Payment Mode</label>
+              <PaymentModeGroup value={paymentMode} onChange={setPaymentMode} />
+            </div>
+          </>
+        )}
 
         <div className="form-group">
           <label className="form-label" htmlFor="payment-date">

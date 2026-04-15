@@ -1,0 +1,124 @@
+.searchable-select {
+  position: relative;
+  min-width: 200px;
+}
+
+.searchable-select-trigger {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.searchable-select-trigger.open {
+  border-color: rgba(11, 102, 228, 0.48);
+}
+
+.searchable-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.select-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  transition: transform var(--transition-fast);
+}
+
+.searchable-select-trigger.open .select-icon svg {
+  transform: rotate(180deg);
+}
+
+.searchable-select-dropdown {
+  position: absolute;
+  inset: calc(100% + 4px) 0 auto;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+  z-index: 40;
+}
+
+.searchable-select-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 10px;
+  background: var(--bg-card);
+}
+
+.searchable-select-input:focus {
+  outline: none;
+  background: var(--bg-tertiary);
+}
+
+.searchable-select-list {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.select-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.select-group-label {
+  padding: 7px 10px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.select-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.select-item:last-child {
+  border-bottom: none;
+}
+
+.select-item:hover,
+.select-item.selected {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}

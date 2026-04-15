@@ -105,6 +105,13 @@ export function JobCardDetailsModal({
             </div>
           ) : null}
 
+          {primary.notes ? (
+            <div className="job-card-detail-notes">
+              <span className="job-card-detail-label">Notes</span>
+              <p>{primary.notes}</p>
+            </div>
+          ) : null}
+
           <div className="job-card-detail-table">
             <table>
               <thead>

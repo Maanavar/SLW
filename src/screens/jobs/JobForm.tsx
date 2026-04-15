@@ -14,6 +14,7 @@ import {
   getJobCardPaymentSummary,
   getPaymentStatusFromAmounts,
   isDcApplicableCustomer,
+  isCommissionApplicableCustomer,
 } from '@/lib/jobUtils';
 import { Customer, Job } from '@/types';
 import './JobForm.css';
@@ -34,17 +35,11 @@ function generateJobCardId(jobDate: string, existingJobs: Job[]) {
   return `${prefix}${String(maxSerial + 1).padStart(3, '0')}`;
 }
 
-function isCommissionApplicableCustomer(customer: Customer | null): boolean {
-  if (!customer) return false;
-  const commissionCustomers = ['RMP', 'WW', 'NM'];
-  return commissionCustomers.includes(customer.shortCode);
-}
-
 export function JobForm() {
-  const { getActiveCustomers, getCustomer, jobs, addJob, deleteJob, clearAllJobs } = useDataStore();
+  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob } = useDataStore();
   const toast = useToast();
 
-  const customers = getActiveCustomers();
+  const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
   const today = getLocalDateString(new Date());
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -66,33 +61,48 @@ export function JobForm() {
   const [dcApproval, setDcApproval] = useState(false);
   const [paidAmount, setPaidAmount] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Pending');
+  const [notes, setNotes] = useState('');
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cardViewMode, setCardViewMode] = useState<'today' | 'range'>('today');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState(today);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingJobIds, setEditingJobIds] = useState<number[]>([]);
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
 
+  const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
+  const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
   const summary = {
-    totalAmount: jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0),
-    totalCommission: jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0),
-    netValue: jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0),
-    finalValue: jobLines.reduce(
-      (sum, line) =>
-        sum + (parseFloat(line.amount) || 0) + (parseFloat(line.commission) || 0),
-      0
-    ),
+    totalAmount,
+    totalCommission,
+    netValue: totalAmount - totalCommission,
+    finalValue: totalAmount + totalCommission,
   };
 
   const todayJobCards = useMemo(() => {
-    const todayJobs = jobs.filter((job) => job.date === today);
-    const groups = groupJobsByCard(todayJobs);
+    let filteredJobs = jobs;
+
+    if (cardViewMode === 'today') {
+      // Show only today's jobs
+      filteredJobs = jobs.filter((job) => job.date === today);
+    } else if (cardViewMode === 'range') {
+      // Show jobs in the selected date range
+      if (filterStartDate && filterEndDate) {
+        filteredJobs = jobs.filter((job) => job.date >= filterStartDate && job.date <= filterEndDate);
+      }
+    }
+
+    const groups = groupJobsByCard(filteredJobs);
 
     return groups.sort((a, b) => {
       const aTime = new Date(a.primary.createdAt || a.primary.date).getTime();
       const bTime = new Date(b.primary.createdAt || b.primary.date).getTime();
       return bTime - aTime;
     });
-  }, [jobs, today]);
+  }, [jobs, today, cardViewMode, filterStartDate, filterEndDate]);
 
   const selectedTodayCard = useMemo(
     () => todayJobCards.find((group) => group.key === selectedCardKey) || null,
@@ -182,41 +192,76 @@ export function JobForm() {
 
     setIsSubmitting(true);
     try {
-      const jobCardId = generateJobCardId(jobDate, jobs);
       const enteredPaidAmount = paymentStatus === 'Paid' ? parseFloat(paidAmount) || 0 : 0;
       const resolvedPaymentStatus =
         paymentStatus === 'Paid'
           ? getPaymentStatusFromAmounts(enteredPaidAmount, summary.netValue)
           : 'Pending';
 
-      const newJobs: Job[] = jobLines.map((line, index) => ({
-        id: Date.now() + Math.random(),
-        customerId: selectedCustomer.id,
-        workTypeName: line.workType!.name,
-        workName: line.workType!.shortCode,
-        quantity: line.quantity,
-        amount: parseFloat(line.amount),
-        commissionAmount: parseFloat(line.commission) || 0,
-        netAmount: parseFloat(line.amount),
-        date: jobDate,
-        paymentStatus: resolvedPaymentStatus,
-        paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
-        paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
-        workMode,
-        isSpotWork: workMode === 'Spot',
-        jobCardId,
-        jobCardLine: index + 1,
-        ...(showDcFields && {
-          dcNo: dcNo || undefined,
-          vehicleNo: vehicleNo || undefined,
-          dcDate: dcDate || undefined,
-          dcApproval: dcApproval || undefined,
-        }),
-      }));
+      if (isEditMode && editingJobIds.length > 0) {
+        // EDIT MODE: Update existing jobs
+        await Promise.all(
+          jobLines.map((line, index) =>
+            updateJob(editingJobIds[index], {
+              workTypeName: line.workType!.name,
+              workName: line.workType!.shortCode,
+              quantity: line.quantity,
+              amount: parseFloat(line.amount),
+              commissionAmount: parseFloat(line.commission) || 0,
+              netAmount: parseFloat(line.amount),
+              paymentStatus: resolvedPaymentStatus,
+              paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
+              paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
+              workMode,
+              isSpotWork: workMode === 'Spot',
+              notes: notes || undefined,
+              ...(showDcFields && {
+                dcNo: dcNo || undefined,
+                vehicleNo: vehicleNo || undefined,
+                dcDate: dcDate || undefined,
+                dcApproval: dcApproval || undefined,
+              }),
+            })
+          )
+        );
 
-      newJobs.forEach((job) => addJob(job));
-      toast.success('Success', `JobCard ${jobCardId} created with ${newJobs.length} line(s)`);
+        toast.success('Success', 'JobCard updated successfully');
+        setIsEditMode(false);
+        setEditingJobIds([]);
+      } else {
+        // CREATE MODE: Create new jobs
+        const jobCardId = generateJobCardId(jobDate, jobs);
+        const newJobs: Job[] = jobLines.map((line, index) => ({
+          id: Date.now() + Math.random(),
+          customerId: selectedCustomer.id,
+          workTypeName: line.workType!.name,
+          workName: line.workType!.shortCode,
+          quantity: line.quantity,
+          amount: parseFloat(line.amount),
+          commissionAmount: parseFloat(line.commission) || 0,
+          netAmount: parseFloat(line.amount),
+          date: jobDate,
+          paymentStatus: resolvedPaymentStatus,
+          paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
+          paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
+          workMode,
+          isSpotWork: workMode === 'Spot',
+          jobCardId,
+          jobCardLine: index + 1,
+          notes: notes || undefined,
+          ...(showDcFields && {
+            dcNo: dcNo || undefined,
+            vehicleNo: vehicleNo || undefined,
+            dcDate: dcDate || undefined,
+            dcApproval: dcApproval || undefined,
+          }),
+        }));
 
+        await addJobsBulk(newJobs);
+        toast.success('Success', `JobCard ${jobCardId} created with ${newJobs.length} line(s)`);
+      }
+
+      // Reset form
       setJobDate(getLocalDateString(new Date()));
       setSelectedCustomer(null);
       setJobLines([
@@ -236,23 +281,24 @@ export function JobForm() {
       setVehicleNo('');
       setDcDate('');
       setDcApproval(false);
+      setNotes('');
     } catch (error) {
-      console.error('Error creating jobs:', error);
-      toast.error('Error', 'Failed to create jobs. Please try again.');
+      console.error('Error saving job:', error);
+      toast.error('Error', `Failed to ${isEditMode ? 'update' : 'create'} job. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEditCard = () => {
-    if (!selectedTodayCard) return;
+  const handleEditCard = (card?: typeof selectedTodayCard) => {
+    const cardToEdit = card || selectedTodayCard;
+    if (!cardToEdit) return;
 
-    const card = selectedTodayCard;
-    setSelectedCustomer(getCustomer(card.primary.customerId) || null);
-    setJobDate(card.primary.date);
-    setWorkMode(card.primary.workMode as 'Workshop' | 'Spot');
+    setSelectedCustomer(getCustomer(cardToEdit.primary.customerId) || null);
+    setJobDate(cardToEdit.primary.date);
+    setWorkMode(cardToEdit.primary.workMode as 'Workshop' | 'Spot');
 
-    const lines: JobLineState[] = card.jobs.map((job) => ({
+    const lines: JobLineState[] = cardToEdit.jobs.map((job) => ({
       id: job.id.toString(),
       workType: {
         id: 0,
@@ -268,30 +314,34 @@ export function JobForm() {
     }));
 
     setJobLines(lines);
+    setNotes(cardToEdit.primary.notes || '');
 
-    if (card.primary.dcNo || card.primary.dcApproval) {
-      setDcNo(card.primary.dcNo || '');
-      setVehicleNo(card.primary.vehicleNo || '');
-      setDcDate(card.primary.dcDate || '');
-      setDcApproval(card.primary.dcApproval || false);
+    if (cardToEdit.primary.dcNo || cardToEdit.primary.dcApproval) {
+      setDcNo(cardToEdit.primary.dcNo || '');
+      setVehicleNo(cardToEdit.primary.vehicleNo || '');
+      setDcDate(cardToEdit.primary.dcDate || '');
+      setDcApproval(cardToEdit.primary.dcApproval || false);
     }
 
-    if (card.primary.paymentStatus === 'Paid' && card.primary.paidAmount) {
+    if (cardToEdit.primary.paymentStatus === 'Paid' && cardToEdit.primary.paidAmount) {
       setPaymentStatus('Paid');
-      setPaidAmount(String(card.primary.paidAmount));
-      setPaymentMode(card.primary.paymentMode || '');
+      setPaidAmount(String(cardToEdit.primary.paidAmount));
+      setPaymentMode(cardToEdit.primary.paymentMode || '');
     }
 
+    setEditingJobIds(cardToEdit.jobs.map((j) => j.id));
+    setIsEditMode(true);
     setSelectedCardKey(null);
-    toast.success('Info', 'Edit mode activated. Modify the form and create to save changes.');
+    toast.success('Info', 'Edit mode activated. Modify and click "Update Job" to save changes.');
   };
 
-  const handleDeleteCard = () => {
-    if (!selectedTodayCard) return;
+  const handleDeleteCard = async (card?: typeof selectedTodayCard) => {
+    const cardToDelete = card || selectedTodayCard;
+    if (!cardToDelete) return;
 
-    const cardId = selectedTodayCard.primary.jobCardId || `LEGACY-${selectedTodayCard.primary.id}`;
+    const cardId = cardToDelete.primary.jobCardId || `LEGACY-${cardToDelete.primary.id}`;
     const confirmed = window.confirm(
-      `Are you sure you want to delete JobCard ${cardId}?\n\nThis will remove ${selectedTodayCard.jobs.length} job line(s) and cannot be undone.`
+      `Are you sure you want to delete JobCard ${cardId}?\n\nThis will remove ${cardToDelete.jobs.length} job line(s) and cannot be undone.`
     );
 
     if (!confirmed) {
@@ -299,33 +349,13 @@ export function JobForm() {
     }
 
     try {
-      selectedTodayCard.jobs.forEach((job) => {
-        deleteJob(job.id);
-      });
+      await Promise.all(cardToDelete.jobs.map((job) => deleteJob(job.id)));
       toast.success('Success', `JobCard ${cardId} deleted`);
       setSelectedCardKey(null);
     } catch (error) {
       console.error('Error deleting job card:', error);
       toast.error('Error', 'Failed to delete job card');
     }
-  };
-
-  const handleDeleteAllJobCards = () => {
-    const totalCards = groupJobsByCard(jobs).length;
-    if (totalCards === 0) {
-      toast.error('Error', 'No JobCards available to delete');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `WARNING: Delete ALL ${totalCards} JobCards?\n\nThis action will permanently remove all job lines from all dates and cannot be undone.`
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    clearAllJobs();
-    toast.success('Success', 'All JobCards deleted');
   };
 
   return (
@@ -457,7 +487,7 @@ export function JobForm() {
                   type="text"
                   className="form-input"
                   value={vehicleNo}
-                  onChange={(e) => setVehicleNo(e.target.value)}
+                  onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
                   placeholder="Vehicle registration..."
                 />
               </div>
@@ -478,7 +508,12 @@ export function JobForm() {
 
               <div className="form-group">
                 <label className="form-label">Approved Without DC</label>
-                <ToggleSwitch checked={dcApproval} onChange={setDcApproval} id="dc-approval" />
+                <ToggleSwitch
+                  checked={dcApproval}
+                  onChange={setDcApproval}
+                  id="dc-approval"
+                  disabled={!!(dcNo.trim() || vehicleNo.trim() || dcDate)}
+                />
               </div>
             </div>
             <p className="dc-validation-note">
@@ -486,6 +521,24 @@ export function JobForm() {
             </p>
           </div>
         ) : null}
+
+        <div className="form-section">
+          <h3 className="section-title">Notes</h3>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="notes">
+              Notes
+            </label>
+            <textarea
+              id="notes"
+              className="form-textarea"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Any special instructions or remarks about this job card..."
+              rows={3}
+            />
+          </div>
+        </div>
 
         <div className="form-section">
           <h3 className="section-title">Payment</h3>
@@ -520,17 +573,31 @@ export function JobForm() {
                 <label className="form-label" htmlFor="paid-amount">
                   Paid Amount (INR)
                 </label>
-                <input
-                  id="paid-amount"
-                  type="number"
-                  className="form-input"
-                  value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                  placeholder="0.00"
-                  step="0.01"
-                  min="0"
-                  required={paymentStatus === 'Paid'}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <input
+                    id="paid-amount"
+                    type="number"
+                    className="form-input"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    required={paymentStatus === 'Paid'}
+                    style={{ flex: 1 }}
+                  />
+                  {summary.netValue > 0 && (
+                    <button
+                      type="button"
+                      className="suggestion-chip suggestion-chip-action"
+                      onClick={() => setPaidAmount(String(summary.netValue))}
+                      style={{ marginTop: '8px', whiteSpace: 'nowrap' }}
+                      title="Fill with net value"
+                    >
+                      Fill: {formatCurrency(summary.netValue)}
+                    </button>
+                  )}
+                </div>
               </div>
             ) : null}
 
@@ -566,27 +633,105 @@ export function JobForm() {
             {isSubmitting ? (
               <>
                 <span className="loading-spinner-inline" aria-hidden="true">⏳</span>
-                Creating...
+                {isEditMode ? 'Updating...' : 'Creating...'}
               </>
             ) : (
-              'Create Job'
+              isEditMode ? 'Update Job' : 'Create Job'
             )}
           </button>
+          {isEditMode && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-submit"
+              onClick={() => {
+                setIsEditMode(false);
+                setEditingJobIds([]);
+                setJobDate(getLocalDateString(new Date()));
+                setSelectedCustomer(null);
+                setJobLines([
+                  {
+                    id: Date.now().toString(),
+                    workType: null,
+                    quantity: 1,
+                    amount: '',
+                    commission: '',
+                  },
+                ]);
+                setWorkMode('Workshop');
+                setPaymentMode('');
+                setPaidAmount('');
+                setPaymentStatus('Pending');
+                setDcNo('');
+                setVehicleNo('');
+                setDcDate('');
+                setDcApproval(false);
+                setNotes('');
+                toast.info('Info', 'Edit cancelled');
+              }}
+              disabled={isSubmitting}
+            >
+              Cancel Edit
+            </button>
+          )}
         </div>
       </form>
 
       <div className="form-section today-cards-section">
         <div className="section-header">
-          <h3 className="section-title">Today's JobCards</h3>
-          <div className="today-cards-header-actions">
-            <span className="today-cards-count">{todayJobCards.length} cards</span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-danger"
-              onClick={handleDeleteAllJobCards}
-            >
-              Delete All JobCards
-            </button>
+          <h3 className="section-title">JobCards</h3>
+          <div className="today-cards-header-controls">
+            <div className="view-mode-buttons">
+              <button
+                type="button"
+                className={`mode-btn ${cardViewMode === 'today' ? 'active' : ''}`}
+                onClick={() => {
+                  setCardViewMode('today');
+                  setSelectedCardKey(null);
+                }}
+                title="Show today's job cards only"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`mode-btn ${cardViewMode === 'range' ? 'active' : ''}`}
+                onClick={() => {
+                  setCardViewMode('range');
+                  setFilterStartDate(today);
+                  setFilterEndDate(today);
+                  setSelectedCardKey(null);
+                }}
+                title="Show job cards from a date range"
+              >
+                Range
+              </button>
+            </div>
+
+            {cardViewMode === 'range' && (
+              <div className="date-range-wrapper">
+                <input
+                  type="date"
+                  className="filter-date-input"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  max={today}
+                  title="Start date"
+                  aria-label="From date"
+                />
+                <span className="date-range-separator">to</span>
+                <input
+                  type="date"
+                  className="filter-date-input"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  max={today}
+                  title="End date"
+                  aria-label="To date"
+                />
+              </div>
+            )}
+
+            <span className="today-cards-count">{todayJobCards.length}</span>
           </div>
         </div>
 
@@ -597,7 +742,6 @@ export function JobForm() {
             {todayJobCards.map((group) => {
               const cardNo = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
               const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
-              const finalValue = group.totalAmount + group.totalCommission;
               const payment = getJobCardPaymentSummary(group.jobs);
 
               return (
@@ -615,28 +759,43 @@ export function JobForm() {
                   }}
                 >
                   <div className="today-card-main">
-                    <span className="today-card-id">{cardNo}</span>
-                    <span className="today-card-customer">{customerName}</span>
-                    <StatusBadge status={payment.status} />
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
+                      <span className="today-card-id">{cardNo}</span>
+                      <span className="today-card-customer">{customerName}</span>
+                      <StatusBadge status={payment.status} />
+                    </div>
+                    <div className="today-card-actions">
+                      <button
+                        type="button"
+                        className="icon-btn icon-edit"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditCard(group);
+                        }}
+                        title="Edit this job card"
+                        aria-label="Edit"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCard(group);
+                        }}
+                        title="Delete this job card"
+                        aria-label="Delete"
+                      >
+                        🗑
+                      </button>
+                    </div>
                   </div>
                   <div className="today-card-stats">
-                    <span>Lines: {group.lineCount}</span>
-                    <span>Amt: {formatCurrency(group.totalAmount)}</span>
-                    <span>Comm: {formatCurrency(group.totalCommission)}</span>
-                    <span>Final: {formatCurrency(finalValue)}</span>
+                    <span>{formatCurrency(group.totalAmount)}</span>
                     <span>Paid: {formatCurrency(payment.paid)}</span>
                     <span>Pending: {formatCurrency(payment.pending)}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-view-card"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedCardKey(group.key);
-                    }}
-                  >
-                    View JobCard
-                  </button>
                 </div>
               );
             })}

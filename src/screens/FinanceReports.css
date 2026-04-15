@@ -1,0 +1,492 @@
+.finance-reports {
+  padding: var(--space-lg);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.finance-header {
+  margin-bottom: var(--space-xl);
+}
+
+.finance-header h1 {
+  font-size: clamp(24px, 5vw, 32px);
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+}
+
+.finance-subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* ============================================================================
+   PERIOD FILTER
+   ============================================================================ */
+
+.period-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.period-filter label {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.period-buttons {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.period-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.period-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.period-btn.active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+/* ============================================================================
+   REPORT TABS
+   ============================================================================ */
+
+.report-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  border-bottom: 2px solid var(--border-color);
+  overflow-x: auto;
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: var(--text-sm);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* ============================================================================
+   REPORT CONTENT
+   ============================================================================ */
+
+.report-content {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.report-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.report-section h2 {
+  font-size: 20px;
+  margin: 0 0 var(--space-lg) 0;
+  color: var(--text-primary);
+}
+
+/* ============================================================================
+   METRICS GRID
+   ============================================================================ */
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.metric-card {
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.metric-card:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.metric-card.highlight {
+  border-color: var(--accent-primary);
+  background: rgba(11, 102, 228, 0.04);
+}
+
+.metric-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.metric-value.negative {
+  color: #ef4444;
+}
+
+.metric-value.warning {
+  color: #f59e0b;
+}
+
+.metric-subtitle {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* ============================================================================
+   DETAILS TABLE
+   ============================================================================ */
+
+.details-table {
+  margin-top: var(--space-lg);
+}
+
+.details-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.details-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.details-table td.value {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.details-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================================================
+   DATA TABLES
+   ============================================================================ */
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.data-table thead {
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.data-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.3px;
+}
+
+.data-table th.text-right {
+  text-align: right;
+}
+
+.data-table th.text-center {
+  text-align: center;
+}
+
+.data-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.data-table td.text-right {
+  text-align: right;
+}
+
+.data-table td.text-center {
+  text-align: center;
+}
+
+.data-table td.negative {
+  color: #ef4444;
+}
+
+.data-table td.warning {
+  color: #f59e0b;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================================================
+   METHOD CARDS
+   ============================================================================ */
+
+.method-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md);
+}
+
+.method-card {
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.method-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.method-amount {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-bottom: 12px;
+}
+
+.method-bar {
+  height: 8px;
+  background: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.method-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
+  border-radius: 4px;
+}
+
+.method-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* ============================================================================
+   AGEING CARDS
+   ============================================================================ */
+
+.ageing-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.ageing-card {
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.ageing-range {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+}
+
+.ageing-amount {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f59e0b;
+  margin-bottom: 8px;
+}
+
+.ageing-bar {
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.ageing-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  border-radius: 3px;
+}
+
+.ageing-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* ============================================================================
+   TOTAL BOX
+   ============================================================================ */
+
+.total-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+}
+
+.total-box span:first-child {
+  color: var(--text-primary);
+}
+
+.total-box span:last-child {
+  font-size: 20px;
+  color: var(--accent-primary);
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+  padding: var(--space-lg);
+  text-align: center;
+  color: var(--text-secondary);
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .finance-reports {
+    padding: var(--space-md);
+  }
+
+  .period-filter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .period-buttons {
+    width: 100%;
+  }
+
+  .period-btn {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .report-tabs {
+    gap: 0;
+    border-bottom: 2px solid var(--border-color);
+  }
+
+  .tab-btn {
+    padding: 10px 12px;
+    font-size: var(--text-xs);
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-sm);
+  }
+
+  .metric-value {
+    font-size: 20px;
+  }
+
+  .method-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .ageing-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .data-table {
+    font-size: var(--text-xs);
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px;
+  }
+}

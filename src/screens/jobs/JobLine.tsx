@@ -24,6 +24,11 @@ interface JobLineProps {
 export function JobLine({ line, onChange, onRemove, lineNumber, showCommission = true }: JobLineProps) {
   const { workTypes } = useDataStore();
 
+  const sortedWorkTypes = [...workTypes].sort((a, b) => {
+    const categoryCompare = a.category.localeCompare(b.category);
+    return categoryCompare !== 0 ? categoryCompare : a.name.localeCompare(b.name);
+  });
+
   const handleWorkTypeChange = (workType: WorkType) => {
     onChange({ ...line, workType });
   };
@@ -59,7 +64,7 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
       <div className="line-field work-type-field">
         <label className="field-label">Work Type</label>
         <SearchableSelect
-          items={workTypes}
+          items={sortedWorkTypes}
           value={line.workType}
           onChange={handleWorkTypeChange}
           getLabel={(wt) => wt.name}

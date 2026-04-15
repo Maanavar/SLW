@@ -1,0 +1,17 @@
+.placeholder-screen {
+  padding: var(--space-lg);
+  text-align: center;
+}
+
+.placeholder-title {
+  margin: 0 0 var(--space-md) 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.placeholder-message {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}

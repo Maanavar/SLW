@@ -3,6 +3,7 @@ import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
+import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
 import { getJobCardPaymentSummary } from '@/lib/jobUtils';
@@ -39,6 +40,7 @@ export function HistoryScreen() {
   const today = getLocalDateString(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
   const jobsInRange = getJobsInRange(jobs, selectedDate, selectedDate);
   const groups = groupJobsByCard(jobsInRange);
@@ -80,13 +82,17 @@ export function HistoryScreen() {
     [groups, selectedCardId]
   );
 
+  const editingGroup = useMemo(
+    () => groups.find((group) => group.key === editingCardId) || null,
+    [groups, editingCardId]
+  );
+
   const handleEditCard = () => {
     if (!selectedGroup) return;
-    toast.info('Info', 'Edit functionality coming soon');
-    setSelectedCardId(null);
+    setEditingCardId(selectedGroup.key);
   };
 
-  const handleDeleteCard = () => {
+  const handleDeleteCard = async () => {
     if (!selectedGroup) return;
 
     const cardId = selectedGroup.primary.jobCardId || `LEGACY-${selectedGroup.primary.id}`;
@@ -99,9 +105,7 @@ export function HistoryScreen() {
     }
 
     try {
-      selectedGroup.jobs.forEach((job) => {
-        deleteJob(job.id);
-      });
+      await Promise.all(selectedGroup.jobs.map((job) => deleteJob(job.id)));
       toast.success('Success', `JobCard ${cardId} deleted`);
       setSelectedCardId(null);
     } catch (error) {
@@ -244,6 +248,15 @@ export function HistoryScreen() {
         getCustomer={getCustomer}
         onEdit={handleEditCard}
         onDelete={handleDeleteCard}
+      />
+
+      <JobCardEditOverlay
+        isOpen={Boolean(editingGroup)}
+        jobs={editingGroup?.jobs || null}
+        onClose={() => setEditingCardId(null)}
+        onSave={() => {
+          setEditingCardId(null);
+        }}
       />
     </div>
   );

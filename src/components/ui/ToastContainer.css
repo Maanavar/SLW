@@ -1,0 +1,25 @@
+.toast-container {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 1300;
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast-container .toast {
+  pointer-events: auto;
+}
+
+@media (max-width: 1024px) {
+  .toast-container {
+    right: 10px;
+    left: 10px;
+    bottom: calc(var(--mobile-nav-height) + 16px);
+  }
+
+  .toast-container .toast {
+    min-width: 0;
+  }
+}

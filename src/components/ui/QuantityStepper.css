@@ -1,0 +1,51 @@
+.quantity-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepper-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stepper-btn:hover:not(:disabled) {
+  color: var(--accent-primary);
+  border-color: rgba(11, 102, 228, 0.45);
+}
+
+.stepper-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.stepper-input {
+  width: 56px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  text-align: center;
+  font-weight: 700;
+}
+
+.stepper-input:focus {
+  outline: none;
+  border-color: rgba(11, 102, 228, 0.5);
+}
+
+.stepper-input::-webkit-outer-spin-button,
+.stepper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.stepper-input[type='number'] {
+  -moz-appearance: textfield;
+}

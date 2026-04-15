@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useToast } from '@/hooks/useToast';
 import { StatusBadge } from '@/components/ui/Badge';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
+import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobsInRange, getReportRange, groupJobsByCard } from '@/lib/reportUtils';
 import { getJobCardPaymentSummary, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
@@ -30,16 +32,73 @@ function downloadTextFile(fileName: string, content: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
+interface ExportFieldSelection {
+  cardId: boolean;
+  date: boolean;
+  customer: boolean;
+  workType: boolean;
+  quantity: boolean;
+  amount: boolean;
+  commission: boolean;
+  paid: boolean;
+  dcNo: boolean;
+  dcDate: boolean;
+  notes?: boolean;
+}
+
+const DEFAULT_EXPORT_FIELDS: ExportFieldSelection = {
+  cardId: true,
+  date: true,
+  customer: true,
+  workType: true,
+  quantity: true,
+  amount: true,
+  commission: false,
+  paid: true,
+  dcNo: true,
+  dcDate: true,
+  notes: false,
+};
+
 export function ReportsScreen() {
-  const { jobs, getActiveCustomers, getCustomer } = useDataStore();
+  const { jobs, getActiveCustomers, getCustomer, deleteJob } = useDataStore();
+  const toast = useToast();
   const [period, setPeriod] = useState<PeriodType>('month');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [rangeFrom, setRangeFrom] = useState('');
   const [rangeTo, setRangeTo] = useState(getLocalDateString(new Date()));
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
+  const [editingCardKey, setEditingCardKey] = useState<string | null>(null);
+  const [showExportFields, setShowExportFields] = useState(false);
+  const [exportFields, setExportFields] = useState<ExportFieldSelection>(DEFAULT_EXPORT_FIELDS);
   const today = getLocalDateString(new Date());
 
-  const customers = getActiveCustomers();
+  const handleDeleteCard = async () => {
+    if (!selectedGroup) return;
+
+    const cardId = selectedGroup.primary.jobCardId || `LEGACY-${selectedGroup.primary.id}`;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete JobCard ${cardId}?\n\nThis will remove ${selectedGroup.jobs.length} job line(s) and cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await Promise.all(selectedGroup.jobs.map((job) => deleteJob(job.id)));
+      setSelectedCardKey(null);
+    } catch (error) {
+      console.error('Error deleting job card:', error);
+    }
+  };
+
+  const handleEditCard = () => {
+    if (!selectedGroup) return;
+    setEditingCardKey(selectedGroup.key);
+  };
+
+  const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
 
   const range = useMemo(() => {
     if (period === 'all') {
@@ -64,60 +123,72 @@ export function ReportsScreen() {
     [groupedJobs, selectedCardKey]
   );
 
+  const editingGroup = useMemo(
+    () => groupedJobs.find((group) => group.key === editingCardKey) || null,
+    [groupedJobs, editingCardKey]
+  );
+
   const summary = useMemo(() => {
     let ourIncome = 0;
     let totalPaid = 0;
-    let totalCommission = 0;
 
     groupedJobs.forEach((group) => {
       ourIncome += group.jobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
       totalPaid += group.jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-      totalCommission += group.jobs.reduce((sum, job) => sum + (job.commissionAmount || 0), 0);
     });
 
     return {
       totalCards: groupedJobs.length,
       ourIncome,
-      netIncome: ourIncome + totalCommission,
+      netIncome: ourIncome,
       totalPaid,
-      totalCommission,
     };
-  }, [groupedJobs]);
+  }, [groupedJobs, getCustomer]);
 
   const reportRows = useMemo(() => {
     return groupedJobs.flatMap((group) =>
-      group.jobs.map((job) => ({
-        cardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
-        date: job.date,
-        customer: getCustomer(job.customerId)?.name || 'Unknown',
-        workType: job.workTypeName,
-        quantity: job.quantity,
-        amount: getJobNetValue(job),
-        commission: job.commissionAmount || 0,
-        paid: getJobPaidAmount(job),
-        dcNo: job.dcNo || '-',
-        dcDate: job.dcDate || '-',
-      }))
+      group.jobs.map((job) => {
+        const customer = getCustomer(job.customerId);
+
+        return {
+          cardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
+          date: job.date,
+          customer: customer?.name || 'Unknown',
+          workType: job.workTypeName,
+          quantity: job.quantity,
+          amount: getJobNetValue(job),
+          commission: job.commissionAmount || 0,
+          paid: getJobPaidAmount(job),
+          dcNo: job.dcNo || '-',
+          dcDate: job.dcDate || '-',
+        };
+      })
     );
   }, [groupedJobs, getCustomer]);
 
   const handleExportExcel = () => {
+    const headers: string[] = [];
+    const dataIndices: (keyof typeof reportRows[0])[] = [];
+
+    if (exportFields.cardId) { headers.push('Card ID'); dataIndices.push('cardId'); }
+    if (exportFields.date) { headers.push('Date'); dataIndices.push('date'); }
+    if (exportFields.customer) { headers.push('Customer'); dataIndices.push('customer'); }
+    if (exportFields.workType) { headers.push('Work Type'); dataIndices.push('workType'); }
+    if (exportFields.quantity) { headers.push('Qty'); dataIndices.push('quantity'); }
+    if (exportFields.amount) { headers.push('Amount'); dataIndices.push('amount'); }
+    if (exportFields.commission) { headers.push('Commission'); dataIndices.push('commission'); }
+    if (exportFields.paid) { headers.push('Paid'); dataIndices.push('paid'); }
+    if (exportFields.dcNo) { headers.push('DC No'); dataIndices.push('dcNo'); }
+    if (exportFields.dcDate) { headers.push('DC Date'); dataIndices.push('dcDate'); }
+
     const lines = [
-      'Card ID,Date,Customer,Work Type,Quantity,Amount,Commission,Paid,DC No,DC Date',
+      headers.join(','),
       ...reportRows.map((row) =>
-        [
-          row.cardId,
-          row.date,
-          row.customer,
-          row.workType,
-          row.quantity,
-          row.amount,
-          row.commission,
-          row.paid,
-          row.dcNo,
-          row.dcDate,
-        ]
-          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        dataIndices
+          .map((key) => {
+            const value = String(row[key] || '');
+            return `"${value.replace(/"/g, '""')}"`;
+          })
           .join(',')
       ),
     ];
@@ -126,56 +197,228 @@ export function ReportsScreen() {
   };
 
   const handleExportPdf = () => {
+    const headers: string[] = [];
+    const dataIndices: (keyof typeof reportRows[0])[] = [];
+
+    if (exportFields.cardId) { headers.push('Card ID'); dataIndices.push('cardId'); }
+    if (exportFields.date) { headers.push('Date'); dataIndices.push('date'); }
+    if (exportFields.customer) { headers.push('Customer'); dataIndices.push('customer'); }
+    if (exportFields.workType) { headers.push('Work Type'); dataIndices.push('workType'); }
+    if (exportFields.quantity) { headers.push('Qty'); dataIndices.push('quantity'); }
+    if (exportFields.amount) { headers.push('Amount'); dataIndices.push('amount'); }
+    if (exportFields.commission) { headers.push('Commission'); dataIndices.push('commission'); }
+    if (exportFields.paid) { headers.push('Paid'); dataIndices.push('paid'); }
+    if (exportFields.dcNo) { headers.push('DC No'); dataIndices.push('dcNo'); }
+    if (exportFields.dcDate) { headers.push('DC Date'); dataIndices.push('dcDate'); }
+
+    const headerRow = headers.map((h) => `<th>${h}</th>`).join('');
+    const bodyRows = reportRows
+      .map((row) => {
+        const cells = dataIndices.map((key) => `<td>${row[key] || '-'}</td>`).join('');
+        return `<tr>${cells}</tr>`;
+      })
+      .join('');
+
     const reportHtml = `
+      <!DOCTYPE html>
       <html>
-      <head><title>SLW Report</title></head>
-      <body style="font-family: Arial, sans-serif; padding: 24px;">
-        <h2>SLW Report</h2>
-        <p>Period: ${range.label}</p>
-        <p>Total Job Cards: ${summary.totalCards}</p>
-        <p>Our Income: ${formatCurrency(summary.ourIncome)}</p>
-        <p>Net Income: ${formatCurrency(summary.netIncome)}</p>
-        <p>Commission: ${formatCurrency(summary.totalCommission)}</p>
-        <p>Total Paid: ${formatCurrency(summary.totalPaid)}</p>
-        <p>Pending: ${formatCurrency(summary.ourIncome - summary.totalPaid)}</p>
-        <table border="1" cellspacing="0" cellpadding="6" style="border-collapse: collapse; width: 100%; margin-top: 16px;">
-          <thead>
-            <tr>
-              <th>Card ID</th><th>Date</th><th>Customer</th><th>Work Type</th><th>Qty</th><th>Amount</th><th>Commission</th><th>Paid</th><th>DC No</th><th>DC Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${reportRows
-              .map(
-                (row) =>
-                  `<tr><td>${row.cardId}</td><td>${row.date}</td><td>${row.customer}</td><td>${row.workType}</td><td>${row.quantity}</td><td>${row.amount}</td><td>${row.commission}</td><td>${row.paid}</td><td>${row.dcNo}</td><td>${row.dcDate}</td></tr>`
-              )
-              .join('')}
-          </tbody>
-        </table>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Siva Lathe Works Report</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background: #f5f5f7;
+            padding: 40px;
+            color: #1d1d1f;
+          }
+
+          .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          }
+
+          .header {
+            margin-bottom: 32px;
+            border-bottom: 1px solid #e5e5e7;
+            padding-bottom: 20px;
+          }
+
+          h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1d1d1f;
+          }
+
+          .report-period {
+            font-size: 14px;
+            color: #86868b;
+            font-weight: 500;
+          }
+
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+          }
+
+          .summary-card {
+            background: #f5f5f7;
+            border-radius: 8px;
+            padding: 16px;
+            border-left: 3px solid #0071e3;
+          }
+
+          .summary-card.positive { border-left-color: #34c759; }
+          .summary-card.negative { border-left-color: #ff3b30; }
+          .summary-card.neutral { border-left-color: #a2a2a7; }
+
+          .summary-label {
+            font-size: 12px;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: block;
+          }
+
+          .summary-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1d1d1f;
+            font-family: 'Courier New', monospace;
+          }
+
+          .summary-card.positive .summary-value { color: #34c759; }
+          .summary-card.negative .summary-value { color: #ff3b30; }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+          }
+
+          thead {
+            background: #f5f5f7;
+            border-bottom: 2px solid #e5e5e7;
+          }
+
+          th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            color: #1d1d1f;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+
+          td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e5e7;
+            font-size: 13px;
+            color: #1d1d1f;
+          }
+
+          tbody tr:hover {
+            background: #f5f5f7;
+          }
+
+          tbody tr:last-child td {
+            border-bottom: none;
+          }
+
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e5e7;
+            font-size: 12px;
+            color: #86868b;
+            text-align: center;
+          }
+
+          @media print {
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; padding: 0; }
+            tbody tr:hover { background: white; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Siva Lathe Works</h1>
+            <div class="report-period">Report Period: ${range.label} | Generated: ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+          </div>
+
+          <div class="summary-grid">
+            <div class="summary-card neutral">
+              <span class="summary-label">Job Cards</span>
+              <div class="summary-value">${summary.totalCards}</div>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Our Income</span>
+              <div class="summary-value">${formatCurrency(summary.ourIncome)}</div>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Net Income</span>
+              <div class="summary-value">${formatCurrency(summary.netIncome)}</div>
+            </div>
+            <div class="summary-card positive">
+              <span class="summary-label">Total Paid</span>
+              <div class="summary-value">${formatCurrency(summary.totalPaid)}</div>
+            </div>
+            <div class="summary-card ${summary.ourIncome - summary.totalPaid > 0 ? 'negative' : 'positive'}">
+              <span class="summary-label">Pending</span>
+              <div class="summary-value">${formatCurrency(summary.ourIncome - summary.totalPaid)}</div>
+            </div>
+          </div>
+
+          <table>
+            <thead><tr>${headerRow}</tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} • Siva Lathe Works Management System
+          </div>
+        </div>
       </body>
       </html>
     `;
 
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(reportHtml);
-    win.document.close();
-    win.focus();
-    win.print();
+    const blob = new Blob([reportHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `slw-report-${today}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleExportWhatsApp = () => {
-    const text = [
+    const baseText = [
       `SLW Report (${range.label})`,
       `Job Cards: ${summary.totalCards}`,
       `Our Income: ${formatCurrency(summary.ourIncome)}`,
       `Net Income: ${formatCurrency(summary.netIncome)}`,
       `Total Paid: ${formatCurrency(summary.totalPaid)}`,
       `Pending: ${formatCurrency(summary.ourIncome - summary.totalPaid)}`,
-      `Commission: ${formatCurrency(summary.totalCommission)}`,
-    ].join('\n');
+    ];
 
+    const text = baseText.join('\n');
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -260,6 +503,14 @@ export function ReportsScreen() {
 
       <div className="screen-content">
         <div className="report-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowExportFields(!showExportFields)}
+            title="Select which fields to include in export"
+          >
+            {showExportFields ? 'Hide Fields' : 'Select Fields'}
+          </button>
           <button type="button" className="btn btn-secondary" onClick={handleExportPdf}>
             Export PDF
           </button>
@@ -270,6 +521,117 @@ export function ReportsScreen() {
             Share WhatsApp
           </button>
         </div>
+
+        {showExportFields && (
+          <div className="export-fields-selector">
+            <h3 className="fields-selector-title">Select Fields to Export</h3>
+            <div className="fields-groups">
+              <div className="field-group">
+                <h4 className="field-group-title">Basic Information</h4>
+                <div className="field-group-items">
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.cardId}
+                      onChange={(e) => setExportFields({ ...exportFields, cardId: e.target.checked })}
+                    />
+                    Card ID
+                  </label>
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.date}
+                      onChange={(e) => setExportFields({ ...exportFields, date: e.target.checked })}
+                    />
+                    Date
+                  </label>
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.customer}
+                      onChange={(e) => setExportFields({ ...exportFields, customer: e.target.checked })}
+                    />
+                    Customer
+                  </label>
+                </div>
+              </div>
+
+              <div className="field-group">
+                <h4 className="field-group-title">Work Details</h4>
+                <div className="field-group-items">
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.workType}
+                      onChange={(e) => setExportFields({ ...exportFields, workType: e.target.checked })}
+                    />
+                    Work Type
+                  </label>
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.quantity}
+                      onChange={(e) => setExportFields({ ...exportFields, quantity: e.target.checked })}
+                    />
+                    Quantity
+                  </label>
+                </div>
+              </div>
+
+              <div className="field-group">
+                <h4 className="field-group-title">Financial</h4>
+                <div className="field-group-items">
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.amount}
+                      onChange={(e) => setExportFields({ ...exportFields, amount: e.target.checked })}
+                    />
+                    Amount
+                  </label>
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.commission}
+                      onChange={(e) => setExportFields({ ...exportFields, commission: e.target.checked })}
+                    />
+                    Commission
+                  </label>
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.paid}
+                      onChange={(e) => setExportFields({ ...exportFields, paid: e.target.checked })}
+                    />
+                    Paid
+                  </label>
+                </div>
+              </div>
+
+              <div className="field-group">
+                <h4 className="field-group-title">Delivery Challan</h4>
+                <div className="field-group-items">
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.dcNo}
+                      onChange={(e) => setExportFields({ ...exportFields, dcNo: e.target.checked })}
+                    />
+                    DC No
+                  </label>
+                  <label className="field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={exportFields.dcDate}
+                      onChange={(e) => setExportFields({ ...exportFields, dcDate: e.target.checked })}
+                    />
+                    DC Date
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="reports-summary">
           <div className="summary-card">
@@ -293,10 +655,6 @@ export function ReportsScreen() {
             <p className="summary-card-value">
               {formatCurrency(summary.ourIncome - summary.totalPaid)}
             </p>
-          </div>
-          <div className="summary-card">
-            <h3 className="summary-card-label">Commission</h3>
-            <p className="summary-card-value">{formatCurrency(summary.totalCommission)}</p>
           </div>
         </div>
 
@@ -361,8 +719,17 @@ export function ReportsScreen() {
         jobs={selectedGroup?.jobs || null}
         onClose={() => setSelectedCardKey(null)}
         getCustomer={getCustomer}
-        onEdit={undefined}
-        onDelete={undefined}
+        onEdit={handleEditCard}
+        onDelete={handleDeleteCard}
+      />
+
+      <JobCardEditOverlay
+        isOpen={Boolean(editingGroup)}
+        jobs={editingGroup?.jobs || null}
+        onClose={() => setEditingCardKey(null)}
+        onSave={() => {
+          setEditingCardKey(null);
+        }}
       />
     </div>
   );
