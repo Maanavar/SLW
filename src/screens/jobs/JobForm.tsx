@@ -52,6 +52,7 @@ export function JobForm() {
       quantity: 1,
       amount: '',
       commission: '',
+      commissionWorker: null,
     },
   ]);
   const [workMode, setWorkMode] = useState<'Workshop' | 'Spot'>('Workshop');
@@ -74,6 +75,9 @@ export function JobForm() {
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
+  const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
+    ? getCommissionWorkersForCustomer(selectedCustomer.id)
+    : [];
 
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
   const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
@@ -84,20 +88,26 @@ export function JobForm() {
     finalValue: totalAmount + totalCommission,
   };
 
-  // Auto-calculate commission distribution when customer or total commission changes
+  // Create commission distribution based on selected worker (100% to selected worker)
   useMemo(() => {
-    if (showCommissionFields && selectedCustomer) {
-      const workers = getCommissionWorkersForCustomer(selectedCustomer.id);
-      if (workers.length > 0 && totalCommission > 0) {
-        const distribution = computeDefaultDistribution(workers, totalCommission);
-        setCommissionDistribution(distribution);
+    if (showCommissionFields && totalCommission > 0 && jobLines.length > 0) {
+      const firstLine = jobLines[0];
+      if (firstLine.commissionWorker) {
+        // If worker is selected, give 100% of commission to that worker
+        setCommissionDistribution([
+          {
+            workerId: firstLine.commissionWorker.id,
+            workerName: firstLine.commissionWorker.name,
+            amount: totalCommission,
+          },
+        ]);
       } else {
         setCommissionDistribution([]);
       }
     } else {
       setCommissionDistribution([]);
     }
-  }, [selectedCustomer, totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
+  }, [jobLines, totalCommission, showCommissionFields]);
 
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
@@ -135,6 +145,7 @@ export function JobForm() {
         quantity: 1,
         amount: '',
         commission: '',
+        commissionWorker: null,
       },
     ]);
   };
@@ -232,6 +243,9 @@ export function JobForm() {
               workMode,
               isSpotWork: workMode === 'Spot',
               notes: notes || undefined,
+              ...(showCommissionFields && commissionDistribution.length > 0 && index === 0 && {
+                commissionDistribution,
+              }),
               ...(showDcFields && {
                 dcNo: dcNo || undefined,
                 vehicleNo: vehicleNo || undefined,
@@ -291,6 +305,7 @@ export function JobForm() {
           quantity: 1,
           amount: '',
           commission: '',
+          commissionWorker: null,
         },
       ]);
       setWorkMode('Workshop');
@@ -451,6 +466,7 @@ export function JobForm() {
                 onRemove={() => handleRemoveLine(line.id)}
                 lineNumber={index + 1}
                 showCommission={showCommissionFields}
+                commissionWorkers={commissionWorkersForCustomer}
               />
             ))}
           </div>

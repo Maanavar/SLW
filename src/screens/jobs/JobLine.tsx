@@ -2,7 +2,7 @@ import { useDataStore } from '@/stores/dataStore';
 import type { ChangeEvent } from 'react';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
-import { WorkType } from '@/types';
+import { WorkType, CommissionWorker } from '@/types';
 import './JobLine.css';
 
 export interface JobLineState {
@@ -11,6 +11,7 @@ export interface JobLineState {
   quantity: number;
   amount: string;
   commission: string;
+  commissionWorker: CommissionWorker | null;
 }
 
 interface JobLineProps {
@@ -19,9 +20,10 @@ interface JobLineProps {
   onRemove: () => void;
   lineNumber: number;
   showCommission?: boolean;
+  commissionWorkers?: CommissionWorker[];
 }
 
-export function JobLine({ line, onChange, onRemove, lineNumber, showCommission = true }: JobLineProps) {
+export function JobLine({ line, onChange, onRemove, lineNumber, showCommission = true, commissionWorkers = [] }: JobLineProps) {
   const { workTypes } = useDataStore();
 
   const sortedWorkTypes = [...workTypes].sort((a, b) => {
@@ -29,8 +31,14 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
     return categoryCompare !== 0 ? categoryCompare : a.name.localeCompare(b.name);
   });
 
+  const sortedWorkers = [...commissionWorkers].sort((a, b) => a.name.localeCompare(b.name));
+
   const handleWorkTypeChange = (workType: WorkType) => {
     onChange({ ...line, workType });
+  };
+
+  const handleWorkerChange = (worker: CommissionWorker) => {
+    onChange({ ...line, commissionWorker: worker });
   };
 
   const handleQuantityChange = (quantity: number) => {
@@ -76,6 +84,20 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
           placeholder="Select work type..."
         />
       </div>
+
+      {showCommission && commissionWorkers.length > 0 && (
+        <div className="line-field worker-field">
+          <label className="field-label">Worker</label>
+          <SearchableSelect
+            items={sortedWorkers}
+            value={line.commissionWorker}
+            onChange={handleWorkerChange}
+            getLabel={(w) => w.name}
+            getKey={(w) => String(w.id)}
+            placeholder="Select worker..."
+          />
+        </div>
+      )}
 
       <div className="line-field quantity-field">
         <label className="field-label">Quantity</label>
