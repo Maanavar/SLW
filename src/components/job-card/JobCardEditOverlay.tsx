@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
-import { isDcApplicableCustomer, isCommissionApplicableCustomer } from '@/lib/jobUtils';
-import type { Customer, Job } from '@/types';
+import { isDcApplicableCustomer, isCommissionApplicableCustomer, computeDefaultDistribution } from '@/lib/jobUtils';
+import type { Customer, Job, CommissionDistribution } from '@/types';
 import { JobLine, JobLineState } from '@/screens/jobs/JobLine';
 import './JobCardEditOverlay.css';
 
@@ -17,7 +17,7 @@ interface JobCardEditOverlayProps {
 }
 
 export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEditOverlayProps) {
-  const { getActiveCustomers, getCustomer, updateJob } = useDataStore();
+  const { getActiveCustomers, getCustomer, updateJob, getCommissionWorkersForCustomer } = useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
 
@@ -42,9 +42,23 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   );
   const [notes, setNotes] = useState(primary?.notes || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [commissionDistribution, setCommissionDistribution] = useState<CommissionDistribution[]>(
+    primary?.commissionDistribution || []
+  );
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
+
+  // Auto-calculate commission distribution when commission changes
+  useMemo(() => {
+    if (showCommissionFields && selectedCustomer && summary.totalCommission > 0) {
+      const workers = getCommissionWorkersForCustomer(selectedCustomer.id);
+      if (workers.length > 0) {
+        const distribution = computeDefaultDistribution(workers, summary.totalCommission);
+        setCommissionDistribution(distribution);
+      }
+    }
+  }, [selectedCustomer, summary.totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
 
   // Initialize when modal opens
   useEffect(() => {
@@ -255,6 +269,25 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
             <div className="edit-summary-value">{formatCurrency(summary.netValue)}</div>
           </div>
         </div>
+
+        {/* Commission Distribution */}
+        {showCommissionFields && commissionDistribution.length > 0 && (
+          <div className="edit-commission-distribution edit-section">
+            <h3 className="edit-section-title">Commission Distribution</h3>
+            <div className="edit-commission-breakdown">
+              <div className="edit-breakdown-header">
+                <span>Worker Name</span>
+                <span>Amount</span>
+              </div>
+              {commissionDistribution.map((dist) => (
+                <div key={dist.workerId} className="edit-breakdown-row">
+                  <span>{dist.workerName}</span>
+                  <span>{formatCurrency(dist.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* DC Fields */}
         {showDcFields && (

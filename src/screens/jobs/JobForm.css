@@ -440,6 +440,73 @@
   color: var(--text-secondary);
 }
 
+/* Commission Distribution Section */
+.commission-distribution-section {
+  border-left: 3px solid var(--accent-primary);
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+}
+
+.commission-breakdown-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.breakdown-header,
+.breakdown-row,
+.breakdown-footer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-md);
+  padding: 12px var(--space-md);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.breakdown-header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.3px;
+}
+
+.breakdown-row {
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+
+.breakdown-row:last-of-type {
+  border-bottom: none;
+}
+
+.breakdown-footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.worker-col {
+  text-align: left;
+}
+
+.amount-col {
+  text-align: right;
+  font-weight: 600;
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+}
+
+.breakdown-footer .amount-col {
+  color: var(--text-primary);
+}
+
 @media (max-width: 1024px) {
   .header-fields {
     grid-template-columns: 1fr 1fr;

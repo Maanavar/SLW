@@ -381,6 +381,65 @@ html[data-theme='dark'] .edit-payment-btn.active {
   background: var(--bg-secondary);
 }
 
+/* Commission Distribution */
+.edit-commission-distribution {
+  border-left: 3px solid var(--accent-primary);
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+}
+
+.edit-section-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.edit-commission-breakdown {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-card);
+  margin-top: 8px;
+}
+
+.edit-breakdown-header,
+.edit-breakdown-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-md);
+  padding: 10px var(--space-md);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.edit-breakdown-header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.3px;
+}
+
+.edit-breakdown-row {
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+
+.edit-breakdown-row:last-child {
+  border-bottom: none;
+}
+
+.edit-breakdown-row span:last-child {
+  text-align: right;
+  font-weight: 600;
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+}
+
 @media (max-width: 1024px) {
   .edit-header-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));

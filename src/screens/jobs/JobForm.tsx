@@ -15,8 +15,9 @@ import {
   getPaymentStatusFromAmounts,
   isDcApplicableCustomer,
   isCommissionApplicableCustomer,
+  computeDefaultDistribution,
 } from '@/lib/jobUtils';
-import { Customer, Job } from '@/types';
+import { Customer, Job, type CommissionDistribution } from '@/types';
 import './JobForm.css';
 
 function generateJobCardId(jobDate: string, existingJobs: Job[]) {
@@ -36,7 +37,7 @@ function generateJobCardId(jobDate: string, existingJobs: Job[]) {
 }
 
 export function JobForm() {
-  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob } = useDataStore();
+  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer } = useDataStore();
   const toast = useToast();
 
   const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
@@ -69,9 +70,25 @@ export function JobForm() {
   const [filterEndDate, setFilterEndDate] = useState(today);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingJobIds, setEditingJobIds] = useState<number[]>([]);
+  const [commissionDistribution, setCommissionDistribution] = useState<CommissionDistribution[]>([]);
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
+
+  // Auto-calculate commission distribution when customer or total commission changes
+  useMemo(() => {
+    if (showCommissionFields && selectedCustomer) {
+      const workers = getCommissionWorkersForCustomer(selectedCustomer.id);
+      if (workers.length > 0 && totalCommission > 0) {
+        const distribution = computeDefaultDistribution(workers, totalCommission);
+        setCommissionDistribution(distribution);
+      } else {
+        setCommissionDistribution([]);
+      }
+    } else {
+      setCommissionDistribution([]);
+    }
+  }, [selectedCustomer, totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
 
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
   const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
@@ -249,6 +266,9 @@ export function JobForm() {
           jobCardId,
           jobCardLine: index + 1,
           notes: notes || undefined,
+          ...(showCommissionFields && commissionDistribution.length > 0 && index === 0 && {
+            commissionDistribution,
+          }),
           ...(showDcFields && {
             dcNo: dcNo || undefined,
             vehicleNo: vehicleNo || undefined,
@@ -519,6 +539,30 @@ export function JobForm() {
             <p className="dc-validation-note">
               Validation rule: DC Number is mandatory, or mark Approved Without DC.
             </p>
+          </div>
+        ) : null}
+
+        {showCommissionFields && commissionDistribution.length > 0 ? (
+          <div className="form-section commission-distribution-section">
+            <h3 className="section-title">Commission Distribution to Workers</h3>
+            <div className="commission-breakdown-table">
+              <div className="breakdown-header">
+                <span className="worker-col">Worker Name</span>
+                <span className="amount-col">Commission Amount</span>
+              </div>
+              {commissionDistribution.map((dist) => (
+                <div key={dist.workerId} className="breakdown-row">
+                  <span className="worker-col">{dist.workerName}</span>
+                  <span className="amount-col">{formatCurrency(dist.amount)}</span>
+                </div>
+              ))}
+              <div className="breakdown-footer">
+                <span className="worker-col">Total</span>
+                <span className="amount-col">
+                  {formatCurrency(commissionDistribution.reduce((sum, d) => sum + d.amount, 0))}
+                </span>
+              </div>
+            </div>
           </div>
         ) : null}
 
