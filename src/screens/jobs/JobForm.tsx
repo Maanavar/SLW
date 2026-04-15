@@ -333,20 +333,28 @@ export function JobForm() {
     setJobDate(cardToEdit.primary.date);
     setWorkMode(cardToEdit.primary.workMode as 'Workshop' | 'Spot');
 
-    const lines: JobLineState[] = cardToEdit.jobs.map((job) => ({
-      id: job.id.toString(),
-      workType: {
-        id: 0,
-        name: job.workTypeName,
-        shortCode: job.workName || '',
-        category: '',
-        defaultUnit: '',
-        defaultRate: 0,
-      },
-      quantity: job.quantity,
-      amount: String(job.amount),
-      commission: String(job.commissionAmount || 0),
-    }));
+    const lines: JobLineState[] = cardToEdit.jobs.map((job) => {
+      // Extract commissionWorker from commissionDistribution if it exists
+      const commissionWorker = job.commissionDistribution && job.commissionDistribution.length > 0
+        ? commissionWorkersForCustomer.find(w => w.id === job.commissionDistribution![0].workerId) || null
+        : null;
+
+      return {
+        id: job.id.toString(),
+        workType: {
+          id: 0,
+          name: job.workTypeName,
+          shortCode: job.workName || '',
+          category: '',
+          defaultUnit: '',
+          defaultRate: 0,
+        },
+        quantity: job.quantity,
+        amount: String(job.amount),
+        commission: String(job.commissionAmount || 0),
+        commissionWorker,
+      };
+    });
 
     setJobLines(lines);
     setNotes(cardToEdit.primary.notes || '');
