@@ -49,17 +49,6 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
 
-  // Auto-calculate commission distribution when commission changes
-  useMemo(() => {
-    if (showCommissionFields && selectedCustomer && summary.totalCommission > 0) {
-      const workers = getCommissionWorkersForCustomer(selectedCustomer.id);
-      if (workers.length > 0) {
-        const distribution = computeDefaultDistribution(workers, summary.totalCommission);
-        setCommissionDistribution(distribution);
-      }
-    }
-  }, [selectedCustomer, summary.totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
-
   // Initialize when modal opens
   useEffect(() => {
     if (jobs && isOpen && jobs.length > 0) {
@@ -130,6 +119,17 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
     totalCommission,
     netValue: totalAmount - totalCommission,
   };
+
+  // Auto-calculate commission distribution when commission changes
+  useMemo(() => {
+    if (showCommissionFields && selectedCustomer && summary.totalCommission > 0) {
+      const workers = getCommissionWorkersForCustomer(selectedCustomer.id);
+      if (workers.length > 0) {
+        const distribution = computeDefaultDistribution(workers, summary.totalCommission);
+        setCommissionDistribution(distribution);
+      }
+    }
+  }, [selectedCustomer, summary.totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
 
   const handleSave = async () => {
     if (!jobs) return;

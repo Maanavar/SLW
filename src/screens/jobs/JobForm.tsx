@@ -75,6 +75,15 @@ export function JobForm() {
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
 
+  const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
+  const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
+  const summary = {
+    totalAmount,
+    totalCommission,
+    netValue: totalAmount - totalCommission,
+    finalValue: totalAmount + totalCommission,
+  };
+
   // Auto-calculate commission distribution when customer or total commission changes
   useMemo(() => {
     if (showCommissionFields && selectedCustomer) {
@@ -89,15 +98,6 @@ export function JobForm() {
       setCommissionDistribution([]);
     }
   }, [selectedCustomer, totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
-
-  const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
-  const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
-  const summary = {
-    totalAmount,
-    totalCommission,
-    netValue: totalAmount - totalCommission,
-    finalValue: totalAmount + totalCommission,
-  };
 
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
