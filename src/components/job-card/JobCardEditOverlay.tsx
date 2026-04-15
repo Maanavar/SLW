@@ -48,6 +48,9 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
+  const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
+    ? getCommissionWorkersForCustomer(selectedCustomer.id)
+    : [];
 
   // Initialize when modal opens
   useEffect(() => {
@@ -68,20 +71,28 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
         setDcApproval(firstJob.dcApproval || false);
       }
 
-      const lines: JobLineState[] = jobs.map((job) => ({
-        id: job.id.toString(),
-        workType: {
-          id: 0,
-          name: job.workTypeName,
-          shortCode: job.workName || '',
-          category: '',
-          defaultUnit: '',
-          defaultRate: 0,
-        },
-        quantity: job.quantity,
-        amount: String(job.amount),
-        commission: String(job.commissionAmount || 0),
-      }));
+      const lines: JobLineState[] = jobs.map((job) => {
+        // Extract commissionWorker from commissionDistribution if it exists
+        const commissionWorker = job.commissionDistribution && job.commissionDistribution.length > 0
+          ? commissionWorkersForCustomer.find(w => w.id === job.commissionDistribution![0].workerId) || null
+          : null;
+
+        return {
+          id: job.id.toString(),
+          workType: {
+            id: 0,
+            name: job.workTypeName,
+            shortCode: job.workName || '',
+            category: '',
+            defaultUnit: '',
+            defaultRate: 0,
+          },
+          quantity: job.quantity,
+          amount: String(job.amount),
+          commission: String(job.commissionAmount || 0),
+          commissionWorker,
+        };
+      });
       setJobLines(lines);
     }
   }, [jobs, isOpen, getCustomer]);
@@ -95,6 +106,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
         quantity: 1,
         amount: '',
         commission: '',
+        commissionWorker: null,
       },
     ]);
   };
@@ -175,6 +187,20 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           updates.paidAmount = 0;
         }
 
+        // Add commission distribution for first job if worker is selected
+        if (showCommissionFields && i === 0 && line.commissionWorker) {
+          const totalCommissionAmount = parseFloat(line.commission) || 0;
+          if (totalCommissionAmount > 0) {
+            updates.commissionDistribution = [
+              {
+                workerId: line.commissionWorker.id,
+                workerName: line.commissionWorker.name,
+                amount: totalCommissionAmount,
+              },
+            ];
+          }
+        }
+
         if (showDcFields) {
           updates.dcNo = dcNo || undefined;
           updates.vehicleNo = vehicleNo.toUpperCase() || undefined;
@@ -248,6 +274,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
               onRemove={() => handleRemoveLine(line.id)}
               lineNumber={index + 1}
               showCommission={showCommissionFields}
+              commissionWorkers={commissionWorkersForCustomer}
             />
           ))}
         </div>
