@@ -43,11 +43,29 @@ function getTodayString(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-function getMonthRange(): DateRange {
+function getCurrentMonthStr(): string {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const to = now.toISOString().split('T')[0];
-  return { from, to };
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getMonthRangeForStr(yearMonth: string): DateRange {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const from = new Date(year, month - 1, 1).toISOString().split('T')[0];
+  const lastDay = new Date(year, month, 0).getDate();
+  const rawTo = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+  const today = getTodayString();
+  return { from, to: rawTo > today ? today : rawTo };
+}
+
+function shiftMonthStr(yearMonth: string, delta: number): string {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const date = new Date(year, month - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(yearMonth: string): string {
+  const [year, month] = yearMonth.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 }
 
 function clampRecurringDay(day: number): number {
@@ -80,7 +98,9 @@ export function ExpenseManager() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState<ExpenseFormState>(() => getDefaultFormData(getTodayString()));
 
-  const monthRange = useMemo(() => getMonthRange(), []);
+  const currentMonthStr = useMemo(() => getCurrentMonthStr(), []);
+  const [selectedMonthStr, setSelectedMonthStr] = useState(currentMonthStr);
+  const monthRange = useMemo(() => getMonthRangeForStr(selectedMonthStr), [selectedMonthStr]);
   const monthMetrics = useMemo(() => calculateExpenseMetrics(expenses, monthRange), [expenses, monthRange]);
   const monthlyProjection = useMemo(() => getMonthlyExpenseProjection(expenses), [expenses]);
   const monthSummary = useMemo(
@@ -265,7 +285,16 @@ export function ExpenseManager() {
 
             {formData.isRecurring && (
               <div className="form-group">
-                <label>Recurring Day</label>
+                <label>
+                  Recurring Day
+                  <span
+                    className="field-hint-icon"
+                    title="Capped at 28 so it works in February. Day 29, 30, 31 don't exist in all months."
+                    aria-label="Why capped at 28"
+                  >
+                    ?
+                  </span>
+                </label>
                 <input
                   type="number"
                   min="1"
@@ -281,7 +310,7 @@ export function ExpenseManager() {
                     }));
                   }}
                 />
-                <small>Used to mark which day this monthly expense repeats (1-28).</small>
+                <small>Day of month this expense repeats (1–28, capped for February compatibility).</small>
               </div>
             )}
 
@@ -303,7 +332,7 @@ export function ExpenseManager() {
           className={`tab-btn ${activeTab === 'monthly' ? 'active' : ''}`}
           onClick={() => setActiveTab('monthly')}
         >
-          This Month
+          Month
         </button>
         <button
           className={`tab-btn ${activeTab === 'breakdown' ? 'active' : ''}`}
@@ -327,7 +356,35 @@ export function ExpenseManager() {
 
       <div className="expense-content">
         {activeTab === 'overview' && <OverviewTab profitAnalysis={profitAnalysis} />}
-        {activeTab === 'monthly' && <MonthlyTab summary={monthSummary} projection={monthlyProjection} />}
+        {activeTab === 'monthly' && (
+          <div>
+            <div className="expense-month-nav">
+              <button
+                type="button"
+                className="expense-month-nav-btn"
+                onClick={() => setSelectedMonthStr(shiftMonthStr(selectedMonthStr, -1))}
+                aria-label="Previous month"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <span className="expense-month-label">{formatMonthLabel(selectedMonthStr)}</span>
+              <button
+                type="button"
+                className="expense-month-nav-btn"
+                onClick={() => setSelectedMonthStr(shiftMonthStr(selectedMonthStr, 1))}
+                disabled={selectedMonthStr >= currentMonthStr}
+                aria-label="Next month"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            <MonthlyTab summary={monthSummary} projection={monthlyProjection} />
+          </div>
+        )}
         {activeTab === 'breakdown' && <BreakdownTab metrics={monthMetrics} />}
         {activeTab === 'history' && <HistoryTab expenses={expenses} onDelete={handleDeleteExpense} />}
         {activeTab === 'breakeven' && <BreakEvenTab analysis={breakEven} />}

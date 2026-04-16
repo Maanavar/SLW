@@ -153,6 +153,23 @@
   color: var(--text-muted);
 }
 
+.sidebar-signout {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.sidebar-signout:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
 @media (max-width: 1024px) {
   .sidebar {
     display: none;

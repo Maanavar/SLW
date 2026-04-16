@@ -26,6 +26,7 @@ export function CommissionScreen() {
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentNotes, setPaymentNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
@@ -76,16 +77,14 @@ export function CommissionScreen() {
   };
 
   const handleDeletePayment = async (paymentId: number) => {
-    if (!confirm('Are you sure you want to delete this payment record?')) {
-      return;
-    }
-
     try {
       await deleteCommissionPayment(paymentId);
       toast.success('Success', 'Payment deleted successfully');
     } catch (error) {
       console.error('Error deleting payment:', error);
       toast.error('Error', 'Failed to delete payment');
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -126,13 +125,13 @@ export function CommissionScreen() {
           className={`tab-btn ${activeTab === 'workers' ? 'active' : ''}`}
           onClick={() => setActiveTab('workers')}
         >
-          👥 Workers
+          Workers
         </button>
         <button
           className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
-          📋 Payment History
+          Payment History
         </button>
       </div>
 
@@ -181,6 +180,15 @@ export function CommissionScreen() {
                   step="0.01"
                   min="0"
                 />
+                {selectedWorker && (() => {
+                  const w = workerSummary.find((ws) => ws.workerId === selectedWorker);
+                  return w ? (
+                    <p className="form-hint">
+                      Outstanding: <strong>{formatCurrency(w.outstanding)}</strong>
+                      {w.outstanding <= 0 && <span className="hint-settled"> — fully settled</span>}
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="form-group">
@@ -241,7 +249,11 @@ export function CommissionScreen() {
                         {formatCurrency(worker.outstanding)}
                       </td>
                       <td className="text-center">
-                        {worker.outstanding > 0 ? '⏳ Pending' : '✓ Settled'}
+                        {worker.outstanding > 0 ? (
+                          <span className="status-badge status-badge--pending">Pending</span>
+                        ) : (
+                          <span className="status-badge status-badge--paid">Settled</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -285,13 +297,39 @@ export function CommissionScreen() {
                         <td className="text-right">{formatCurrency(payment.amount)}</td>
                         <td>{payment.notes || '-'}</td>
                         <td className="text-center">
-                          <button
-                            className="icon-btn icon-delete"
-                            onClick={() => handleDeletePayment(payment.id)}
-                            title="Delete payment"
-                          >
-                            🗑
-                          </button>
+                          {confirmDeleteId === payment.id ? (
+                            <span className="inline-confirm">
+                              <span className="inline-confirm-text">Delete?</span>
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-xs"
+                                onClick={() => void handleDeletePayment(payment.id)}
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-xs"
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                No
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="icon-btn icon-delete"
+                              onClick={() => setConfirmDeleteId(payment.id)}
+                              title="Delete payment"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

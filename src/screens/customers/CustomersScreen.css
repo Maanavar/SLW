@@ -82,6 +82,31 @@
   background: var(--bg-card);
 }
 
+/* Empty screen state */
+.empty-screen-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-3xl) var(--space-xl);
+  text-align: center;
+}
+
+.empty-screen-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.empty-screen-desc {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  max-width: 320px;
+}
+
 @media (max-width: 768px) {
   .screen-header {
     flex-direction: column;

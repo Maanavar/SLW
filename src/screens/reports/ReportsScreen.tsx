@@ -87,7 +87,7 @@ export function ReportsScreen() {
   const { jobs, getActiveCustomers, getCustomer, deleteJob } = useDataStore();
   const [period, setPeriod] = useState<PeriodType>('month');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
-  const [viewMode, setViewMode] = useState<ReportViewMode>('cards');
+  const [viewMode, setViewMode] = useState<ReportViewMode>('table');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [rangeFrom, setRangeFrom] = useState('');
   const [rangeTo, setRangeTo] = useState(getLocalDateString(new Date()));

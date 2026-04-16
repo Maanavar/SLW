@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useUIStore } from '@/stores/uiStore';
+import { apiClient } from '@/lib/apiClient';
 import './Sidebar.css';
 
 interface NavItem {
@@ -125,7 +126,7 @@ const navSections: NavSection[] = [
     items: [
       {
         path: '/customers',
-        label: 'Customer',
+        label: 'Customers',
         icon: (
           <svg {...iconProps}>
             <circle cx="8" cy="8" r="3" />
@@ -137,7 +138,7 @@ const navSections: NavSection[] = [
       },
       {
         path: '/work-types',
-        label: 'WorkType',
+        label: 'Work Types',
         icon: (
           <svg {...iconProps}>
             <path d="M4 7h16" />
@@ -167,7 +168,16 @@ const navSections: NavSection[] = [
 ];
 
 export function Sidebar() {
+  const navigate = useNavigate();
   const { sidebarCollapsed } = useUIStore();
+
+  const handleSignOut = async () => {
+    try {
+      await apiClient.logout();
+    } finally {
+      navigate('/login', { replace: true });
+    }
+  };
 
   return (
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
@@ -205,6 +215,9 @@ export function Sidebar() {
 
       <footer className="sidebar-footer">
         <p className="version">React Interface</p>
+        <button type="button" className="sidebar-signout" onClick={() => void handleSignOut()}>
+          Sign out
+        </button>
       </footer>
     </aside>
   );

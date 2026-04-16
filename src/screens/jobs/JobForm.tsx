@@ -72,7 +72,16 @@ export function JobForm() {
   const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer } = useDataStore();
   const toast = useToast();
 
-  const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
+  const customers = useMemo(() => {
+    const jobCountByCustomer: Record<number, number> = {};
+    jobs.forEach((job) => {
+      jobCountByCustomer[job.customerId] = (jobCountByCustomer[job.customerId] || 0) + 1;
+    });
+    return getActiveCustomers().sort((a, b) => {
+      const diff = (jobCountByCustomer[b.id] || 0) - (jobCountByCustomer[a.id] || 0);
+      return diff !== 0 ? diff : a.name.localeCompare(b.name);
+    });
+  }, [getActiveCustomers, jobs]);
   const today = getLocalDateString(new Date());
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -193,16 +202,32 @@ export function JobForm() {
     () => todayJobCards.find((group) => group.key === selectedCardKey) || null,
     [todayJobCards, selectedCardKey]
   );
+  const [showReceivedBreakdown, setShowReceivedBreakdown] = useState(false);
+
   const jobCardsMetrics = useMemo(() => {
     let totalFinal = 0;
     let totalPaid = 0;
     let totalPending = 0;
+    let byCash = 0;
+    let byBank = 0;
+    let byUPI = 0;
+    let byCheque = 0;
 
     todayJobCards.forEach((group) => {
       const payment = getJobCardPaymentSummary(group.jobs);
       totalFinal += payment.finalBill;
       totalPaid += payment.paid;
       totalPending += payment.pending;
+
+      group.jobs.forEach((job) => {
+        const paid = job.paidAmount || 0;
+        if (paid > 0) {
+          if (job.paymentMode === 'Cash') byCash += paid;
+          else if (job.paymentMode === 'Bank') byBank += paid;
+          else if (job.paymentMode === 'UPI') byUPI += paid;
+          else if (job.paymentMode === 'Cheque') byCheque += paid;
+        }
+      });
     });
 
     return {
@@ -210,6 +235,10 @@ export function JobForm() {
       totalFinal,
       totalPaid,
       totalPending,
+      byCash,
+      byBank,
+      byUPI,
+      byCheque,
     };
   }, [todayJobCards]);
   const emptyCardsMessage =
@@ -474,6 +503,7 @@ export function JobForm() {
       setNotes('');
       setCardCommissionWorker(null);
       setCardTotalCommission('');
+      setSelectedCardKey(null);
     } catch (error) {
       console.error('Error saving job:', error);
       toast.error('Error', `Failed to ${isEditMode ? 'update' : 'create'} job. Please try again.`);
@@ -602,7 +632,11 @@ export function JobForm() {
                 getLabel={formatCustomerLabel}
                 getKey={(c) => String(c.id)}
                 placeholder="Select customer..."
+                disabled={isEditMode}
               />
+              {isEditMode && (
+                <p className="form-hint-text">Customer cannot be changed when editing a job card.</p>
+              )}
               {selectedCustomer && (
                 <>
                   {(selectedCustomer.advanceBalance || 0) > 0 && (
@@ -808,7 +842,7 @@ export function JobForm() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Approved Without DC</label>
+                <label className="form-label">Mark as DC-Exempt</label>
                 <ToggleSwitch
                   checked={dcApproval}
                   onChange={setDcApproval}
@@ -818,7 +852,7 @@ export function JobForm() {
               </div>
             </div>
             <p className="dc-validation-note">
-              Validation rule: DC Number is mandatory, or mark Approved Without DC.
+              Enter a DC Number, or toggle Mark as DC-Exempt if approved without one.
             </p>
           </div>
         ) : null}
@@ -1006,6 +1040,9 @@ export function JobForm() {
                 setDcDate('');
                 setDcApproval(false);
                 setNotes('');
+                setCardCommissionWorker(null);
+                setCardTotalCommission('');
+                setSelectedCardKey(null);
                 toast.info('Info', 'Edit cancelled');
               }}
               disabled={isSubmitting}
@@ -1089,9 +1126,29 @@ export function JobForm() {
             <span className="jobs-card-stat-label">Final Bill</span>
             <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalFinal)}</span>
           </div>
-          <div className="jobs-card-stat jobs-card-stat--positive">
-            <span className="jobs-card-stat-label">Paid</span>
+          <div
+            className={`jobs-card-stat jobs-card-stat--positive${jobCardsMetrics.totalPaid > 0 ? ' jobs-card-stat--hoverable' : ''}`}
+            onMouseEnter={() => jobCardsMetrics.totalPaid > 0 && setShowReceivedBreakdown(true)}
+            onMouseLeave={() => setShowReceivedBreakdown(false)}
+          >
+            <span className="jobs-card-stat-label">Received</span>
             <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPaid)}</span>
+            {showReceivedBreakdown && (
+              <div className="jobs-stat-breakdown">
+                {jobCardsMetrics.byCash > 0 && (
+                  <div className="jobs-stat-breakdown-row"><span>Cash</span><span>{formatCurrency(jobCardsMetrics.byCash)}</span></div>
+                )}
+                {jobCardsMetrics.byBank > 0 && (
+                  <div className="jobs-stat-breakdown-row"><span>Bank</span><span>{formatCurrency(jobCardsMetrics.byBank)}</span></div>
+                )}
+                {jobCardsMetrics.byUPI > 0 && (
+                  <div className="jobs-stat-breakdown-row"><span>UPI</span><span>{formatCurrency(jobCardsMetrics.byUPI)}</span></div>
+                )}
+                {jobCardsMetrics.byCheque > 0 && (
+                  <div className="jobs-stat-breakdown-row"><span>Cheque</span><span>{formatCurrency(jobCardsMetrics.byCheque)}</span></div>
+                )}
+              </div>
+            )}
           </div>
           <div className="jobs-card-stat jobs-card-stat--warning">
             <span className="jobs-card-stat-label">Pending</span>

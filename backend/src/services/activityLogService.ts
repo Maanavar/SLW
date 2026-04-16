@@ -2,6 +2,7 @@ import type { Request } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import type { LogAction, LogEntity } from '../domain/constants';
+import { getAuthUser } from '../middleware/auth';
 
 export interface ActorContext {
   actorUserId: number | null;
@@ -9,13 +10,15 @@ export interface ActorContext {
 }
 
 export function getActorFromRequest(req: Request): ActorContext {
+  const authUser = getAuthUser(req);
   const actorNameHeader = req.header('x-actor-name');
   const actorIdHeader = req.header('x-actor-user-id');
   const parsedId = actorIdHeader ? Number(actorIdHeader) : NaN;
 
   return {
-    actorUserId: Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null,
-    actorName: actorNameHeader?.trim() ? actorNameHeader.trim() : null,
+    actorUserId:
+      Number.isInteger(parsedId) && parsedId > 0 ? parsedId : (authUser?.id ?? null),
+    actorName: actorNameHeader?.trim() ? actorNameHeader.trim() : (authUser?.name ?? null),
   };
 }
 

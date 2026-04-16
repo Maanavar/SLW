@@ -20,6 +20,11 @@ import './RecordsScreen.css';
 type PeriodMode = 'day' | 'week' | 'month' | 'quarter' | 'halfyear' | 'year' | 'all' | 'range';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
 type ViewMode = 'cards' | 'table';
+type RecordCustomerOption = {
+  id: number;
+  name: string;
+  shortCode?: string;
+};
 
 interface RecordRow {
   id: string;
@@ -115,7 +120,7 @@ function getCardStatusClass(status: RecordRow['paymentStatus']): string {
 
 export function RecordsScreen() {
   const navigate  = useNavigate();
-  const { jobs, getActiveCustomers, getCustomer, deleteJob } = useDataStore();
+  const { jobs, customers, getCustomer, deleteJob } = useDataStore();
   const toast     = useToast();
   const today     = getLocalDateString(new Date());
 
@@ -128,7 +133,7 @@ export function RecordsScreen() {
   // — Filter state
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [paymentFilter, setPaymentFilter]           = useState<PaymentFilter>('all');
-  const [viewMode, setViewMode]                     = useState<ViewMode>('cards');
+  const [viewMode, setViewMode]                     = useState<ViewMode>('table');
 
   // — Modal state
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
@@ -136,6 +141,7 @@ export function RecordsScreen() {
 
   // — Summary hover
   const [showReceivedBreakdown, setShowReceivedBreakdown] = useState(false);
+  const [showBillBreakdown, setShowBillBreakdown] = useState(false);
 
   // — Export state
   const [showExportMenu, setShowExportMenu]     = useState(false);
@@ -175,10 +181,49 @@ export function RecordsScreen() {
 
   // ─── Data ──────────────────────────────────────────────────────────────────
 
-  const customers = useMemo(
-    () => getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name)),
-    [getActiveCustomers]
-  );
+  const customerOptions = useMemo<RecordCustomerOption[]>(() => {
+    const usageMap = new Map<number, { count: number; latestDate: string }>();
+
+    jobs.forEach((job) => {
+      const usage = usageMap.get(job.customerId) || { count: 0, latestDate: '' };
+      usage.count += 1;
+      if (job.date > usage.latestDate) {
+        usage.latestDate = job.date;
+      }
+      usageMap.set(job.customerId, usage);
+    });
+
+    const sortedCustomers = customers
+      .filter((customer) => customer.isActive !== false)
+      .map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        shortCode: customer.shortCode,
+      }))
+      .sort((a, b) => {
+        const aUsage = usageMap.get(a.id);
+        const bUsage = usageMap.get(b.id);
+        const countDiff = (bUsage?.count || 0) - (aUsage?.count || 0);
+        if (countDiff !== 0) return countDiff;
+
+        const latestDateDiff = (bUsage?.latestDate || '').localeCompare(aUsage?.latestDate || '');
+        if (latestDateDiff !== 0) return latestDateDiff;
+
+        return a.name.localeCompare(b.name);
+      });
+
+    return [{ id: 0, name: 'All Clients' }, ...sortedCustomers];
+  }, [customers, jobs]);
+
+  const selectedCustomerOption = useMemo<RecordCustomerOption>(() => {
+    const targetId = selectedCustomerId ?? 0;
+    return (
+      customerOptions.find((customer) => customer.id === targetId) || {
+        id: 0,
+        name: 'All Clients',
+      }
+    );
+  }, [customerOptions, selectedCustomerId]);
 
   const jobsInRange = useMemo(
     () => getJobsInRange(jobs, rangeStart, rangeEnd),
@@ -226,11 +271,12 @@ export function RecordsScreen() {
   );
 
   const summary = useMemo(() => ({
-    totalCards:   rows.length,
-    totalBill:    rows.reduce((s, r) => s + r.finalBill,  0),
-    totalNet:     rows.reduce((s, r) => s + r.ourNet,     0),
-    totalPaid:    rows.reduce((s, r) => s + r.paid,       0),
-    totalPending: rows.reduce((s, r) => s + r.pending,    0),
+    totalCards:      rows.length,
+    totalBill:       rows.reduce((s, r) => s + r.finalBill,  0),
+    totalNet:        rows.reduce((s, r) => s + r.ourNet,     0),
+    totalPaid:       rows.reduce((s, r) => s + r.paid,       0),
+    totalPending:    rows.reduce((s, r) => s + r.pending,    0),
+    totalCommission: rows.reduce((s, r) => s + r.commission, 0),
   }), [rows]);
 
   const receivedBreakdown = useMemo<PaymentBreakdown>(() => {
@@ -473,45 +519,40 @@ export function RecordsScreen() {
         {/* Row 3: Date context — day nav | range inputs | period subtitle */}
         {periodMode === 'day' && (
           <div className="records-day-nav">
-            <button
-              type="button"
-              className="records-nav-btn"
-              onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
-              aria-label="Previous day"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
+            <div className="records-day-nav-shell">
+              <button
+                type="button"
+                className="records-nav-btn"
+                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+                aria-label="Previous day"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
 
-            <label className="records-date-label" title="Click to pick a date">
               <input
+                id="records-date-input"
                 type="date"
                 className="records-date-input"
                 value={selectedDate}
                 onChange={e => setSelectedDate(e.target.value)}
                 max={today}
+                aria-label="Select date"
               />
-              <svg className="records-cal-icon" width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                <rect x="0.75" y="2" width="11.5" height="10" rx="1.75" stroke="currentColor" strokeWidth="1.25"/>
-                <line x1="0.75" y1="5" x2="12.25" y2="5" stroke="currentColor" strokeWidth="1.25"/>
-                <line x1="4" y1="0.75" x2="4" y2="3.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
-                <line x1="9" y1="0.75" x2="9" y2="3.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
-              </svg>
-              {isToday ? 'Today · ' : ''}{formatDayLabel(selectedDate)}
-            </label>
 
-            <button
-              type="button"
-              className="records-nav-btn"
-              onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
-              disabled={selectedDate >= today}
-              aria-label="Next day"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
+              <button
+                type="button"
+                className="records-nav-btn"
+                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+                disabled={selectedDate >= today}
+                aria-label="Next day"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
 
             {!isToday && (
               <button type="button" className="records-today-btn" onClick={() => setSelectedDate(today)}>
@@ -560,15 +601,13 @@ export function RecordsScreen() {
       {/* ── Filter Bar ── */}
       <div className="records-filter-bar">
         <div className="records-filter-left">
-          <SearchableSelect
-            items={[{ id: 0, name: 'All Clients' }, ...customers]}
-            value={selectedCustomerId === null
-              ? { id: 0, name: 'All Clients' }
-              : customers.find(c => c.id === selectedCustomerId) || { id: 0, name: 'All Clients' }
-            }
+          <SearchableSelect<RecordCustomerOption>
+            items={customerOptions}
+            value={selectedCustomerOption}
             onChange={item => setSelectedCustomerId(item.id === 0 ? null : item.id)}
             getLabel={item => item.name}
             getKey={item => String(item.id)}
+            getSearchText={item => `${item.name} ${item.shortCode || ''}`}
             placeholder="All Clients"
           />
 
@@ -629,9 +668,28 @@ export function RecordsScreen() {
             <span className="records-stat-label">Job Cards</span>
             <span className="records-stat-value">{summary.totalCards}</span>
           </div>
-          <div className="records-stat records-stat--slate">
+          <div
+            className={`records-stat records-stat--slate${summary.totalCommission > 0 ? ' records-stat--hoverable' : ''}`}
+            onMouseEnter={() => summary.totalCommission > 0 && setShowBillBreakdown(true)}
+            onMouseLeave={() => setShowBillBreakdown(false)}
+          >
             <span className="records-stat-label">Final Bill</span>
             <span className="records-stat-value">{formatCurrency(summary.totalBill)}</span>
+            {summary.totalCommission > 0 && showBillBreakdown && (
+              <div className="records-breakdown">
+                <div className="breakdown-header">Bill Breakdown</div>
+                <div className="breakdown-items">
+                  <div className="breakdown-item">
+                    <span className="breakdown-label">Net Income</span>
+                    <span className="breakdown-value">{formatCurrency(summary.totalNet)}</span>
+                  </div>
+                  <div className="breakdown-item">
+                    <span className="breakdown-label">Commission</span>
+                    <span className="breakdown-value">{formatCurrency(summary.totalCommission)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="records-stat records-stat--indigo">
             <span className="records-stat-label">Net Income</span>

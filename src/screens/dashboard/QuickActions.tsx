@@ -58,8 +58,8 @@ export function QuickActions() {
       ),
     },
     {
-      label: 'View Reports',
-      action: () => navigate('/reports'),
+      label: 'View Records',
+      action: () => navigate('/records'),
       icon: (
         <svg {...iconProps}>
           <path d="M4 20V4" />

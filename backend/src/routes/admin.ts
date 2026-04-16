@@ -4,8 +4,8 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
-import { env } from '../config/env';
 import { createActivityLog, getActorFromRequest } from '../services/activityLogService';
+import { getAuthUser } from '../middleware/auth';
 import {
   CUSTOMER_TYPES,
   EXPENSE_CATEGORIES,
@@ -129,12 +129,9 @@ const importLegacySchema = z.object({
 const router = Router();
 
 function assertAdminKey(req: Request) {
-  if (!env.adminApiKey) {
-    return;
-  }
-  const providedKey = req.header('x-admin-key');
-  if (providedKey !== env.adminApiKey) {
-    throw new HttpError(401, 'Invalid or missing x-admin-key');
+  const authUser = getAuthUser(req);
+  if (!authUser || authUser.role !== 'admin') {
+    throw new HttpError(403, 'Admin access required');
   }
 }
 

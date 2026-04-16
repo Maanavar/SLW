@@ -223,6 +223,76 @@
   gap: 6px;
 }
 
+.payment-day-selector {
+  min-width: 330px;
+}
+
+.payment-day-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-day-nav-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.payment-day-input {
+  width: 170px;
+  min-width: 170px;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-input);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.payment-day-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(11, 102, 228, 0.1);
+}
+
+.payment-day-nav-btn,
+.payment-day-today-btn {
+  height: 34px;
+  min-height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s ease;
+}
+
+.payment-day-nav-btn:hover,
+.payment-day-today-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.payment-day-nav-btn:disabled,
+.payment-day-today-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .payment-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -312,6 +382,11 @@
   align-items: center;
 }
 
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .icon-btn {
   width: 32px;
   height: 32px;
@@ -389,6 +464,42 @@
   border-color: #2563eb;
 }
 
+.payment-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.payment-filter-select {
+  min-width: 200px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.payment-filter-clear {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.payment-filter-clear:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(201, 55, 44, 0.06);
+}
+
 .quick-fill-buttons {
   display: flex;
   flex-direction: column;
@@ -439,6 +550,27 @@
 
   .report-controls > div {
     min-width: 100%;
+  }
+
+  .payment-day-selector {
+    min-width: 100%;
+  }
+
+  .payment-day-nav {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .payment-day-nav-shell {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .payment-day-input {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 180px;
   }
 
   .form-title {

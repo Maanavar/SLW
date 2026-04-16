@@ -171,3 +171,9 @@ export interface CommissionPayment {
   notes?: string;
   createdAt?: string;
 }
+
+export interface AuthUser {
+  id: number | null;
+  name: string;
+  role: 'admin';
+}
