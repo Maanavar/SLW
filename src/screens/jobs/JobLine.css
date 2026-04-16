@@ -9,6 +9,18 @@
   align-items: end;
 }
 
+.job-line-container.no-worker {
+  grid-template-columns: 34px minmax(220px, 1.9fr) minmax(120px, 0.8fr) minmax(160px, 1fr) minmax(160px, 1fr) 34px;
+}
+
+.job-line-container.no-commission {
+  grid-template-columns: 34px minmax(220px, 1.9fr) minmax(120px, 0.8fr) minmax(160px, 1fr) minmax(160px, 1fr) 34px;
+}
+
+.job-line-container.no-worker.no-commission {
+  grid-template-columns: 34px minmax(240px, 2fr) minmax(130px, 0.9fr) minmax(180px, 1fr) 34px;
+}
+
 .line-number {
   width: 34px;
   height: 34px;
@@ -45,8 +57,8 @@
   border-color: rgba(11, 102, 228, 0.48);
 }
 
-.amount-field,
-.commission-field {
+.job-line-amount-field,
+.job-line-commission-field {
   position: relative;
 }
 
@@ -91,9 +103,9 @@
   }
 
   .work-type-field,
-  .quantity-field,
-  .amount-field,
-  .commission-field {
+  .job-line-quantity-field,
+  .job-line-amount-field,
+  .job-line-commission-field {
     grid-column: span 1;
   }
 

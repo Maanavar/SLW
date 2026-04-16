@@ -22,18 +22,19 @@ model User {
 }
 
 model Customer {
-  id            Int       @id @default(autoincrement())
-  name          String    @db.VarChar(120)
-  shortCode     String    @db.VarChar(20)
-  type          String    @db.VarChar(20)
-  hasCommission Boolean   @default(false)
-  requiresDc    Boolean   @default(false)
-  notes         String    @default("")
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  jobs          Job[]
-  payments      Payment[]
+  id             Int       @id @default(autoincrement())
+  name           String    @db.VarChar(120)
+  shortCode      String    @db.VarChar(20)
+  type           String    @db.VarChar(20)
+  hasCommission  Boolean   @default(false)
+  requiresDc     Boolean   @default(false)
+  advanceBalance Float     @default(0)
+  notes          String    @default("")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  jobs           Job[]
+  payments       Payment[]
 
   @@index([name])
   @@index([shortCode])
@@ -64,6 +65,8 @@ model Job {
   quantity         Float
   amount           Float
   commissionAmount Float     @default(0)
+  commissionWorkerId   Int?
+  commissionWorkerName String?   @db.VarChar(120)
   netAmount        Float?
   date             String    @db.VarChar(10)
   paymentStatus    String?   @db.VarChar(20)
@@ -77,6 +80,7 @@ model Job {
   vehicleNo        String?   @db.VarChar(40)
   dcDate           String?   @db.VarChar(10)
   dcApproval       Boolean?
+  notes            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -84,6 +88,7 @@ model Job {
 
   @@index([date])
   @@index([customerId, date])
+  @@index([commissionWorkerId])
   @@index([jobCardId])
   @@map("jobs")
 }

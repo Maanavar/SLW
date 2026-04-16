@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import type { CommissionWorker } from '@/types';
-import { formatCurrency } from '@/lib/currencyUtils';
 import './Modals.css';
 
 export function CustomerModal() {
@@ -30,7 +29,6 @@ export function CustomerModal() {
   const isCustomerModal = modal.isOpen && modal.type === 'customer';
   const isEditMode = isCustomerModal && (modal.id || 0) > 0;
 
-  // Form state
   const [name, setName] = useState('');
   const [shortCode, setShortCode] = useState('');
   const [customerType, setCustomerType] = useState<'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash'>('Monthly');
@@ -38,13 +36,18 @@ export function CustomerModal() {
   const [requiresDc, setRequiresDc] = useState(false);
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
+
   const [commissionWorkers, setCommissionWorkers] = useState<CommissionWorker[]>([]);
   const [newWorkerName, setNewWorkerName] = useState('');
-  const [newWorkerShareType, setNewWorkerShareType] = useState<'percentage' | 'fixed'>('percentage');
-  const [newWorkerShareValue, setNewWorkerShareValue] = useState('');
   const [newWorkerActive, setNewWorkerActive] = useState(true);
+  const [editingWorkerId, setEditingWorkerId] = useState<number | null>(null);
 
-  // Load customer data for edit mode
+  const resetWorkerForm = () => {
+    setNewWorkerName('');
+    setNewWorkerActive(true);
+    setEditingWorkerId(null);
+  };
+
   useEffect(() => {
     if (isEditMode && modal.id) {
       const customer = getCustomer(modal.id as number);
@@ -57,16 +60,10 @@ export function CustomerModal() {
         setNotes(customer.notes);
         setIsActive(customer.isActive);
 
-        // Load commission workers if this customer has commission
-        if (customer.hasCommission) {
-          const workers = getCommissionWorkersForCustomer(customer.id);
-          setCommissionWorkers(workers);
-        } else {
-          setCommissionWorkers([]);
-        }
+        const workers = customer.hasCommission ? getCommissionWorkersForCustomer(customer.id) : [];
+        setCommissionWorkers(workers);
       }
     } else {
-      // Reset form for add mode
       setName('');
       setShortCode('');
       setCustomerType('Monthly');
@@ -76,53 +73,74 @@ export function CustomerModal() {
       setIsActive(true);
       setCommissionWorkers([]);
     }
-    // Reset new worker form
-    setNewWorkerName('');
-    setNewWorkerShareType('percentage');
-    setNewWorkerShareValue('');
-    setNewWorkerActive(true);
+
+    resetWorkerForm();
   }, [isEditMode, modal.id, getCustomer, getCommissionWorkersForCustomer]);
 
-  const handleAddWorker = async () => {
+  const handleAddOrUpdateWorker = async () => {
     if (!newWorkerName.trim()) {
       toast.error('Error', 'Worker name is required');
       return;
     }
 
-    if (!newWorkerShareValue || parseFloat(newWorkerShareValue) <= 0) {
-      toast.error('Error', 'Share value must be greater than 0');
-      return;
-    }
-
-    if (newWorkerShareType === 'percentage' && parseFloat(newWorkerShareValue) > 100) {
-      toast.error('Error', 'Percentage cannot exceed 100%');
+    const duplicateName = commissionWorkers.some(
+      (worker) =>
+        worker.id !== editingWorkerId &&
+        worker.name.trim().toLowerCase() === newWorkerName.trim().toLowerCase()
+    );
+    if (duplicateName) {
+      toast.error('Error', 'Worker name already exists for this customer');
       return;
     }
 
     try {
-      if (isEditMode && modal.id) {
-        await addCommissionWorker({
-          customerId: modal.id as number,
-          name: newWorkerName.trim(),
-          shareType: newWorkerShareType,
-          shareValue: parseFloat(newWorkerShareValue),
-          isActive: newWorkerActive,
-        });
+      const workerPatch = {
+        name: newWorkerName.trim(),
+        isActive: newWorkerActive,
+        shareType: 'fixed' as const,
+        shareValue: 0,
+      };
 
-        // Reload workers
-        const workers = getCommissionWorkersForCustomer(modal.id as number);
-        setCommissionWorkers(workers);
+      if (editingWorkerId !== null) {
+        if (isEditMode && editingWorkerId > 0) {
+          await updateCommissionWorker(editingWorkerId, workerPatch);
+        }
 
-        setNewWorkerName('');
-        setNewWorkerShareValue('');
-        setNewWorkerShareType('percentage');
-        setNewWorkerActive(true);
+        setCommissionWorkers((prev) =>
+          prev.map((worker) => (worker.id === editingWorkerId ? { ...worker, ...workerPatch } : worker))
+        );
 
-        toast.success('Success', 'Worker added successfully');
+        resetWorkerForm();
+        toast.success('Success', 'Worker updated successfully');
+        return;
       }
-    } catch (error) {
-      toast.error('Error', 'Failed to add worker');
+
+      if (isEditMode && modal.id) {
+        const created = await addCommissionWorker({
+          customerId: modal.id as number,
+          ...workerPatch,
+        });
+        setCommissionWorkers((prev) => [...prev, created]);
+      } else {
+        const draftWorker: CommissionWorker = {
+          id: -Date.now(),
+          customerId: 0,
+          ...workerPatch,
+        };
+        setCommissionWorkers((prev) => [...prev, draftWorker]);
+      }
+
+      resetWorkerForm();
+      toast.success('Success', 'Worker added successfully');
+    } catch {
+      toast.error('Error', `Failed to ${editingWorkerId !== null ? 'update' : 'add'} worker`);
     }
+  };
+
+  const handleEditWorker = (worker: CommissionWorker) => {
+    setEditingWorkerId(worker.id);
+    setNewWorkerName(worker.name);
+    setNewWorkerActive(worker.isActive);
   };
 
   const handleDeleteWorker = async (workerId: number) => {
@@ -131,12 +149,30 @@ export function CustomerModal() {
     }
 
     try {
-      await deleteCommissionWorker(workerId);
-      setCommissionWorkers(commissionWorkers.filter((w) => w.id !== workerId));
+      if (isEditMode && workerId > 0) {
+        await deleteCommissionWorker(workerId);
+      }
+      setCommissionWorkers((prev) => prev.filter((w) => w.id !== workerId));
+      if (editingWorkerId === workerId) {
+        resetWorkerForm();
+      }
       toast.success('Success', 'Worker deleted successfully');
-    } catch (error) {
+    } catch {
       toast.error('Error', 'Failed to delete worker');
     }
+  };
+
+  const handleHasCommissionChange = (checked: boolean) => {
+    if (!checked && commissionWorkers.length > 0) {
+      const confirmed = confirm(
+        'This customer has commission workers configured. Turn off commission for this customer?'
+      );
+      if (!confirmed) {
+        return;
+      }
+      resetWorkerForm();
+    }
+    setHasCommission(checked);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -167,17 +203,30 @@ export function CustomerModal() {
         await updateCustomer(modal.id as number, customerData);
         toast.success('Success', `${name} updated successfully`);
       } else {
-        await addCustomer(customerData);
+        const createdCustomer = await addCustomer(customerData);
+        if (hasCommission && commissionWorkers.length > 0) {
+          await Promise.all(
+            commissionWorkers.map((worker) =>
+              addCommissionWorker({
+                customerId: createdCustomer.id,
+                name: worker.name,
+                isActive: worker.isActive,
+                shareType: 'fixed',
+                shareValue: 0,
+              })
+            )
+          );
+        }
         toast.success('Success', `${name} added successfully`);
       }
 
       closeModal();
-    } catch (error) {
+    } catch {
       toast.error('Error', 'Failed to save customer');
     }
   };
 
-  const showCommissionWorkers = isEditMode && hasCommission;
+  const showCommissionWorkers = hasCommission;
 
   return (
     <Modal
@@ -226,7 +275,7 @@ export function CustomerModal() {
             id="customerType"
             className="form-input"
             value={customerType}
-            onChange={(e) => setCustomerType(e.target.value as any)}
+            onChange={(e) => setCustomerType(e.target.value as typeof customerType)}
           >
             <option value="Monthly">Monthly</option>
             <option value="Invoice">Invoice</option>
@@ -235,25 +284,27 @@ export function CustomerModal() {
           </select>
         </div>
 
-        <div className="form-group">
-          <div className="checkbox-group">
-            <ToggleSwitch
-              checked={hasCommission}
-              onChange={setHasCommission}
-              label="Has Commission"
-              id="has-commission"
-            />
+        <div className="customer-flags-row">
+          <div className="form-group">
+            <div className="checkbox-group">
+              <ToggleSwitch
+                checked={hasCommission}
+                onChange={handleHasCommissionChange}
+                label="Has Commission"
+                id="has-commission"
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="form-group">
-          <div className="checkbox-group">
-            <ToggleSwitch
-              checked={requiresDc}
-              onChange={setRequiresDc}
-              label="Requires DC"
-              id="requires-dc"
-            />
+          <div className="form-group">
+            <div className="checkbox-group">
+              <ToggleSwitch
+                checked={requiresDc}
+                onChange={setRequiresDc}
+                label="Requires DC"
+                id="requires-dc"
+              />
+            </div>
           </div>
         </div>
 
@@ -272,150 +323,101 @@ export function CustomerModal() {
         </div>
 
         {showCommissionWorkers && (
-          <div className="form-group" style={{ borderTop: '1px solid #ddd', paddingTop: '1rem', marginTop: '1rem' }}>
-            <h4 style={{ marginBottom: '1rem' }}>Commission Workers</h4>
+          <section className="commission-workers-panel">
+            <div className="commission-workers-header">
+              <h4>Commission Workers</h4>
+              <p>
+                Worker tagging only. Commission amount is entered per job card.
+              </p>
+            </div>
 
-            {commissionWorkers.length > 0 && (
-              <div style={{ marginBottom: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #ddd' }}>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>Name</th>
-                      <th style={{ textAlign: 'left', padding: '8px' }}>Share</th>
-                      <th style={{ textAlign: 'center', padding: '8px', width: '60px' }}>Active</th>
-                      <th style={{ textAlign: 'center', padding: '8px', width: '60px' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {commissionWorkers.map((worker) => (
-                      <tr key={worker.id} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '8px' }}>{worker.name}</td>
-                        <td style={{ padding: '8px' }}>
-                          {worker.shareType === 'percentage'
-                            ? `${worker.shareValue}%`
-                            : formatCurrency(worker.shareValue)}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px' }}>
-                          {worker.isActive ? '✓' : '✗'}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px' }}>
-                          <button
-                            type="button"
-                            className="icon-btn"
-                            onClick={() => handleDeleteWorker(worker.id)}
-                            title="Delete worker"
-                            style={{ color: '#d32f2f', cursor: 'pointer' }}
-                          >
-                            🗑
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {commissionWorkers.length === 0 ? (
+              <p className="commission-workers-empty">No workers added for this customer yet.</p>
+            ) : (
+              <div className="commission-workers-list" role="list">
+                {commissionWorkers.map((worker) => (
+                  <div className="commission-worker-item" role="listitem" key={worker.id}>
+                    <div className="commission-worker-meta">
+                      <strong>{worker.name}</strong>
+                      <span className={`worker-status ${worker.isActive ? 'active' : 'inactive'}`}>
+                        {worker.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="commission-worker-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleEditWorker(worker)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm btn-danger-soft"
+                        onClick={() => handleDeleteWorker(worker.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            <div style={{ backgroundColor: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
-              <h5 style={{ marginTop: 0, marginBottom: '0.8rem' }}>Add New Worker</h5>
-
-              <div className="form-group" style={{ marginBottom: '0.8rem' }}>
-                <label className="form-label" htmlFor="worker-name">
-                  Name
-                </label>
-                <input
-                  id="worker-name"
-                  type="text"
-                  className="form-input"
-                  value={newWorkerName}
-                  onChange={(e) => setNewWorkerName(e.target.value)}
-                  placeholder="Worker name..."
-                  style={{ marginBottom: 0 }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '0.8rem' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="worker-share-type">
-                    Type
-                  </label>
-                  <select
-                    id="worker-share-type"
-                    className="form-input"
-                    value={newWorkerShareType}
-                    onChange={(e) => setNewWorkerShareType(e.target.value as 'percentage' | 'fixed')}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <option value="percentage">Percentage (%)</option>
-                    <option value="fixed">Fixed (₹)</option>
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="worker-share-value">
-                    {newWorkerShareType === 'percentage' ? 'Percentage' : 'Amount'}
+            <div className="commission-worker-editor">
+              <h5>{editingWorkerId !== null ? 'Edit Worker' : 'Add Worker'}</h5>
+              <div className="commission-worker-editor-grid">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="worker-name">
+                    Worker Name
                   </label>
                   <input
-                    id="worker-share-value"
-                    type="number"
+                    id="worker-name"
+                    type="text"
                     className="form-input"
-                    value={newWorkerShareValue}
-                    onChange={(e) => setNewWorkerShareValue(e.target.value)}
-                    placeholder={newWorkerShareType === 'percentage' ? '0-100' : '0.00'}
-                    step={newWorkerShareType === 'percentage' ? '0.01' : '0.01'}
-                    min="0"
-                    max={newWorkerShareType === 'percentage' ? '100' : undefined}
-                    style={{ marginBottom: 0 }}
+                    value={newWorkerName}
+                    onChange={(e) => setNewWorkerName(e.target.value)}
+                    placeholder="Enter worker name"
                   />
+                </div>
+
+                <div className="form-group">
+                  <div className="checkbox-group">
+                    <ToggleSwitch
+                      checked={newWorkerActive}
+                      onChange={setNewWorkerActive}
+                      label="Active"
+                      id="worker-active"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '0.8rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={newWorkerActive}
-                    onChange={(e) => setNewWorkerActive(e.target.checked)}
-                  />
-                  <span>Active</span>
-                </label>
+              <div className="commission-worker-editor-actions">
+                <button type="button" className="btn btn-secondary" onClick={handleAddOrUpdateWorker}>
+                  {editingWorkerId !== null ? 'Update Worker' : 'Add Worker'}
+                </button>
+                {editingWorkerId !== null && (
+                  <button type="button" className="btn btn-secondary" onClick={resetWorkerForm}>
+                    Cancel Edit
+                  </button>
+                )}
               </div>
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleAddWorker}
-                style={{ width: '100%' }}
-              >
-                Add Worker
-              </button>
             </div>
-          </div>
+          </section>
         )}
 
         <div className="form-group">
           <div className="checkbox-group">
-            <ToggleSwitch
-              checked={isActive}
-              onChange={setIsActive}
-              label="Active"
-              id="is-active"
-            />
+            <ToggleSwitch checked={isActive} onChange={setIsActive} label="Active" id="is-active" />
           </div>
         </div>
 
         <div className="modal-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={closeModal}
-          >
+          <button type="button" className="btn btn-secondary" onClick={closeModal}>
             Cancel
           </button>
-          <button
-            type="submit"
-            className="btn btn-primary"
-          >
+          <button type="submit" className="btn btn-primary">
             {isEditMode ? 'Update' : 'Add'} Customer
           </button>
         </div>

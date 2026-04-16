@@ -20,10 +20,21 @@ interface JobLineProps {
   onRemove: () => void;
   lineNumber: number;
   showCommission?: boolean;
+  showInlineWorker?: boolean;
+  showInlineCommission?: boolean;
   commissionWorkers?: CommissionWorker[];
 }
 
-export function JobLine({ line, onChange, onRemove, lineNumber, showCommission = true, commissionWorkers = [] }: JobLineProps) {
+export function JobLine({
+  line,
+  onChange,
+  onRemove,
+  lineNumber,
+  showCommission = true,
+  showInlineWorker = true,
+  showInlineCommission = true,
+  commissionWorkers = [],
+}: JobLineProps) {
   const { workTypes } = useDataStore();
 
   const sortedWorkTypes = [...workTypes].sort((a, b) => {
@@ -65,8 +76,18 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
     });
   };
 
+  const showWorkerField = showCommission && showInlineWorker && commissionWorkers.length > 0;
+  const showCommissionField = showCommission && showInlineCommission;
+  const lineContainerClassName = [
+    'job-line-container',
+    showWorkerField ? '' : 'no-worker',
+    showCommissionField ? '' : 'no-commission',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="job-line-container">
+    <div className={lineContainerClassName}>
       <div className="line-number">{lineNumber}</div>
 
       <div className="line-field work-type-field">
@@ -85,8 +106,8 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
         />
       </div>
 
-      {showCommission && commissionWorkers.length > 0 && (
-        <div className="line-field worker-field">
+      {showWorkerField && (
+        <div className="line-field job-line-worker-field">
           <label className="field-label">Worker</label>
           <SearchableSelect
             items={sortedWorkers}
@@ -99,12 +120,12 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
         </div>
       )}
 
-      <div className="line-field quantity-field">
+      <div className="line-field job-line-quantity-field">
         <label className="field-label">Quantity</label>
         <QuantityStepper value={line.quantity} onChange={handleQuantityChange} min={1} max={9999} step={1} />
       </div>
 
-      <div className="line-field amount-field">
+      <div className="line-field job-line-amount-field">
         <label className="field-label">Amount (INR)</label>
         <input
           type="number"
@@ -128,8 +149,8 @@ export function JobLine({ line, onChange, onRemove, lineNumber, showCommission =
         ) : null}
       </div>
 
-      {showCommission && (
-        <div className="line-field commission-field">
+      {showCommissionField && (
+        <div className="line-field job-line-commission-field">
           <label className="field-label">Commission (INR)</label>
           <input
             type="number"

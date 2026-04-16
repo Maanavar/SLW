@@ -9,6 +9,7 @@ export interface Customer {
   type: 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
   hasCommission: boolean;
   requiresDc: boolean;
+  advanceBalance?: number;
   notes: string;
   isActive: boolean;
 }
@@ -46,8 +47,9 @@ export interface Job {
   vehicleNo?: string;
   dcDate?: string;
   dcApproval?: boolean;
-  // Commission Distribution
-  commissionDistribution?: CommissionDistribution[];
+  // Commission Worker Tagging
+  commissionWorkerId?: number;
+  commissionWorkerName?: string;
   createdAt?: string;
 }
 
@@ -156,12 +158,6 @@ export interface CommissionWorker {
   shareValue: number; // if percentage: 0-100, if fixed: fixed rupee amount
   isActive: boolean;
   createdAt?: string;
-}
-
-export interface CommissionDistribution {
-  workerId: number;
-  workerName: string; // denormalized snapshot at job-creation time
-  amount: number; // actual rupee amount for this worker on this job line
 }
 
 export interface CommissionPayment {

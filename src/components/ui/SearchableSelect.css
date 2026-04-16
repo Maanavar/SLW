@@ -59,13 +59,14 @@
 
 .searchable-select-dropdown {
   position: absolute;
-  inset: calc(100% + 4px) 0 auto;
+  inset: calc(100% + 4px) auto auto 0;
+  min-width: 100%;
   border: 1px solid var(--border-color);
   border-radius: 10px;
   overflow: hidden;
   background: var(--bg-card);
   box-shadow: var(--shadow-lg);
-  z-index: 40;
+  z-index: 9999;
 }
 
 .searchable-select-input {

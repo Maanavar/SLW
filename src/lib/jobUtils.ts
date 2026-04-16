@@ -3,7 +3,7 @@
  * Ported from src/js/data.js and src/js/dashboard.js
  */
 
-import type { Job, Customer, JobGroup, JobSummary, CommissionWorker, CommissionDistribution } from '@/types';
+import type { Job, Customer, JobGroup, JobSummary } from '@/types';
 
 export type PaymentStatus = 'Paid' | 'Pending' | 'Partially Paid';
 
@@ -19,55 +19,6 @@ export function isDcApplicableCustomer(customer?: Customer | null): boolean {
  */
 export function isCommissionApplicableCustomer(customer?: Customer | null): boolean {
   return customer?.hasCommission === true;
-}
-
-/**
- * Compute default commission distribution based on workers and total commission
- * For percentage-based workers: amount = (shareValue / 100) * totalCommission
- * For fixed-amount workers: amount = shareValue
- * Last worker absorbs rounding differences
- */
-export function computeDefaultDistribution(
-  workers: CommissionWorker[],
-  totalCommission: number
-): CommissionDistribution[] {
-  if (!workers.length || totalCommission <= 0) {
-    return [];
-  }
-
-  const activeWorkers = workers.filter((w) => w.isActive);
-  if (!activeWorkers.length) {
-    return [];
-  }
-
-  const distribution: CommissionDistribution[] = [];
-  let allocatedAmount = 0;
-
-  activeWorkers.forEach((worker, index) => {
-    let amount = 0;
-
-    if (worker.shareType === 'percentage') {
-      amount = (worker.shareValue / 100) * totalCommission;
-    } else {
-      // fixed amount
-      amount = worker.shareValue;
-    }
-
-    // Last worker absorbs rounding differences
-    if (index === activeWorkers.length - 1) {
-      amount = Math.max(0, totalCommission - allocatedAmount);
-    } else {
-      allocatedAmount += amount;
-    }
-
-    distribution.push({
-      workerId: worker.id,
-      workerName: worker.name,
-      amount: Number(amount.toFixed(2)),
-    });
-  });
-
-  return distribution;
 }
 
 /**
@@ -95,10 +46,18 @@ export function getJobWorkName(job: Job): string {
 }
 
 /**
+ * Get final bill value for a job line.
+ * Business rule: Final Bill = Amount + Commission.
+ */
+export function getJobFinalBillValue(job: Job): number {
+  return (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+}
+
+/**
  * Get payment status for job
  */
 export function getJobPaymentStatus(job: Job): string {
-  return getPaymentStatusFromAmounts(getJobPaidAmount(job), getJobNetValue(job));
+  return getPaymentStatusFromAmounts(getJobPaidAmount(job), getJobFinalBillValue(job));
 }
 
 /**
@@ -117,24 +76,24 @@ export function getJobPaidAmount(job: Job): number {
   }
 
   if ((job.paymentStatus || '').toLowerCase() === 'paid') {
-    return getJobNetValue(job);
+    return getJobFinalBillValue(job);
   }
 
   return 0;
 }
 
 /**
- * Derive payment status from paid and net values
+ * Derive payment status from paid and due values
  */
-export function getPaymentStatusFromAmounts(paid: number, net: number): PaymentStatus {
+export function getPaymentStatusFromAmounts(paid: number, due: number): PaymentStatus {
   const normalizedPaid = Number(paid) || 0;
-  const normalizedNet = Number(net) || 0;
+  const normalizedDue = Number(due) || 0;
 
-  if (normalizedPaid <= 0 || normalizedNet <= 0) {
+  if (normalizedPaid <= 0 || normalizedDue <= 0) {
     return 'Pending';
   }
 
-  if (normalizedPaid >= normalizedNet) {
+  if (normalizedPaid >= normalizedDue) {
     return 'Paid';
   }
 
@@ -142,18 +101,11 @@ export function getPaymentStatusFromAmounts(paid: number, net: number): PaymentS
 }
 
 /**
- * Get net value for job (Our actual profit)
- * Business rule: Net Value = Revenue - Commission Expense
- *
- * Example:
- *   Company pays us: ₹1,200 (job.amount)
- *   Commission to manager: ₹200 (job.commissionAmount)
- *   Our Net Income: ₹1,000 (₹1,200 - ₹200)
+ * Get our net income for a job line.
+ * Business rule: `job.amount` already stores our net income.
  */
 export function getJobNetValue(job: Job): number {
-  const amount = Number(job.amount) || 0;
-  const commission = Number(job.commissionAmount) || 0;
-  return amount - commission;
+  return Number(job.amount) || 0;
 }
 
 /**
@@ -176,7 +128,7 @@ export function getJobDcStatus(job: Job, customer?: Customer): string {
 
 /**
  * Calculate customer balance
- * Balance = Total Net Amount - Amount Paid from Jobs - Direct Payments
+ * Balance = Total Final Bill - Amount Paid from Jobs - Direct Payments
  */
 export function calculateCustomerBalance(
   jobs: Job[],
@@ -186,11 +138,11 @@ export function calculateCustomerBalance(
   const customerJobs = jobs.filter((j) => j.customerId === customerId);
   const customerPayments = payments.filter((p) => p.customerId === customerId);
 
-  const totalNet = customerJobs.reduce((sum, j) => sum + getJobNetValue(j), 0);
+  const totalDue = customerJobs.reduce((sum, j) => sum + getJobFinalBillValue(j), 0);
   const totalPaidFromJobs = customerJobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
   const totalPaid = customerPayments.reduce((sum, p) => sum + p.amount, 0);
 
-  return totalNet - totalPaidFromJobs - totalPaid;
+  return totalDue - totalPaidFromJobs - totalPaid;
 }
 
 /**
@@ -231,11 +183,11 @@ export function groupJobsByCard(jobs: Job[]): JobGroup[] {
  * Get summary statistics for jobs
  */
 export function getJobSummary(jobs: Job[]): JobSummary {
-  const billed = jobs.reduce((sum, job) => sum + (Number(job.amount) || 0), 0);
+  const billed = jobs.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const commission = jobs.reduce((sum, job) => sum + (Number(job.commissionAmount) || 0), 0);
   const net = jobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
   const received = jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-  const pending = net - received;
+  const pending = billed - received;
   const jobCards = groupJobsByCard(jobs).length;
 
   return {
@@ -252,14 +204,16 @@ export function getJobSummary(jobs: Job[]): JobSummary {
  * Compute payment summary for a grouped JobCard
  */
 export function getJobCardPaymentSummary(jobs: Job[]) {
+  const finalBill = jobs.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const net = jobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
   const paid = jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-  const pending = Math.max(0, net - paid);
+  const pending = Math.max(0, finalBill - paid);
 
   return {
+    finalBill,
     net,
     paid,
     pending,
-    status: getPaymentStatusFromAmounts(paid, net),
+    status: getPaymentStatusFromAmounts(paid, finalBill),
   };
 }

@@ -1,11 +1,11 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
-import { isDcApplicableCustomer, isCommissionApplicableCustomer, computeDefaultDistribution } from '@/lib/jobUtils';
-import type { Customer, Job, CommissionDistribution } from '@/types';
+import { isDcApplicableCustomer, isCommissionApplicableCustomer } from '@/lib/jobUtils';
+import type { Customer, Job } from '@/types';
 import { JobLine, JobLineState } from '@/screens/jobs/JobLine';
 import './JobCardEditOverlay.css';
 
@@ -16,8 +16,11 @@ interface JobCardEditOverlayProps {
   onSave?: () => void;
 }
 
+const normalizeOverlayPaymentStatus = (status?: Job['paymentStatus']): 'Paid' | 'Pending' =>
+  status === 'Paid' || status === 'Partially Paid' ? 'Paid' : 'Pending';
+
 export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEditOverlayProps) {
-  const { getActiveCustomers, getCustomer, updateJob, getCommissionWorkersForCustomer } = useDataStore();
+  const { getCustomer, updateJob, getCommissionWorkersForCustomer } = useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
 
@@ -42,25 +45,54 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   );
   const [notes, setNotes] = useState(primary?.notes || '');
   const [isSaving, setIsSaving] = useState(false);
-  const [commissionDistribution, setCommissionDistribution] = useState<CommissionDistribution[]>(
-    primary?.commissionDistribution || []
-  );
+  const [cardCommissionWorker, setCardCommissionWorker] = useState<typeof commissionWorkersForCustomer[0] | null>(null);
+  const [cardTotalCommission, setCardTotalCommission] = useState('0');
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
-  const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
-    ? getCommissionWorkersForCustomer(selectedCustomer.id)
-    : [];
+  const commissionWorkersForCustomer = useMemo(
+    () =>
+      showCommissionFields && selectedCustomer
+        ? getCommissionWorkersForCustomer(selectedCustomer.id)
+        : [],
+    [showCommissionFields, selectedCustomer?.id, getCommissionWorkersForCustomer]
+  );
+  const sortedCommissionWorkers = useMemo(
+    () => [...commissionWorkersForCustomer].sort((a, b) => a.name.localeCompare(b.name)),
+    [commissionWorkersForCustomer]
+  );
+
+  useEffect(() => {
+    if (!showCommissionFields) {
+      return;
+    }
+
+    if (sortedCommissionWorkers.length === 1) {
+      const onlyWorker = sortedCommissionWorkers[0];
+      if (!cardCommissionWorker || cardCommissionWorker.id !== onlyWorker.id) {
+        setCardCommissionWorker(onlyWorker);
+      }
+      return;
+    }
+
+    if (
+      cardCommissionWorker &&
+      !sortedCommissionWorkers.some((worker) => worker.id === cardCommissionWorker.id)
+    ) {
+      setCardCommissionWorker(null);
+    }
+  }, [showCommissionFields, sortedCommissionWorkers, cardCommissionWorker]);
 
   // Initialize when modal opens
   useEffect(() => {
     if (jobs && isOpen && jobs.length > 0) {
       const firstJob = jobs[0];
+      const workersForCard = getCommissionWorkersForCustomer(firstJob.customerId);
       setSelectedCustomer(getCustomer(firstJob.customerId) || null);
       setJobDate(firstJob.date);
       setWorkMode((firstJob.workMode as 'Workshop' | 'Spot') || 'Workshop');
       setNotes(firstJob.notes || '');
-      setPaymentStatus((firstJob.paymentStatus as 'Paid' | 'Pending') || 'Pending');
+      setPaymentStatus(normalizeOverlayPaymentStatus(firstJob.paymentStatus));
       setPaidAmount(String(firstJob.paidAmount || '0'));
       setPaymentMode(firstJob.paymentMode || '');
 
@@ -72,11 +104,6 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
       }
 
       const lines: JobLineState[] = jobs.map((job) => {
-        // Extract commissionWorker from commissionDistribution if it exists
-        const commissionWorker = job.commissionDistribution && job.commissionDistribution.length > 0
-          ? commissionWorkersForCustomer.find(w => w.id === job.commissionDistribution![0].workerId) || null
-          : null;
-
         return {
           id: job.id.toString(),
           workType: {
@@ -89,13 +116,20 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           },
           quantity: job.quantity,
           amount: String(job.amount),
-          commission: String(job.commissionAmount || 0),
-          commissionWorker,
+          commission: '0',
+          commissionWorker: null,
         };
       });
       setJobLines(lines);
+
+      // Set card-level commission from first job
+      if (firstJob.commissionWorkerId) {
+        const commissionWorker = workersForCard.find((w) => w.id === firstJob.commissionWorkerId);
+        setCardCommissionWorker(commissionWorker || null);
+      }
+      setCardTotalCommission(String(firstJob.commissionAmount || 0));
     }
-  }, [jobs, isOpen, getCustomer]);
+  }, [jobs, isOpen, getCustomer, getCommissionWorkersForCustomer]);
 
   const handleAddLine = () => {
     setJobLines([
@@ -120,28 +154,33 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   };
 
   const handleLineChange = (updatedLine: JobLineState) => {
-    const finalLine = showCommissionFields ? updatedLine : { ...updatedLine, commission: '0' };
+    const finalLine = showCommissionFields
+      ? updatedLine
+      : { ...updatedLine, commission: '0', commissionWorker: null };
     setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
   };
 
+  const handleCommissionWorkerChange = (lineId: string, workerId: string) => {
+    const worker = sortedCommissionWorkers.find((item) => String(item.id) === workerId) || null;
+    setJobLines((prev) =>
+      prev.map((line) => (line.id === lineId ? { ...line, commissionWorker: worker } : line))
+    );
+  };
+
+  const handleCommissionValueChange = (lineId: string, value: string) => {
+    setJobLines((prev) =>
+      prev.map((line) => (line.id === lineId ? { ...line, commission: value } : line))
+    );
+  };
+
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
-  const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
+  const totalCommission = parseFloat(cardTotalCommission) || 0;
   const summary = {
     totalAmount,
     totalCommission,
-    netValue: totalAmount - totalCommission,
+    netValue: totalAmount,
+    finalValue: totalAmount + totalCommission,
   };
-
-  // Auto-calculate commission distribution when commission changes
-  useMemo(() => {
-    if (showCommissionFields && selectedCustomer && summary.totalCommission > 0) {
-      const workers = getCommissionWorkersForCustomer(selectedCustomer.id);
-      if (workers.length > 0) {
-        const distribution = computeDefaultDistribution(workers, summary.totalCommission);
-        setCommissionDistribution(distribution);
-      }
-    }
-  }, [selectedCustomer, summary.totalCommission, showCommissionFields, getCommissionWorkersForCustomer]);
 
   const handleSave = async () => {
     if (!jobs) return;
@@ -161,6 +200,31 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
       return;
     }
 
+    if (paymentStatus === 'Paid' && (!paidAmount || parseFloat(paidAmount) <= 0)) {
+      toast.error('Error', 'Paid amount is mandatory when status is Paid');
+      return;
+    }
+
+    if (paymentStatus === 'Paid' && !paymentMode) {
+      toast.error('Error', 'Payment mode is mandatory when status is Paid');
+      return;
+    }
+
+    if (showCommissionFields && (cardTotalCommission === '' || parseFloat(cardTotalCommission) < 0)) {
+      toast.error('Error', 'Please enter commission amount');
+      return;
+    }
+
+    if (showCommissionFields && sortedCommissionWorkers.length === 0) {
+      toast.error('Error', 'Add at least one commission worker for this customer');
+      return;
+    }
+
+    if (showCommissionFields && !cardCommissionWorker) {
+      toast.error('Error', 'Select one commission worker for this job card');
+      return;
+    }
+
     setIsSaving(true);
     try {
       for (let i = 0; i < jobs.length; i++) {
@@ -170,14 +234,19 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
         if (!line) continue;
 
         const updates: any = {
+          date: jobDate,
           amount: parseFloat(line.amount),
-          commissionAmount: parseFloat(line.commission) || 0,
+          commissionAmount: i === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+          commissionWorkerId:
+            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+          commissionWorkerName:
+            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
           quantity: line.quantity,
           workTypeName: line.workType?.name,
           workName: line.workType?.shortCode,
           paymentStatus,
           workMode,
-          notes: notes || undefined,
+          notes: notes.trim() ? notes.trim() : null,
         };
 
         if (paymentStatus === 'Paid') {
@@ -185,20 +254,6 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           updates.paymentMode = paymentMode;
         } else {
           updates.paidAmount = 0;
-        }
-
-        // Add commission distribution for first job if worker is selected
-        if (showCommissionFields && i === 0 && line.commissionWorker) {
-          const totalCommissionAmount = parseFloat(line.commission) || 0;
-          if (totalCommissionAmount > 0) {
-            updates.commissionDistribution = [
-              {
-                workerId: line.commissionWorker.id,
-                workerName: line.commissionWorker.name,
-                amount: totalCommissionAmount,
-              },
-            ];
-          }
         }
 
         if (showDcFields) {
@@ -239,7 +294,14 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           </div>
           <div className="edit-field-group">
             <label className="edit-field-label">Date</label>
-            <div className="edit-field-display">{jobDate}</div>
+            <input
+              type="date"
+              value={jobDate}
+              onChange={(e) => setJobDate(e.target.value)}
+              max={today}
+              className="edit-input"
+              aria-label="Job Date"
+            />
           </div>
           <div className="edit-field-group">
             <label className="edit-field-label">Work Mode</label>
@@ -274,10 +336,61 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
               onRemove={() => handleRemoveLine(line.id)}
               lineNumber={index + 1}
               showCommission={showCommissionFields}
-              commissionWorkers={commissionWorkersForCustomer}
+              showInlineWorker={false}
+              showInlineCommission={false}
             />
           ))}
         </div>
+
+        {showCommissionFields && (
+          <div className="edit-commission-assignment edit-section">
+            <div className="edit-job-details-header">
+              <h3 className="edit-section-title">Commission Assignment</h3>
+              <span className="edit-assignment-note">One job card can be tagged to only one commission worker.</span>
+            </div>
+
+            {sortedCommissionWorkers.length === 0 ? (
+              <p className="edit-assignment-empty">
+                No commission workers found for this customer. Add workers in Customer settings.
+              </p>
+            ) : (
+              <div className="edit-assignment-simple">
+                <div className="edit-field-group">
+                  <label className="edit-field-label">Commission Worker</label>
+                  <select
+                    className="edit-select"
+                    value={cardCommissionWorker ? String(cardCommissionWorker.id) : ''}
+                    onChange={(e) => {
+                      const worker = sortedCommissionWorkers.find((w) => String(w.id) === e.target.value);
+                      setCardCommissionWorker(worker || null);
+                    }}
+                    aria-label="Commission Worker"
+                  >
+                    <option value="">Select worker...</option>
+                    {sortedCommissionWorkers.map((worker) => (
+                      <option key={worker.id} value={String(worker.id)}>
+                        {worker.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="edit-field-group">
+                  <label className="edit-field-label">Total Commission (INR)</label>
+                  <input
+                    type="number"
+                    className="edit-input"
+                    value={cardTotalCommission}
+                    onChange={(e) => setCardTotalCommission(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    aria-label="Total Commission"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Summary */}
         <div className={`edit-summary-grid edit-section ${!showCommissionFields ? 'two-column' : ''}`}>
@@ -291,30 +404,17 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
               <div className="edit-summary-value">{formatCurrency(summary.totalCommission)}</div>
             </div>
           )}
+          {showCommissionFields && (
+            <div className="edit-summary-item">
+              <div className="edit-summary-label">Final Bill</div>
+              <div className="edit-summary-value">{formatCurrency(summary.finalValue)}</div>
+            </div>
+          )}
           <div className="edit-summary-item">
-            <div className="edit-summary-label">Net Value</div>
+            <div className="edit-summary-label">{showCommissionFields ? 'Our Net Income' : 'Net Value'}</div>
             <div className="edit-summary-value">{formatCurrency(summary.netValue)}</div>
           </div>
         </div>
-
-        {/* Commission Distribution */}
-        {showCommissionFields && commissionDistribution.length > 0 && (
-          <div className="edit-commission-distribution edit-section">
-            <h3 className="edit-section-title">Commission Distribution</h3>
-            <div className="edit-commission-breakdown">
-              <div className="edit-breakdown-header">
-                <span>Worker Name</span>
-                <span>Amount</span>
-              </div>
-              {commissionDistribution.map((dist) => (
-                <div key={dist.workerId} className="edit-breakdown-row">
-                  <span>{dist.workerName}</span>
-                  <span>{formatCurrency(dist.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* DC Fields */}
         {showDcFields && (

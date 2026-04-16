@@ -381,63 +381,63 @@ html[data-theme='dark'] .edit-payment-btn.active {
   background: var(--bg-secondary);
 }
 
-/* Commission Distribution */
-.edit-commission-distribution {
-  border-left: 3px solid var(--accent-primary);
-  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+.edit-commission-assignment {
+  border-color: rgba(11, 102, 228, 0.36);
+  background:
+    linear-gradient(180deg, rgba(11, 102, 228, 0.05), transparent 70%),
+    var(--bg-card);
 }
 
-.edit-section-title {
-  margin: 0;
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.edit-commission-breakdown {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--bg-card);
-  margin-top: 8px;
-}
-
-.edit-breakdown-header,
-.edit-breakdown-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-md);
-  padding: 10px var(--space-md);
-  align-items: center;
-  font-size: var(--text-sm);
-}
-
-.edit-breakdown-header {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: uppercase;
+.edit-assignment-note {
   font-size: var(--text-xs);
-  letter-spacing: 0.3px;
+  color: var(--text-muted);
 }
 
-.edit-breakdown-row {
-  border-bottom: 1px solid var(--border-light);
+.edit-assignment-empty {
+  margin: 0;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
-.edit-breakdown-row:last-child {
+.edit-assignment-table {
+  margin-top: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.edit-assignment-header,
+.edit-assignment-row {
+  display: grid;
+  grid-template-columns: 70px minmax(160px, 2fr) minmax(170px, 2fr) minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.edit-assignment-header {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.edit-assignment-row {
+  border-bottom: 1px solid var(--border-light);
+}
+
+.edit-assignment-row:last-child {
   border-bottom: none;
 }
 
-.edit-breakdown-row span:last-child {
-  text-align: right;
-  font-weight: 600;
-  color: var(--accent-green);
-  font-family: var(--font-mono);
+.edit-assignment-simple {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
 @media (max-width: 1024px) {
@@ -450,7 +450,10 @@ html[data-theme='dark'] .edit-payment-btn.active {
   .edit-summary-grid,
   .edit-summary-grid.two-column,
   .edit-dc-fields,
-  .edit-paid-fields {
+  .edit-paid-fields,
+  .edit-assignment-header,
+  .edit-assignment-row,
+  .edit-assignment-simple {
     grid-template-columns: 1fr;
   }
 }

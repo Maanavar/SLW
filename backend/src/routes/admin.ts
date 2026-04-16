@@ -75,6 +75,8 @@ const importLegacySchema = z.object({
         quantity: z.number().positive(),
         amount: z.number().min(0),
         commissionAmount: z.number().min(0).default(0),
+        commissionWorkerId: z.number().int().positive().optional(),
+        commissionWorkerName: z.string().trim().max(120).optional(),
         netAmount: z.number().min(0).optional(),
         date: localDateSchema,
         paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
@@ -88,6 +90,7 @@ const importLegacySchema = z.object({
         vehicleNo: z.string().trim().max(40).optional(),
         dcDate: localDateSchema.optional(),
         dcApproval: z.boolean().optional(),
+        notes: z.string().max(1000).optional(),
       })
     )
     .default([]),
@@ -188,6 +191,8 @@ router.post(
           data: payload.jobs.map((job) => ({
             ...job,
             workName: job.workName ?? null,
+            commissionWorkerId: job.commissionWorkerId ?? null,
+            commissionWorkerName: job.commissionWorkerName ?? null,
             netAmount: job.netAmount ?? null,
             paymentStatus: job.paymentStatus ?? null,
             paymentMode: job.paymentMode ?? null,
@@ -200,6 +205,7 @@ router.post(
             vehicleNo: job.vehicleNo ?? null,
             dcDate: job.dcDate ?? null,
             dcApproval: job.dcApproval ?? null,
+            notes: job.notes ?? null,
           })),
           skipDuplicates: true,
         });

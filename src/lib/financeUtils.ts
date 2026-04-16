@@ -4,16 +4,16 @@
  */
 
 import type { Job, Payment, Customer, CommissionPayment, CommissionWorker } from '@/types';
-import { getJobNetValue, getJobPaidAmount, groupJobsByCard } from './jobUtils';
+import { getJobFinalBillValue, getJobPaidAmount, groupJobsByCard } from './jobUtils';
 
 // ============================================================================
 // ACCOUNTING STANDARD TYPES
 // ============================================================================
 
 export interface RevenueMetrics {
-  totalRevenue: number;      // Sum of all job.amount
+  totalRevenue: number;      // Sum of all final bill values (amount + commission)
   commissionExpense: number; // Sum of all job.commissionAmount
-  grossProfit: number;       // totalRevenue - commissionExpense
+  grossProfit: number;       // Our net income after commission
   jobCount: number;          // Number of unique jobs/cards
 }
 
@@ -34,7 +34,7 @@ export interface WorkerCommissionSummary {
   workerId: number;
   workerName: string;
   customerId: number;
-  totalDue: number;           // Sum of commission distribution amounts for this worker
+  totalDue: number;           // Sum of tagged commission amounts for this worker
   totalPaid: number;          // Sum of commission payments to this worker
   outstanding: number;        // totalDue - totalPaid
 }
@@ -79,7 +79,7 @@ export function calculateRevenueMetrics(
     ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
     : jobs;
 
-  const totalRevenue = filtered.reduce((sum, job) => sum + (Number(job.amount) || 0), 0);
+  const totalRevenue = filtered.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const commissionExpense = filtered.reduce(
     (sum, job) => sum + (Number(job.commissionAmount) || 0),
     0
@@ -106,7 +106,7 @@ export function calculatePaymentMetrics(
     ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
     : jobs;
 
-  const totalRevenue = filtered.reduce((sum, job) => sum + (Number(job.amount) || 0), 0);
+  const totalRevenue = filtered.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
 
   const paymentsInRange = filterByDate
     ? payments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
@@ -173,6 +173,8 @@ export function calculateWorkerCommissionSummary(
   workers: CommissionWorker[]
 ): WorkerCommissionSummary[] {
   const summaryMap = new Map<number, WorkerCommissionSummary>();
+  const workerById = new Map<number, CommissionWorker>();
+  workers.forEach((worker) => workerById.set(worker.id, worker));
 
   // Initialize summaries for all workers
   workers.forEach((worker) => {
@@ -186,23 +188,66 @@ export function calculateWorkerCommissionSummary(
     });
   });
 
-  // Calculate total due from commission distributions
+  // Calculate total due from tagged commission worker on each job line
   jobs.forEach((job) => {
-    if (job.commissionDistribution && Array.isArray(job.commissionDistribution)) {
-      job.commissionDistribution.forEach((dist) => {
-        const summary = summaryMap.get(dist.workerId);
-        if (summary) {
-          summary.totalDue += dist.amount || 0;
-        }
+    const commission = Number(job.commissionAmount) || 0;
+    if (commission <= 0) {
+      return;
+    }
+
+    let workerId = job.commissionWorkerId;
+    let workerName = job.commissionWorkerName?.trim() || '';
+
+    if (typeof workerId !== 'number' && workerName) {
+      const match = workers.find(
+        (worker) =>
+          worker.customerId === job.customerId &&
+          worker.name.toLowerCase() === workerName.toLowerCase()
+      );
+      if (match) {
+        workerId = match.id;
+      }
+    }
+
+    if (typeof workerId !== 'number') {
+      return;
+    }
+
+    if (!summaryMap.has(workerId)) {
+      const knownWorker = workerById.get(workerId);
+      summaryMap.set(workerId, {
+        workerId,
+        workerName: knownWorker?.name || workerName || `Worker #${workerId}`,
+        customerId: knownWorker?.customerId || job.customerId,
+        totalDue: 0,
+        totalPaid: 0,
+        outstanding: 0,
       });
+    }
+
+    const summary = summaryMap.get(workerId);
+    if (summary) {
+      summary.totalDue += commission;
     }
   });
 
   // Calculate total paid from commission payments
   commissionPayments.forEach((payment) => {
-    const summary = summaryMap.get(payment.workerId);
-    if (summary) {
-      summary.totalPaid += payment.amount || 0;
+    if (!summaryMap.has(payment.workerId)) {
+      const knownWorker = workerById.get(payment.workerId);
+      summaryMap.set(payment.workerId, {
+        workerId: payment.workerId,
+        workerName: knownWorker?.name || payment.workerName,
+        customerId: knownWorker?.customerId || payment.customerId,
+        totalDue: 0,
+        totalPaid: 0,
+        outstanding: 0,
+      });
+    }
+
+    const paymentSummary = summaryMap.get(payment.workerId);
+    if (paymentSummary) {
+      paymentSummary.totalPaid += payment.amount || 0;
     }
   });
 
@@ -242,8 +287,9 @@ export function calculateCustomerFinancials(
 
     const amount = Number(job.amount) || 0;
     const commission = Number(job.commissionAmount) || 0;
+    const finalBill = amount + commission;
 
-    existing.totalRevenue += amount;
+    existing.totalRevenue += finalBill;
     existing.commissionExpense += commission;
     existing.grossProfit = existing.totalRevenue - existing.commissionExpense;
     existing.totalReceived += getJobPaidAmount(job);
@@ -327,7 +373,7 @@ export function calculatePaymentMethodBreakdown(
 
 export function calculateOutstandingAgeing(
   jobs: Job[],
-  payments: Payment[]
+  _payments: Payment[]
 ): AgeingBucket[] {
   const today = new Date();
   const buckets: AgeingBucket[] = [
@@ -341,7 +387,7 @@ export function calculateOutstandingAgeing(
   const customerAges = new Map<number, number[]>();
 
   jobs.forEach((job) => {
-    const outstanding = Number(job.amount) || 0 - (getJobPaidAmount(job) || 0);
+    const outstanding = getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0);
     if (outstanding > 0) {
       const jobDate = new Date(job.date);
       const days = Math.floor((today.getTime() - jobDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -419,10 +465,10 @@ export function calculateDailyCashFlow(
   jobs.forEach((job) => {
     const flow = cashFlows.get(job.date);
     if (flow) {
-      flow.revenue += Number(job.amount) || 0;
+      flow.revenue += getJobFinalBillValue(job);
       flow.commission += Number(job.commissionAmount) || 0;
       flow.netIncome = flow.revenue - flow.commission;
-      flow.outstanding = flow.revenue - (getJobPaidAmount(job) || 0);
+      flow.outstanding += Math.max(0, getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0));
     }
   });
 

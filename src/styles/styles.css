@@ -1341,24 +1341,6 @@
   }
 }
 
-/* Commission field styling */
-.commission-field {
-  display: none;
-}
-
-.commission-field.visible {
-  display: block;
-}
-
-/* DC/Vehicle fields */
-.dc-fields {
-  display: none;
-}
-
-.dc-fields.visible {
-  display: grid;
-}
-
 /* Suggestion chip */
 .suggestion-chip {
   display: inline-flex;

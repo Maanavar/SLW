@@ -20,16 +20,7 @@ const iconProps = {
 };
 
 const navItems: MobileNavItem[] = [
-  {
-    path: '/',
-    label: 'Jobs',
-    icon: (
-      <svg {...iconProps}>
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <path d="M8 9h8M8 13h8M8 17h4" />
-      </svg>
-    ),
-  },
+  // Operations
   {
     path: '/dashboard',
     label: 'Dashboard',
@@ -43,18 +34,19 @@ const navItems: MobileNavItem[] = [
     ),
   },
   {
-    path: '/payments',
-    label: 'Payments',
+    path: '/',
+    label: 'Jobs',
     icon: (
       <svg {...iconProps}>
-        <path d="M12 2v20" />
-        <path d="M17 7.5C17 5.6 14.8 4 12 4s-5 1.6-5 3.5S9.2 11 12 11s5 1.5 5 3.5S14.8 18 12 18s-5-1.6-5-3.5" />
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M8 9h8M8 13h8M8 17h4" />
       </svg>
     ),
   },
+  // Reporting
   {
     path: '/history',
-    label: 'Job History',
+    label: 'History',
     icon: (
       <svg {...iconProps}>
         <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -76,6 +68,17 @@ const navItems: MobileNavItem[] = [
       </svg>
     ),
   },
+  // Finance
+  {
+    path: '/payments',
+    label: 'Payments',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M12 2v20" />
+        <path d="M17 7.5C17 5.6 14.8 4 12 4s-5 1.6-5 3.5S9.2 11 12 11s5 1.5 5 3.5S14.8 18 12 18s-5-1.6-5-3.5" />
+      </svg>
+    ),
+  },
   {
     path: '/finance',
     label: 'Finance',
@@ -85,16 +88,6 @@ const navItems: MobileNavItem[] = [
         <path d="M7 11h10" />
         <path d="M7 15h10" />
         <path d="M7 7h10" />
-      </svg>
-    ),
-  },
-  {
-    path: '/expenses',
-    label: 'Expenses',
-    icon: (
-      <svg {...iconProps}>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v10M7 12h10" />
       </svg>
     ),
   },
@@ -111,6 +104,17 @@ const navItems: MobileNavItem[] = [
       </svg>
     ),
   },
+  {
+    path: '/expenses',
+    label: 'Expenses',
+    icon: (
+      <svg {...iconProps}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v10M7 12h10" />
+      </svg>
+    ),
+  },
+  // Settings
   {
     path: '/logger',
     label: 'Logger',

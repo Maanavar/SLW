@@ -54,18 +54,8 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    title: 'Finance',
+    title: 'Reporting',
     items: [
-      {
-        path: '/payments',
-        label: 'Payments',
-        icon: (
-          <svg {...iconProps}>
-            <path d="M12 2v20" />
-            <path d="M17 7.5C17 5.6 14.8 4 12 4s-5 1.6-5 3.5S9.2 11 12 11s5 1.5 5 3.5S14.8 18 12 18s-5-1.6-5-3.5" />
-          </svg>
-        ),
-      },
       {
         path: '/history',
         label: 'Job History',
@@ -90,6 +80,21 @@ const navSections: NavSection[] = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    title: 'Finance',
+    items: [
+      {
+        path: '/payments',
+        label: 'Payments',
+        icon: (
+          <svg {...iconProps}>
+            <path d="M12 2v20" />
+            <path d="M17 7.5C17 5.6 14.8 4 12 4s-5 1.6-5 3.5S9.2 11 12 11s5 1.5 5 3.5S14.8 18 12 18s-5-1.6-5-3.5" />
+          </svg>
+        ),
+      },
       {
         path: '/finance',
         label: 'Finance',
@@ -99,16 +104,6 @@ const navSections: NavSection[] = [
             <path d="M7 11h10" />
             <path d="M7 15h10" />
             <path d="M7 7h10" />
-          </svg>
-        ),
-      },
-      {
-        path: '/expenses',
-        label: 'Expenses',
-        icon: (
-          <svg {...iconProps}>
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v10M7 12h10" />
           </svg>
         ),
       },
@@ -126,12 +121,12 @@ const navSections: NavSection[] = [
         ),
       },
       {
-        path: '/logger',
-        label: 'Logger',
+        path: '/expenses',
+        label: 'Expenses',
         icon: (
           <svg {...iconProps}>
-            <path d="M4 4h16v16H4z" />
-            <path d="M8 8h8M8 12h8M8 16h5" />
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v10M7 12h10" />
           </svg>
         ),
       },
@@ -161,6 +156,21 @@ const navSections: NavSection[] = [
             <path d="M6 7V5.5A1.5 1.5 0 0 1 7.5 4h9A1.5 1.5 0 0 1 18 5.5V7" />
             <rect x="5" y="7" width="14" height="13" rx="2" />
             <path d="M9 12h6M9 16h4" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    title: 'Settings',
+    items: [
+      {
+        path: '/logger',
+        label: 'Logger',
+        icon: (
+          <svg {...iconProps}>
+            <path d="M4 4h16v16H4z" />
+            <path d="M8 8h8M8 12h8M8 16h5" />
           </svg>
         ),
       },

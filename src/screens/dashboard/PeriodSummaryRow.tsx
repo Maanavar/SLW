@@ -3,7 +3,7 @@ import { StatCard, PaymentBreakdown } from '@/components/ui/StatCard';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobsInRange, getPaymentsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
 import { getLocalDateString, getWeekStartDate } from '@/lib/dateUtils';
 
 interface PeriodStats {
@@ -49,7 +49,7 @@ function getPeriodStats(
   const jobsCount = groupJobsByCard(jobsInPeriod).length;
 
   // Revenue & Expense Calculations
-  const totalRevenue = jobsInPeriod.reduce((sum, job) => sum + (Number(job.amount) || 0), 0);
+  const totalRevenue = jobsInPeriod.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const commissionExpense = jobsInPeriod.reduce(
     (sum, job) => sum + (Number(job.commissionAmount) || 0),
     0

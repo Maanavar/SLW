@@ -95,10 +95,71 @@ function parseJsonArray<T>(raw: string | null): T[] {
   }
 }
 
+type LegacyJobLike = Job & {
+  commissionDistribution?: Array<{ workerId?: number; workerName?: string }>;
+};
+
+function normalizeLegacyJob(job: LegacyJobLike): Job {
+  let commissionWorkerId = job.commissionWorkerId;
+  let commissionWorkerName = job.commissionWorkerName;
+
+  if (
+    typeof commissionWorkerId !== 'number' &&
+    Array.isArray(job.commissionDistribution) &&
+    job.commissionDistribution.length > 0
+  ) {
+    const firstDistribution = job.commissionDistribution[0];
+    if (typeof firstDistribution.workerId === 'number') {
+      commissionWorkerId = firstDistribution.workerId;
+    }
+    if (!commissionWorkerName && typeof firstDistribution.workerName === 'string') {
+      commissionWorkerName = firstDistribution.workerName;
+    }
+  }
+
+  const normalized: Job = {
+    ...job,
+    commissionWorkerId,
+    commissionWorkerName,
+  };
+  delete (normalized as LegacyJobLike).commissionDistribution;
+  return normalized;
+}
+
+function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
+  return customers.map((customer) => {
+    const isCommissionDcCustomer = [1, 2, 17, 18].includes(customer.id);
+    if (customer.id === 17 && !customer.shortCode) {
+      return {
+        ...customer,
+        shortCode: 'AKR',
+        hasCommission: true,
+        requiresDc: true,
+      };
+    }
+    if (customer.id === 18 && !customer.shortCode) {
+      return {
+        ...customer,
+        shortCode: 'AVP',
+        hasCommission: true,
+        requiresDc: true,
+      };
+    }
+    if (isCommissionDcCustomer) {
+      return {
+        ...customer,
+        hasCommission: true,
+        requiresDc: true,
+      };
+    }
+    return customer;
+  });
+}
+
 function loadLegacySnapshot() {
   const customers = parseJsonArray<Customer>(localStorage.getItem(LEGACY_KEYS.customers));
   const workTypes = parseJsonArray<WorkType>(localStorage.getItem(LEGACY_KEYS.workTypes));
-  const jobs = parseJsonArray<Job>(localStorage.getItem(LEGACY_KEYS.jobs));
+  const jobs = parseJsonArray<LegacyJobLike>(localStorage.getItem(LEGACY_KEYS.jobs)).map(normalizeLegacyJob);
   const payments = parseJsonArray<Payment>(localStorage.getItem(LEGACY_KEYS.payments));
   const expenses = parseJsonArray<Expense>(localStorage.getItem(LEGACY_KEYS.expenses));
   const categoriesJson = localStorage.getItem(LEGACY_KEYS.categories);
@@ -107,7 +168,7 @@ function loadLegacySnapshot() {
   const commissionPayments = parseJsonArray<CommissionPayment>(localStorage.getItem(LEGACY_KEYS.commissionPayments));
 
   return {
-    customers: customers.length > 0 ? customers : defaultCustomers,
+    customers: patchCommissionDcCustomers(customers.length > 0 ? customers : defaultCustomers),
     workTypes: workTypes.length > 0 ? workTypes : defaultWorkTypes,
     jobs,
     payments,
@@ -172,6 +233,7 @@ export const useDataStore = create<DataStore>()(
           };
 
           let data = await hydrateFromApi();
+          data.jobs = data.jobs.map((job) => normalizeLegacyJob(job as LegacyJobLike));
           const isBackendEmpty =
             data.customers.length === 0 &&
             data.workTypes.length === 0 &&
@@ -194,12 +256,7 @@ export const useDataStore = create<DataStore>()(
             data = await hydrateFromApi();
           }
 
-          // Patch AVP/AKR shortCodes if empty
-          data.customers = data.customers.map(c => {
-            if (c.id === 17 && !c.shortCode) return { ...c, shortCode: 'AKR' };
-            if (c.id === 18 && !c.shortCode) return { ...c, shortCode: 'AVP' };
-            return c;
-          });
+          data.customers = patchCommissionDcCustomers(data.customers);
 
           set({
             ...data,
@@ -240,9 +297,9 @@ export const useDataStore = create<DataStore>()(
         ]);
 
         set({
-          customers,
+          customers: patchCommissionDcCustomers(customers),
           workTypes,
-          jobs,
+          jobs: jobs.map((job) => normalizeLegacyJob(job as LegacyJobLike)),
           payments,
           expenses,
           lastSyncAt: new Date().toISOString(),

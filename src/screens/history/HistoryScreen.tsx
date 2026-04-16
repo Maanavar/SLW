@@ -19,9 +19,9 @@ interface CardHistoryRow {
   customerName: string;
   lineCount: number;
   workSummary: string;
-  amount: number;
+  finalBill: number;
   commission: number;
-  net: number;
+  ourNet: number;
   paid: number;
   pending: number;
   paymentStatus: 'Paid' | 'Pending' | 'Partially Paid';
@@ -66,9 +66,9 @@ export function HistoryScreen() {
           customerName,
           lineCount: group.lineCount,
           workSummary,
-          amount: group.totalAmount,
+          finalBill: payment.finalBill,
           commission,
-          net: payment.net,
+          ourNet: payment.net,
           paid: payment.paid,
           pending: payment.pending,
           paymentStatus: payment.status,
@@ -124,8 +124,8 @@ export function HistoryScreen() {
       render: (value) => String(value),
     },
     {
-      key: 'amount',
-      label: 'Amount',
+      key: 'finalBill',
+      label: 'Final Bill',
       render: (value) => formatCurrency(value as number),
     },
     {
@@ -134,8 +134,8 @@ export function HistoryScreen() {
       render: (value) => formatCurrency(value as number),
     },
     {
-      key: 'net',
-      label: 'Net',
+      key: 'ourNet',
+      label: 'Our Net',
       render: (value) => formatCurrency(value as number),
     },
     {
@@ -158,7 +158,7 @@ export function HistoryScreen() {
   const summary = useMemo(
     () => ({
       totalCards: rows.length,
-      totalValue: rows.reduce((sum, row) => sum + row.net, 0),
+      totalValue: rows.reduce((sum, row) => sum + row.finalBill, 0),
       totalPaid: rows.reduce((sum, row) => sum + row.paid, 0),
       totalPending: rows.reduce((sum, row) => sum + row.pending, 0),
     }),
@@ -216,7 +216,7 @@ export function HistoryScreen() {
               <span className="summary-value">{summary.totalCards}</span>
             </div>
             <div className="summary-item">
-              <span className="summary-label">Total Value</span>
+              <span className="summary-label">Total Final Bill</span>
               <span className="summary-value">{formatCurrency(summary.totalValue)}</span>
             </div>
             <div className="summary-item">

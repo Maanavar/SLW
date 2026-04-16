@@ -9,13 +9,12 @@ import { useToast } from '@/hooks/useToast';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { calculateWorkerCommissionSummary } from '@/lib/financeUtils';
-import type { CommissionPayment } from '@/types';
 import './CommissionScreen.css';
 
 type TabType = 'workers' | 'history';
 
 export function CommissionScreen() {
-  const { jobs, commissionWorkers, commissionPayments, addCommissionPayment, deleteCommissionPayment } =
+  const { jobs, commissionWorkers, commissionPayments, addCommissionPayment, deleteCommissionPayment, getCustomer } =
     useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
@@ -156,16 +155,16 @@ export function CommissionScreen() {
               <div className="form-group">
                 <label className="form-label">Worker</label>
                 <select
-                  className="form-input"
-                  value={selectedWorker || ''}
-                  onChange={(e) => setSelectedWorker(Number(e.target.value) || null)}
+                  className="form-select"
+                  value={selectedWorker ? String(selectedWorker) : ''}
+                  onChange={(e) => setSelectedWorker(e.target.value ? Number(e.target.value) : null)}
                 >
                   <option value="">Select a worker...</option>
                   {[...workerSummary]
                     .sort((a, b) => a.workerName.localeCompare(b.workerName))
                     .map((worker) => (
-                      <option key={worker.workerId} value={worker.workerId}>
-                        {worker.workerName} ({worker.customerId})
+                      <option key={worker.workerId} value={String(worker.workerId)}>
+                        {worker.workerName} ({getCustomer(worker.customerId)?.shortCode || worker.customerId})
                       </option>
                     ))}
                 </select>

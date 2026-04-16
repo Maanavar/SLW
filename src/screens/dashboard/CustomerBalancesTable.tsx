@@ -14,9 +14,10 @@ import { Customer } from '@/types';
 interface CustomerBalance extends Customer {
   ourIncome: number;
   commission: number;
-  netIncome: number;
+  finalBill: number;
   paidAmount: number;
   balance: number;
+  advance: number;
 }
 
 export function CustomerBalancesTable() {
@@ -45,17 +46,18 @@ export function CustomerBalancesTable() {
         ...customer,
         ourIncome: totalNet,
         commission: totalCommission,
-        netIncome: totalNet + totalCommission,
+        finalBill: totalNet + totalCommission,
         paidAmount: paidFromJobs + paidFromPayments,
         balance,
+        advance: customer.advanceBalance || 0,
       };
     });
   }, [customers, jobs, payments]);
 
-  // Filter by type if selected, and show only customers with non-zero balance
+  // Filter by type if selected, and show only customers with non-zero balance or advance
   const filteredByType = typeFilter
-    ? customersWithBalances.filter((c) => c.type === typeFilter && c.balance !== 0)
-    : customersWithBalances.filter((c) => c.balance !== 0);
+    ? customersWithBalances.filter((c) => c.type === typeFilter && (c.balance !== 0 || c.advance > 0))
+    : customersWithBalances.filter((c) => c.balance !== 0 || c.advance > 0);
 
   const filtered = customerFilter.trim()
     ? filteredByType.filter((c) =>
@@ -93,14 +95,22 @@ export function CustomerBalancesTable() {
       render: (value) => formatCurrency(value as number),
     },
     {
-      key: 'netIncome',
-      label: 'Net Income',
+      key: 'finalBill',
+      label: 'Final Bill',
       render: (value) => formatCurrency(value as number),
     },
     {
       key: 'paidAmount',
       label: 'Paid Amount',
       render: (value) => formatCurrency(value as number),
+    },
+    {
+      key: 'advance',
+      label: 'Advance',
+      render: (value) => {
+        const advance = value as number;
+        return advance > 0 ? <span className="balance-negative">{formatCurrency(advance)}</span> : <span>-</span>;
+      },
     },
     {
       key: 'balance',
@@ -120,7 +130,7 @@ export function CustomerBalancesTable() {
       totalCustomers: sorted.length,
       ourIncome: sorted.reduce((sum, c) => sum + c.ourIncome, 0),
       commission: sorted.reduce((sum, c) => sum + c.commission, 0),
-      netIncome: sorted.reduce((sum, c) => sum + c.netIncome, 0),
+      finalBill: sorted.reduce((sum, c) => sum + c.finalBill, 0),
       totalPaid: sorted.reduce((sum, c) => sum + c.paidAmount, 0),
       totalBalance: sorted.reduce((sum, c) => sum + c.balance, 0),
     };
@@ -190,8 +200,8 @@ export function CustomerBalancesTable() {
           <span className="stat-value">{formatCurrency(summary.commission)}</span>
         </div>
         <div className="summary-stat">
-          <span className="stat-label">Net Income:</span>
-          <span className="stat-value">{formatCurrency(summary.netIncome)}</span>
+          <span className="stat-label">Final Bill:</span>
+          <span className="stat-value">{formatCurrency(summary.finalBill)}</span>
         </div>
         <div className="summary-stat">
           <span className="stat-label">Total Paid:</span>

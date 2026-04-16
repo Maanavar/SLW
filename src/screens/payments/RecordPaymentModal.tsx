@@ -13,7 +13,7 @@ import {
   getWeekStartDate,
   isDateInRange,
 } from '@/lib/dateUtils';
-import { calculateCustomerBalance, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { calculateCustomerBalance, getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
 import type { Customer, Job, Payment } from '@/types';
 
 type PaymentMode = 'cash' | 'upi' | 'bank' | 'cheque';
@@ -39,7 +39,7 @@ interface RecordPaymentModalProps {
 }
 
 export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps) {
-  const { getActiveCustomers, payments, addPayment, jobs, updateJob } = useDataStore();
+  const { getActiveCustomers, payments, addPayment, jobs, updateJob, updateCustomer } = useDataStore();
   const toast = useToast();
 
   const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
@@ -99,7 +99,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
 
   const scopedPendingAmount = useMemo(() => {
     return scopedJobs.reduce((sum, job) => {
-      const pending = getJobNetValue(job) - getJobPaidAmount(job);
+      const pending = getJobFinalBillValue(job) - getJobPaidAmount(job);
       return sum + (pending > 0 ? pending : 0);
     }, 0);
   }, [scopedJobs]);
@@ -114,9 +114,11 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
 
   useEffect(() => {
     if (paymentScope !== 'manual') {
-      setAmount(scopedPendingAmount > 0 ? String(scopedPendingAmount) : '');
+      const advance = selectedCustomer?.advanceBalance || 0;
+      const amountAfterAdvance = Math.max(0, scopedPendingAmount - advance);
+      setAmount(amountAfterAdvance > 0 ? String(amountAfterAdvance) : '');
     }
-  }, [paymentScope, scopedPendingAmount]);
+  }, [paymentScope, scopedPendingAmount, selectedCustomer?.advanceBalance]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -127,7 +129,6 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
     }
 
     let totalAmount = 0;
-    let paymentModeToUse: PaymentMode = paymentMode;
 
     if (useBreakdown) {
       const cash = parseFloat(breakdownCash) || 0;
@@ -142,9 +143,6 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         return;
       }
 
-      if ((cash > 0 ? 1 : 0) + (upi > 0 ? 1 : 0) + (bank > 0 ? 1 : 0) + (cheque > 0 ? 1 : 0) > 1) {
-        paymentModeToUse = 'cash'; // Will use 'Mixed' in the payment
-      }
     } else {
       totalAmount = parseFloat(amount) || 0;
       if (totalAmount <= 0) {
@@ -253,7 +251,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           jobs
             .filter((job) => job.customerId === selectedCustomer.id)
             .map((job) => {
-              const net = getJobNetValue(job);
+              const net = getJobFinalBillValue(job);
               return updateJob(job.id, {
                 paidAmount: net,
                 paymentStatus: 'Paid',
@@ -266,7 +264,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         await Promise.all(
           scopedJobs.map((job) => {
             const currentPaid = getJobPaidAmount(job);
-            const net = getJobNetValue(job);
+            const net = getJobFinalBillValue(job);
             const pending = Math.max(0, net - currentPaid);
 
             return updateJob(job.id, {
@@ -281,7 +279,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         const customerOutstandingJobs = jobs.filter(
           (job) =>
             job.customerId === selectedCustomer.id &&
-            getJobNetValue(job) - getJobPaidAmount(job) > 0
+            getJobFinalBillValue(job) - getJobPaidAmount(job) > 0
         );
 
         let remainingAmount = parseFloat(amount);
@@ -290,7 +288,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           if (remainingAmount <= 0) break;
 
           const currentPaid = getJobPaidAmount(job);
-          const net = getJobNetValue(job);
+          const net = getJobFinalBillValue(job);
           const pending = Math.max(0, net - currentPaid);
 
           if (pending === 0) continue;
@@ -306,6 +304,14 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           });
 
           remainingAmount -= paymentAllocation;
+        }
+
+        // If there's remaining amount after allocating to all outstanding jobs, save as advance
+        if (remainingAmount > 0) {
+          const currentAdvance = selectedCustomer.advanceBalance || 0;
+          await updateCustomer(selectedCustomer.id, {
+            advanceBalance: currentAdvance + remainingAmount,
+          });
         }
       }
 
@@ -376,13 +382,29 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         {selectedCustomer && (
           <div className="balance-info">
             <div className="balance-item">
-              <span className="balance-label">Outstanding Balance</span>
+              <span className="balance-label">Outstanding Balance (Backlog)</span>
               <span
                 className={`balance-amount ${customerBalance.balance > 0 ? 'positive' : ''}`}
               >
-                {formatCurrency(customerBalance.balance)}
+                {formatCurrency(Math.max(0, customerBalance.balance))}
               </span>
             </div>
+            {selectedCustomer.advanceBalance && selectedCustomer.advanceBalance > 0 && (
+              <>
+                <div className="balance-item">
+                  <span className="balance-label">Available Advance (Credit)</span>
+                  <span className="balance-amount balance-negative">
+                    {formatCurrency(selectedCustomer.advanceBalance)}
+                  </span>
+                </div>
+                <div className="balance-item">
+                  <span className="balance-label">Amount to Collect (After Advance)</span>
+                  <span className="balance-amount balance-positive">
+                    {formatCurrency(Math.max(0, customerBalance.balance - selectedCustomer.advanceBalance))}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -399,39 +421,54 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         </div>
 
         {!isSettled && (
-          <div className="form-group">
-            <label className="form-label">Payment Scope</label>
-            <div className="scope-buttons">
-              <button
-                type="button"
-                className={`scope-btn ${paymentScope === 'manual' ? 'active' : ''}`}
-                onClick={() => setPaymentScope('manual')}
-              >
-                Manual
-              </button>
-              <button
-                type="button"
-                className={`scope-btn ${paymentScope === 'week' ? 'active' : ''}`}
-                onClick={() => setPaymentScope('week')}
-              >
-                Week
-              </button>
-              <button
-                type="button"
-                className={`scope-btn ${paymentScope === 'month' ? 'active' : ''}`}
-                onClick={() => setPaymentScope('month')}
-              >
-                Month
-              </button>
-              <button
-                type="button"
-                className={`scope-btn ${paymentScope === 'range' ? 'active' : ''}`}
-                onClick={() => setPaymentScope('range')}
-              >
-                Range
-              </button>
+          <>
+            <div className="form-group">
+              <label className="form-label">Payment Scope</label>
+              <div className="scope-buttons">
+                <button
+                  type="button"
+                  className={`scope-btn ${paymentScope === 'manual' ? 'active' : ''}`}
+                  onClick={() => setPaymentScope('manual')}
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  className={`scope-btn ${paymentScope === 'week' ? 'active' : ''}`}
+                  onClick={() => setPaymentScope('week')}
+                >
+                  Week
+                </button>
+                <button
+                  type="button"
+                  className={`scope-btn ${paymentScope === 'month' ? 'active' : ''}`}
+                  onClick={() => setPaymentScope('month')}
+                >
+                  Month
+                </button>
+                <button
+                  type="button"
+                  className={`scope-btn ${paymentScope === 'range' ? 'active' : ''}`}
+                  onClick={() => setPaymentScope('range')}
+                >
+                  Range
+                </button>
+              </div>
             </div>
-          </div>
+
+            {paymentScope !== 'manual' && scopedPendingAmount > 0 && (
+              <div className="quick-fill-info">
+                <span className="quick-fill-label">Pending: {formatCurrency(scopedPendingAmount)}</span>
+                <button
+                  type="button"
+                  className="quick-fill-btn"
+                  onClick={() => setAmount(String(scopedPendingAmount))}
+                >
+                  Use Amount
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {paymentScope === 'week' && !isSettled && (
@@ -606,6 +643,28 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
                 min="0"
                 required
               />
+              {selectedCustomer && (
+                <div className="quick-fill-buttons">
+                  <button
+                    type="button"
+                    className="quick-fill-small-btn"
+                    onClick={() => setAmount(String(customerBalance.balance))}
+                    title={`Fill with outstanding balance: ${formatCurrency(customerBalance.balance)}`}
+                  >
+                    Balance: {formatCurrency(customerBalance.balance)}
+                  </button>
+                  {selectedCustomer.advanceBalance && selectedCustomer.advanceBalance > 0 && (
+                    <button
+                      type="button"
+                      className="quick-fill-small-btn"
+                      onClick={() => setAmount(String(Math.max(0, customerBalance.balance - selectedCustomer.advanceBalance)))}
+                      title="Fill with amount after deducting advance"
+                    >
+                      After Advance: {formatCurrency(Math.max(0, customerBalance.balance - selectedCustomer.advanceBalance))}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="form-group">

@@ -27,6 +27,8 @@ const createJobSchema = z.object({
   quantity: z.number().positive(),
   amount: z.number().min(0),
   commissionAmount: z.number().min(0).default(0),
+  commissionWorkerId: z.number().int().positive().nullable().optional(),
+  commissionWorkerName: z.string().trim().max(120).nullable().optional(),
   netAmount: z.number().min(0).nullable().optional(),
   date: localDateSchema,
   paymentStatus: paymentStatusSchema.nullable().optional(),
@@ -40,6 +42,7 @@ const createJobSchema = z.object({
   vehicleNo: z.string().trim().max(40).nullable().optional(),
   dcDate: localDateSchema.nullable().optional(),
   dcApproval: z.boolean().nullable().optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
 });
 
 const updateJobSchema = createJobSchema.partial();

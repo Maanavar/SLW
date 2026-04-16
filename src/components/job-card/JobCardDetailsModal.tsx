@@ -15,8 +15,8 @@ interface JobCardDetailsModalProps {
   jobs: Job[] | null;
   onClose: () => void;
   getCustomer: (id: number) => Customer | undefined;
-  onDelete?: () => void;
-  onEdit?: () => void;
+  onDelete?: (card?: any) => void;
+  onEdit?: (card?: any) => void;
 }
 
 export function JobCardDetailsModal({
@@ -120,7 +120,8 @@ export function JobCardDetailsModal({
                   <th>Qty</th>
                   <th>Amount</th>
                   <th>Commission</th>
-                  <th>Net</th>
+                  <th>Worker</th>
+                  <th>Our Net</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,6 +131,7 @@ export function JobCardDetailsModal({
                     <td>{job.quantity}</td>
                     <td>{formatCurrency(job.amount)}</td>
                     <td>{formatCurrency(job.commissionAmount || 0)}</td>
+                    <td>{job.commissionWorkerName || '-'}</td>
                     <td>{formatCurrency(getJobNetValue(job))}</td>
                   </tr>
                 ))}
@@ -140,7 +142,8 @@ export function JobCardDetailsModal({
           <div className="job-card-detail-summary">
             <span>Total Amount: {formatCurrency(totalAmount)}</span>
             <span>Total Commission: {formatCurrency(totalCommission)}</span>
-            <span>Net Total: {formatCurrency(payment.net)}</span>
+            <span>Final Bill: {formatCurrency(payment.finalBill)}</span>
+            <span>Our Net Income: {formatCurrency(payment.net)}</span>
             <span>Paid: {formatCurrency(payment.paid)}</span>
             <span>Pending: {formatCurrency(payment.pending)}</span>
           </div>
@@ -151,7 +154,10 @@ export function JobCardDetailsModal({
                 <button
                   type="button"
                   className="btn btn-secondary btn-edit"
-                  onClick={onEdit}
+                  onClick={() => {
+                    const cardData = { jobs, primary };
+                    onEdit(cardData);
+                  }}
                   title="Edit this job card"
                 >
                   Edit
@@ -161,7 +167,10 @@ export function JobCardDetailsModal({
                 <button
                   type="button"
                   className="btn btn-danger btn-delete"
-                  onClick={onDelete}
+                  onClick={() => {
+                    const cardData = { jobs, primary };
+                    onDelete(cardData);
+                  }}
                   title="Delete this job card"
                 >
                   Delete

@@ -353,6 +353,71 @@
   color: #999;
 }
 
+.quick-fill-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.quick-fill-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  flex: 1;
+}
+
+.quick-fill-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-primary);
+  background: var(--accent-primary);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.quick-fill-btn:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.quick-fill-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.quick-fill-small-btn {
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-fill-small-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
 @media (max-width: 768px) {
   .payment-form-container {
     gap: 24px;
@@ -382,5 +447,14 @@
 
   .payment-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-fill-buttons {
+    flex-direction: row;
+  }
+
+  .quick-fill-small-btn {
+    flex: 1;
+    min-width: 0;
   }
 }

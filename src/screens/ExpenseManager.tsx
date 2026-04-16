@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { useToast } from '@/hooks/useToast';
 import { useDataStore } from '@/stores/dataStore';
-import { getJobNetValue, groupJobsByCard } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobNetValue, groupJobsByCard } from '@/lib/jobUtils';
 import type { Expense } from '@/types';
 import {
   EXPENSE_CATEGORIES,
@@ -94,7 +94,7 @@ export function ExpenseManager() {
   );
 
   const monthRevenue = useMemo(
-    () => monthJobs.reduce((sum, job) => sum + (Number(job.amount) || 0), 0),
+    () => monthJobs.reduce((sum, job) => sum + getJobFinalBillValue(job), 0),
     [monthJobs]
   );
 

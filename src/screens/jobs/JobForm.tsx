@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
@@ -15,9 +15,8 @@ import {
   getPaymentStatusFromAmounts,
   isDcApplicableCustomer,
   isCommissionApplicableCustomer,
-  computeDefaultDistribution,
 } from '@/lib/jobUtils';
-import { Customer, Job, type CommissionDistribution } from '@/types';
+import type { CommissionWorker, Customer, Job } from '@/types';
 import './JobForm.css';
 
 function generateJobCardId(jobDate: string, existingJobs: Job[]) {
@@ -37,7 +36,7 @@ function generateJobCardId(jobDate: string, existingJobs: Job[]) {
 }
 
 export function JobForm() {
-  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer } = useDataStore();
+  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer } = useDataStore();
   const toast = useToast();
 
   const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
@@ -71,43 +70,62 @@ export function JobForm() {
   const [filterEndDate, setFilterEndDate] = useState(today);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingJobIds, setEditingJobIds] = useState<number[]>([]);
-  const [commissionDistribution, setCommissionDistribution] = useState<CommissionDistribution[]>([]);
+  const [cardCommissionWorker, setCardCommissionWorker] = useState<CommissionWorker | null>(null);
+  const [cardTotalCommission, setCardTotalCommission] = useState('');;
 
   const showDcFields = isDcApplicableCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
   const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
     ? getCommissionWorkersForCustomer(selectedCustomer.id)
     : [];
+  const sortedCommissionWorkers = useMemo(
+    () => [...commissionWorkersForCustomer].sort((a, b) => a.name.localeCompare(b.name)),
+    [commissionWorkersForCustomer]
+  );
+
+  useEffect(() => {
+    if (!showCommissionFields) {
+      return;
+    }
+
+    if (sortedCommissionWorkers.length === 1) {
+      const onlyWorker = sortedCommissionWorkers[0];
+      if (!cardCommissionWorker || cardCommissionWorker.id !== onlyWorker.id) {
+        setCardCommissionWorker(onlyWorker);
+      }
+      return;
+    }
+
+    if (
+      cardCommissionWorker &&
+      !sortedCommissionWorkers.some((worker) => worker.id === cardCommissionWorker.id)
+    ) {
+      setCardCommissionWorker(null);
+    }
+  }, [showCommissionFields, sortedCommissionWorkers, cardCommissionWorker]);
 
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
-  const totalCommission = jobLines.reduce((sum, line) => sum + (parseFloat(line.commission) || 0), 0);
+  const totalCommission = parseFloat(cardTotalCommission) || 0;
   const summary = {
     totalAmount,
     totalCommission,
-    netValue: totalAmount - totalCommission,
+    netValue: totalAmount,
     finalValue: totalAmount + totalCommission,
   };
 
-  // Create commission distribution based on selected worker (100% to selected worker)
-  useMemo(() => {
-    if (showCommissionFields && totalCommission > 0 && jobLines.length > 0) {
-      const firstLine = jobLines[0];
-      if (firstLine.commissionWorker) {
-        // If worker is selected, give 100% of commission to that worker
-        setCommissionDistribution([
-          {
-            workerId: firstLine.commissionWorker.id,
-            workerName: firstLine.commissionWorker.name,
-            amount: totalCommission,
-          },
-        ]);
-      } else {
-        setCommissionDistribution([]);
-      }
-    } else {
-      setCommissionDistribution([]);
+  useEffect(() => {
+    if (!showCommissionFields) {
+      setJobLines((prev) =>
+        prev.map((line) => ({
+          ...line,
+          commission: '0',
+          commissionWorker: null,
+        }))
+      );
+      setCardCommissionWorker(null);
+      setCardTotalCommission('');
     }
-  }, [jobLines, totalCommission, showCommissionFields]);
+  }, [showCommissionFields]);
 
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
@@ -165,6 +183,16 @@ export function JobForm() {
     setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
   };
 
+  const handleCommissionWorkerChange = (lineId: string, worker: CommissionWorker | null) => {
+    setJobLines((prev) =>
+      prev.map((line) => (line.id === lineId ? { ...line, commissionWorker: worker } : line))
+    );
+  };
+
+  const handleCommissionValueChange = (lineId: string, value: string) => {
+    setJobLines((prev) => prev.map((line) => (line.id === lineId ? { ...line, commission: value } : line)));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -198,8 +226,18 @@ export function JobForm() {
       return;
     }
 
-    if (showCommissionFields && jobLines.some((line) => line.commission === '' || parseFloat(line.commission) < 0)) {
-      toast.error('Error', 'All job lines must include commission value');
+    if (showCommissionFields && (cardTotalCommission === '' || parseFloat(cardTotalCommission) < 0)) {
+      toast.error('Error', 'Please enter commission amount');
+      return;
+    }
+
+    if (showCommissionFields && sortedCommissionWorkers.length === 0) {
+      toast.error('Error', 'Add at least one commission worker for this customer');
+      return;
+    }
+
+    if (showCommissionFields && !cardCommissionWorker) {
+      toast.error('Error', 'Select one commission worker for this job card');
       return;
     }
 
@@ -223,7 +261,7 @@ export function JobForm() {
       const enteredPaidAmount = paymentStatus === 'Paid' ? parseFloat(paidAmount) || 0 : 0;
       const resolvedPaymentStatus =
         paymentStatus === 'Paid'
-          ? getPaymentStatusFromAmounts(enteredPaidAmount, summary.netValue)
+          ? getPaymentStatusFromAmounts(enteredPaidAmount, summary.finalValue)
           : 'Pending';
 
       if (isEditMode && editingJobIds.length > 0) {
@@ -231,21 +269,23 @@ export function JobForm() {
         await Promise.all(
           jobLines.map((line, index) =>
             updateJob(editingJobIds[index], {
+              date: jobDate,
               workTypeName: line.workType!.name,
               workName: line.workType!.shortCode,
               quantity: line.quantity,
               amount: parseFloat(line.amount),
-              commissionAmount: parseFloat(line.commission) || 0,
+              commissionAmount: index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+              commissionWorkerId:
+                showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+              commissionWorkerName:
+                showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
               netAmount: parseFloat(line.amount),
               paymentStatus: resolvedPaymentStatus,
               paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
               paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
               workMode,
               isSpotWork: workMode === 'Spot',
-              notes: notes || undefined,
-              ...(showCommissionFields && commissionDistribution.length > 0 && index === 0 && {
-                commissionDistribution,
-              }),
+              notes: notes.trim() ? notes.trim() : null,
               ...(showDcFields && {
                 dcNo: dcNo || undefined,
                 vehicleNo: vehicleNo || undefined,
@@ -255,6 +295,32 @@ export function JobForm() {
             })
           )
         );
+
+        // Create advance if payment > finalBill (edit mode)
+        if (selectedCustomer && paymentStatus === 'Paid') {
+          const enteredPaidAmount = parseFloat(paidAmount) || 0;
+          const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
+          if (overpayment > 0) {
+            const currentAdvance = selectedCustomer.advanceBalance || 0;
+            await updateCustomer(selectedCustomer.id, {
+              advanceBalance: currentAdvance + overpayment,
+            });
+            toast.info('Advance Created', `₹${overpayment.toFixed(2)} saved as advance for ${selectedCustomer.name}`);
+          }
+        }
+
+        // Deduct advance if it was applied during edit
+        if (selectedCustomer && paymentStatus === 'Paid') {
+          const enteredPaidAmount = parseFloat(paidAmount) || 0;
+          const currentAdvance = selectedCustomer.advanceBalance || 0;
+          const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
+          if (advanceUsed > 0 && advanceUsed < currentAdvance) {
+            // Only deduct if not creating advance
+            await updateCustomer(selectedCustomer.id, {
+              advanceBalance: Math.max(0, currentAdvance - advanceUsed),
+            });
+          }
+        }
 
         toast.success('Success', 'JobCard updated successfully');
         setIsEditMode(false);
@@ -269,7 +335,11 @@ export function JobForm() {
           workName: line.workType!.shortCode,
           quantity: line.quantity,
           amount: parseFloat(line.amount),
-          commissionAmount: parseFloat(line.commission) || 0,
+          commissionAmount: index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+          commissionWorkerId:
+            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+          commissionWorkerName:
+            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
           netAmount: parseFloat(line.amount),
           date: jobDate,
           paymentStatus: resolvedPaymentStatus,
@@ -279,10 +349,7 @@ export function JobForm() {
           isSpotWork: workMode === 'Spot',
           jobCardId,
           jobCardLine: index + 1,
-          notes: notes || undefined,
-          ...(showCommissionFields && commissionDistribution.length > 0 && index === 0 && {
-            commissionDistribution,
-          }),
+          notes: notes.trim() ? notes.trim() : null,
           ...(showDcFields && {
             dcNo: dcNo || undefined,
             vehicleNo: vehicleNo || undefined,
@@ -293,6 +360,31 @@ export function JobForm() {
 
         await addJobsBulk(newJobs);
         toast.success('Success', `JobCard ${jobCardId} created with ${newJobs.length} line(s)`);
+
+        // Create advance if payment > finalBill
+        if (selectedCustomer && paymentStatus === 'Paid') {
+          const enteredPaidAmount = parseFloat(paidAmount) || 0;
+          const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
+          if (overpayment > 0) {
+            const currentAdvance = selectedCustomer.advanceBalance || 0;
+            await updateCustomer(selectedCustomer.id, {
+              advanceBalance: currentAdvance + overpayment,
+            });
+            toast.info('Advance Created', `₹${overpayment.toFixed(2)} saved as advance for ${selectedCustomer.name}`);
+          }
+        }
+      }
+
+      // Deduct advance if it was applied during creation (edit mode)
+      if (selectedCustomer && paymentStatus === 'Paid') {
+        const enteredPaidAmount = parseFloat(paidAmount) || 0;
+        const currentAdvance = selectedCustomer.advanceBalance || 0;
+        const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
+        if (advanceUsed > 0) {
+          await updateCustomer(selectedCustomer.id, {
+            advanceBalance: Math.max(0, currentAdvance - advanceUsed),
+          });
+        }
       }
 
       // Reset form
@@ -317,6 +409,8 @@ export function JobForm() {
       setDcDate('');
       setDcApproval(false);
       setNotes('');
+      setCardCommissionWorker(null);
+      setCardTotalCommission('');
     } catch (error) {
       console.error('Error saving job:', error);
       toast.error('Error', `Failed to ${isEditMode ? 'update' : 'create'} job. Please try again.`);
@@ -329,15 +423,21 @@ export function JobForm() {
     const cardToEdit = card || selectedTodayCard;
     if (!cardToEdit) return;
 
-    setSelectedCustomer(getCustomer(cardToEdit.primary.customerId) || null);
+    const editCustomer = getCustomer(cardToEdit.primary.customerId) || null;
+    const editWorkers = editCustomer ? getCommissionWorkersForCustomer(editCustomer.id) : [];
+    setSelectedCustomer(editCustomer);
     setJobDate(cardToEdit.primary.date);
     setWorkMode(cardToEdit.primary.workMode as 'Workshop' | 'Spot');
 
     const lines: JobLineState[] = cardToEdit.jobs.map((job) => {
-      // Extract commissionWorker from commissionDistribution if it exists
-      const commissionWorker = job.commissionDistribution && job.commissionDistribution.length > 0
-        ? commissionWorkersForCustomer.find(w => w.id === job.commissionDistribution![0].workerId) || null
-        : null;
+      const legacyDistribution = (job as Job & { commissionDistribution?: Array<{ workerId?: number }> })
+        .commissionDistribution;
+      const fallbackWorkerId = Array.isArray(legacyDistribution) ? legacyDistribution[0]?.workerId : undefined;
+      const resolvedWorkerId = job.commissionWorkerId ?? fallbackWorkerId;
+      const commissionWorker =
+        resolvedWorkerId !== undefined
+          ? editWorkers.find((w) => w.id === resolvedWorkerId) || null
+          : null;
 
       return {
         id: job.id.toString(),
@@ -352,12 +452,24 @@ export function JobForm() {
         quantity: job.quantity,
         amount: String(job.amount),
         commission: String(job.commissionAmount || 0),
-        commissionWorker,
+        commissionWorker:
+          commissionWorker ||
+          (job.commissionWorkerName
+            ? editWorkers.find((w) => w.name === job.commissionWorkerName) || null
+            : null),
       };
     });
 
     setJobLines(lines);
     setNotes(cardToEdit.primary.notes || '');
+
+    // Set card-level commission from first job
+    const firstJob = cardToEdit.primary;
+    if (firstJob.commissionWorkerId) {
+      const commissionWorker = editWorkers.find((w) => w.id === firstJob.commissionWorkerId);
+      setCardCommissionWorker(commissionWorker || null);
+    }
+    setCardTotalCommission(String(firstJob.commissionAmount || 0));
 
     if (cardToEdit.primary.dcNo || cardToEdit.primary.dcApproval) {
       setDcNo(cardToEdit.primary.dcNo || '');
@@ -418,6 +530,32 @@ export function JobForm() {
                 getKey={(c) => String(c.id)}
                 placeholder="Select customer..."
               />
+              {selectedCustomer && (
+                <>
+                  {selectedCustomer.advanceBalance && selectedCustomer.advanceBalance > 0 && (
+                    <div className="customer-info-banner advance">
+                      ✓ {selectedCustomer.name} has {formatCurrency(selectedCustomer.advanceBalance)} advance. Apply it in the Payment section below.
+                    </div>
+                  )}
+                  {(() => {
+                    const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer.id);
+                    const outstanding = customerJobs.reduce((sum, job) => {
+                      const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                      const jobPaid = job.paidAmount || 0;
+                      return sum + Math.max(0, jobDue - jobPaid);
+                    }, 0);
+
+                    if (outstanding > 0) {
+                      return (
+                        <div className="customer-info-banner backlog">
+                          ⚠️ {selectedCustomer.name} has {formatCurrency(outstanding)} backlog (unpaid previous jobs).
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
+              )}
             </div>
 
             <div className="form-group">
@@ -474,7 +612,8 @@ export function JobForm() {
                 onRemove={() => handleRemoveLine(line.id)}
                 lineNumber={index + 1}
                 showCommission={showCommissionFields}
-                commissionWorkers={commissionWorkersForCustomer}
+                showInlineWorker={false}
+                showInlineCommission={false}
               />
             ))}
           </div>
@@ -497,11 +636,54 @@ export function JobForm() {
               </>
             )}
             <div className="summary-item">
-              <span className="summary-label">{showCommissionFields ? 'Net Value' : 'Total Value'}</span>
+              <span className="summary-label">{showCommissionFields ? 'Our Net Income' : 'Total Value'}</span>
               <span className="summary-value highlight">{formatCurrency(summary.netValue)}</span>
             </div>
           </div>
         </div>
+
+        {showCommissionFields && (
+          <div className="form-section commission-assignment-section">
+            <div className="section-header">
+              <h3 className="section-title">Commission Assignment</h3>
+              <span className="commission-assignment-note">
+                One job card can be tagged to only one commission worker.
+              </span>
+            </div>
+
+            {sortedCommissionWorkers.length === 0 ? (
+              <p className="dc-validation-note">
+                No commission workers found for this customer. Add workers in Customer settings.
+              </p>
+            ) : (
+              <div className="commission-assignment-simple">
+                <div className="form-group">
+                  <label className="form-label">Commission Worker</label>
+                  <SearchableSelect
+                    items={sortedCommissionWorkers}
+                    value={cardCommissionWorker}
+                    onChange={setCardCommissionWorker}
+                    getLabel={(w) => w.name}
+                    getKey={(w) => String(w.id)}
+                    placeholder="Select worker..."
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Total Commission (INR)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={cardTotalCommission}
+                    onChange={(e) => setCardTotalCommission(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {showDcFields ? (
           <div className="form-section dc-section">
@@ -566,30 +748,6 @@ export function JobForm() {
           </div>
         ) : null}
 
-        {showCommissionFields && commissionDistribution.length > 0 ? (
-          <div className="form-section commission-distribution-section">
-            <h3 className="section-title">Commission Distribution to Workers</h3>
-            <div className="commission-breakdown-table">
-              <div className="breakdown-header">
-                <span className="worker-col">Worker Name</span>
-                <span className="amount-col">Commission Amount</span>
-              </div>
-              {commissionDistribution.map((dist) => (
-                <div key={dist.workerId} className="breakdown-row">
-                  <span className="worker-col">{dist.workerName}</span>
-                  <span className="amount-col">{formatCurrency(dist.amount)}</span>
-                </div>
-              ))}
-              <div className="breakdown-footer">
-                <span className="worker-col">Total</span>
-                <span className="amount-col">
-                  {formatCurrency(commissionDistribution.reduce((sum, d) => sum + d.amount, 0))}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
         <div className="form-section">
           <h3 className="section-title">Notes</h3>
 
@@ -641,7 +799,7 @@ export function JobForm() {
                 <label className="form-label" htmlFor="paid-amount">
                   Paid Amount (INR)
                 </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                   <input
                     id="paid-amount"
                     type="number"
@@ -654,15 +812,49 @@ export function JobForm() {
                     required={paymentStatus === 'Paid'}
                     style={{ flex: 1 }}
                   />
-                  {summary.netValue > 0 && (
+                  {summary.finalValue > 0 && (
                     <button
                       type="button"
                       className="suggestion-chip suggestion-chip-action"
-                      onClick={() => setPaidAmount(String(summary.netValue))}
-                      style={{ marginTop: '8px', whiteSpace: 'nowrap' }}
-                      title="Fill with net value"
+                      onClick={() => {
+                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
+                        const backlog = customerJobs.reduce((sum, job) => {
+                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                          const jobPaid = job.paidAmount || 0;
+                          return sum + Math.max(0, jobDue - jobPaid);
+                        }, 0);
+                        const advance = selectedCustomer?.advanceBalance || 0;
+                        const totalNeeded = backlog + summary.finalValue - advance;
+                        setPaidAmount(String(Math.max(0, totalNeeded)));
+                      }}
+                      title={(() => {
+                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
+                        const backlog = customerJobs.reduce((sum, job) => {
+                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                          const jobPaid = job.paidAmount || 0;
+                          return sum + Math.max(0, jobDue - jobPaid);
+                        }, 0);
+                        const advance = selectedCustomer?.advanceBalance || 0;
+                        if (backlog > 0 && advance > 0) {
+                          return `Backlog (${formatCurrency(backlog)}) + Current (${formatCurrency(summary.finalValue)}) - Advance (${formatCurrency(advance)})`;
+                        } else if (backlog > 0) {
+                          return `Backlog (${formatCurrency(backlog)}) + Current (${formatCurrency(summary.finalValue)})`;
+                        } else if (advance > 0) {
+                          return `Current (${formatCurrency(summary.finalValue)}) - Advance (${formatCurrency(advance)})`;
+                        }
+                        return "Fill with total amount due";
+                      })()}
                     >
-                      Fill: {formatCurrency(summary.netValue)}
+                      Fill: {(() => {
+                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
+                        const backlog = customerJobs.reduce((sum, job) => {
+                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                          const jobPaid = job.paidAmount || 0;
+                          return sum + Math.max(0, jobDue - jobPaid);
+                        }, 0);
+                        const advance = selectedCustomer?.advanceBalance || 0;
+                        return formatCurrency(Math.max(0, backlog + summary.finalValue - advance));
+                      })()}
                     </button>
                   )}
                 </div>
@@ -696,7 +888,11 @@ export function JobForm() {
           <button
             type="submit"
             className="btn btn-primary btn-submit"
-            disabled={!selectedCustomer || isSubmitting}
+            disabled={
+              !selectedCustomer ||
+              isSubmitting ||
+              (showCommissionFields && sortedCommissionWorkers.length === 0)
+            }
           >
             {isSubmitting ? (
               <>
@@ -723,6 +919,7 @@ export function JobForm() {
                     quantity: 1,
                     amount: '',
                     commission: '',
+                    commissionWorker: null,
                   },
                 ]);
                 setWorkMode('Workshop');
@@ -860,7 +1057,7 @@ export function JobForm() {
                     </div>
                   </div>
                   <div className="today-card-stats">
-                    <span>{formatCurrency(group.totalAmount)}</span>
+                    <span>Final: {formatCurrency(payment.finalBill)}</span>
                     <span>Paid: {formatCurrency(payment.paid)}</span>
                     <span>Pending: {formatCurrency(payment.pending)}</span>
                   </div>

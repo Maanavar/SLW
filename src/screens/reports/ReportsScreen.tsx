@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
-import { useToast } from '@/hooks/useToast';
 import { StatusBadge } from '@/components/ui/Badge';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
@@ -62,7 +61,6 @@ const DEFAULT_EXPORT_FIELDS: ExportFieldSelection = {
 
 export function ReportsScreen() {
   const { jobs, getActiveCustomers, getCustomer, deleteJob } = useDataStore();
-  const toast = useToast();
   const [period, setPeriod] = useState<PeriodType>('month');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [rangeFrom, setRangeFrom] = useState('');
@@ -130,17 +128,20 @@ export function ReportsScreen() {
 
   const summary = useMemo(() => {
     let ourIncome = 0;
+    let totalFinalBill = 0;
     let totalPaid = 0;
 
     groupedJobs.forEach((group) => {
-      ourIncome += group.jobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
+      const payment = getJobCardPaymentSummary(group.jobs);
+      ourIncome += payment.net;
+      totalFinalBill += payment.finalBill;
       totalPaid += group.jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
     });
 
     return {
       totalCards: groupedJobs.length,
       ourIncome,
-      netIncome: ourIncome,
+      totalFinalBill,
       totalPaid,
     };
   }, [groupedJobs, getCustomer]);
@@ -175,7 +176,7 @@ export function ReportsScreen() {
     if (exportFields.customer) { headers.push('Customer'); dataIndices.push('customer'); }
     if (exportFields.workType) { headers.push('Work Type'); dataIndices.push('workType'); }
     if (exportFields.quantity) { headers.push('Qty'); dataIndices.push('quantity'); }
-    if (exportFields.amount) { headers.push('Amount'); dataIndices.push('amount'); }
+    if (exportFields.amount) { headers.push('Net Amount'); dataIndices.push('amount'); }
     if (exportFields.commission) { headers.push('Commission'); dataIndices.push('commission'); }
     if (exportFields.paid) { headers.push('Paid'); dataIndices.push('paid'); }
     if (exportFields.dcNo) { headers.push('DC No'); dataIndices.push('dcNo'); }
@@ -205,7 +206,7 @@ export function ReportsScreen() {
     if (exportFields.customer) { headers.push('Customer'); dataIndices.push('customer'); }
     if (exportFields.workType) { headers.push('Work Type'); dataIndices.push('workType'); }
     if (exportFields.quantity) { headers.push('Qty'); dataIndices.push('quantity'); }
-    if (exportFields.amount) { headers.push('Amount'); dataIndices.push('amount'); }
+    if (exportFields.amount) { headers.push('Net Amount'); dataIndices.push('amount'); }
     if (exportFields.commission) { headers.push('Commission'); dataIndices.push('commission'); }
     if (exportFields.paid) { headers.push('Paid'); dataIndices.push('paid'); }
     if (exportFields.dcNo) { headers.push('DC No'); dataIndices.push('dcNo'); }
@@ -367,20 +368,20 @@ export function ReportsScreen() {
               <div class="summary-value">${summary.totalCards}</div>
             </div>
             <div class="summary-card">
-              <span class="summary-label">Our Income</span>
+              <span class="summary-label">Our Net Income</span>
               <div class="summary-value">${formatCurrency(summary.ourIncome)}</div>
             </div>
             <div class="summary-card">
-              <span class="summary-label">Net Income</span>
-              <div class="summary-value">${formatCurrency(summary.netIncome)}</div>
+              <span class="summary-label">Final Bill</span>
+              <div class="summary-value">${formatCurrency(summary.totalFinalBill)}</div>
             </div>
             <div class="summary-card positive">
               <span class="summary-label">Total Paid</span>
               <div class="summary-value">${formatCurrency(summary.totalPaid)}</div>
             </div>
-            <div class="summary-card ${summary.ourIncome - summary.totalPaid > 0 ? 'negative' : 'positive'}">
+            <div class="summary-card ${summary.totalFinalBill - summary.totalPaid > 0 ? 'negative' : 'positive'}">
               <span class="summary-label">Pending</span>
-              <div class="summary-value">${formatCurrency(summary.ourIncome - summary.totalPaid)}</div>
+              <div class="summary-value">${formatCurrency(summary.totalFinalBill - summary.totalPaid)}</div>
             </div>
           </div>
 
@@ -412,10 +413,10 @@ export function ReportsScreen() {
     const baseText = [
       `SLW Report (${range.label})`,
       `Job Cards: ${summary.totalCards}`,
-      `Our Income: ${formatCurrency(summary.ourIncome)}`,
-      `Net Income: ${formatCurrency(summary.netIncome)}`,
+      `Our Net Income: ${formatCurrency(summary.ourIncome)}`,
+      `Final Bill: ${formatCurrency(summary.totalFinalBill)}`,
       `Total Paid: ${formatCurrency(summary.totalPaid)}`,
-      `Pending: ${formatCurrency(summary.ourIncome - summary.totalPaid)}`,
+      `Pending: ${formatCurrency(summary.totalFinalBill - summary.totalPaid)}`,
     ];
 
     const text = baseText.join('\n');
@@ -587,7 +588,7 @@ export function ReportsScreen() {
                       checked={exportFields.amount}
                       onChange={(e) => setExportFields({ ...exportFields, amount: e.target.checked })}
                     />
-                    Amount
+                    Net Amount
                   </label>
                   <label className="field-checkbox">
                     <input
@@ -639,12 +640,12 @@ export function ReportsScreen() {
             <p className="summary-card-value">{summary.totalCards}</p>
           </div>
           <div className="summary-card">
-            <h3 className="summary-card-label">Our Income</h3>
+            <h3 className="summary-card-label">Our Net Income</h3>
             <p className="summary-card-value">{formatCurrency(summary.ourIncome)}</p>
           </div>
           <div className="summary-card">
-            <h3 className="summary-card-label">Net Income</h3>
-            <p className="summary-card-value">{formatCurrency(summary.netIncome)}</p>
+            <h3 className="summary-card-label">Final Bill</h3>
+            <p className="summary-card-value">{formatCurrency(summary.totalFinalBill)}</p>
           </div>
           <div className="summary-card">
             <h3 className="summary-card-label">Total Paid</h3>
@@ -653,7 +654,7 @@ export function ReportsScreen() {
           <div className="summary-card">
             <h3 className="summary-card-label">Pending</h3>
             <p className="summary-card-value">
-              {formatCurrency(summary.ourIncome - summary.totalPaid)}
+              {formatCurrency(summary.totalFinalBill - summary.totalPaid)}
             </p>
           </div>
         </div>
@@ -697,8 +698,10 @@ export function ReportsScreen() {
                       ))}
                     </div>
                     <div className="card-footer">
-                      <span className="footer-label">Net</span>
+                      <span className="footer-label">Our Net</span>
                       <span className="footer-value">{formatCurrency(payment.net)}</span>
+                      <span className="footer-label">Final Bill</span>
+                      <span className="footer-value">{formatCurrency(payment.finalBill)}</span>
                       <span className="footer-label">Paid</span>
                       <span className="footer-value">{formatCurrency(payment.paid)}</span>
                       <span className="footer-label">Pending</span>
