@@ -33,7 +33,10 @@ export function JobCardDetailsModal({
       : [];
   const primary = sortedJobs.length > 0 ? sortedJobs[0] : null;
   const customer = primary ? getCustomer(primary.customerId) : undefined;
-  const shouldShowDc = isDcApplicableCustomer(customer);
+  const hasDcValues = Boolean(
+    primary && (primary.dcNo || primary.vehicleNo || primary.dcDate || primary.dcApproval)
+  );
+  const shouldShowDc = isDcApplicableCustomer(customer) || hasDcValues;
   const payment = getJobCardPaymentSummary(sortedJobs);
   const totalAmount = sortedJobs.reduce((sum, job) => sum + (Number(job.amount) || 0), 0);
   const totalCommission = sortedJobs.reduce(
@@ -140,12 +143,30 @@ export function JobCardDetailsModal({
           </div>
 
           <div className="job-card-detail-summary">
-            <span>Total Amount: {formatCurrency(totalAmount)}</span>
-            <span>Total Commission: {formatCurrency(totalCommission)}</span>
-            <span>Final Bill: {formatCurrency(payment.finalBill)}</span>
-            <span>Our Net Income: {formatCurrency(payment.net)}</span>
-            <span>Paid: {formatCurrency(payment.paid)}</span>
-            <span>Pending: {formatCurrency(payment.pending)}</span>
+            <span className="job-card-detail-summary-item">
+              <span className="job-card-detail-summary-label">Total Amount</span>
+              <span className="job-card-detail-summary-value">{formatCurrency(totalAmount)}</span>
+            </span>
+            <span className="job-card-detail-summary-item">
+              <span className="job-card-detail-summary-label">Commission</span>
+              <span className="job-card-detail-summary-value">{formatCurrency(totalCommission)}</span>
+            </span>
+            <span className="job-card-detail-summary-item">
+              <span className="job-card-detail-summary-label">Final Bill</span>
+              <span className="job-card-detail-summary-value job-card-detail-summary-value--blue">{formatCurrency(payment.finalBill)}</span>
+            </span>
+            <span className="job-card-detail-summary-item">
+              <span className="job-card-detail-summary-label">Our Net</span>
+              <span className="job-card-detail-summary-value job-card-detail-summary-value--blue">{formatCurrency(payment.net)}</span>
+            </span>
+            <span className="job-card-detail-summary-item">
+              <span className="job-card-detail-summary-label">Paid</span>
+              <span className="job-card-detail-summary-value job-card-detail-summary-value--green">{formatCurrency(payment.paid)}</span>
+            </span>
+            <span className="job-card-detail-summary-item">
+              <span className="job-card-detail-summary-label">Pending</span>
+              <span className="job-card-detail-summary-value job-card-detail-summary-value--red">{formatCurrency(payment.pending)}</span>
+            </span>
           </div>
 
           {(onEdit || onDelete) && (

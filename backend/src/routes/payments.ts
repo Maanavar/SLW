@@ -14,11 +14,22 @@ const localDateSchema = z.string().refine(isLocalDateString, {
 
 const paymentModeSchema = z.enum(PAYMENT_MODES);
 
+const breakdownSchema = z
+  .object({
+    cash: z.number().min(0).optional(),
+    upi: z.number().min(0).optional(),
+    bank: z.number().min(0).optional(),
+    cheque: z.number().min(0).optional(),
+  })
+  .nullable()
+  .optional();
+
 const createPaymentSchema = z.object({
   customerId: z.number().int().positive(),
   amount: z.number().positive(),
   date: localDateSchema,
   paymentMode: paymentModeSchema,
+  breakdown: breakdownSchema,
   referenceNumber: z.string().trim().max(60).nullable().optional(),
   paymentForMonth: z.string().trim().max(20).nullable().optional(),
   paymentForDate: localDateSchema.nullable().optional(),

@@ -28,7 +28,7 @@ export function PaymentForm() {
   const today = getLocalDateString(new Date());
 
   // Payment Report state
-  const [reportPeriod, setReportPeriod] = useState<PeriodType>('month');
+  const [reportPeriod, setReportPeriod] = useState<PeriodType>('today');
   const [reportRangeFrom, setReportRangeFrom] = useState('');
   const [reportRangeTo, setReportRangeTo] = useState(today);
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);

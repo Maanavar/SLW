@@ -49,7 +49,7 @@
 }
 
 .stat-card-value {
-  font-size: clamp(20px, 2vw, 28px);
+  font-size: clamp(var(--text-title3), 2vw, var(--text-title1));
   line-height: 1.12;
   letter-spacing: -0.3px;
   font-weight: 700;

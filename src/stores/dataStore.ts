@@ -128,6 +128,28 @@ function normalizeLegacyJob(job: LegacyJobLike): Job {
 
 function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
   return customers.map((customer) => {
+    const normalizedShortCode = String(customer.shortCode || '').trim().toLowerCase();
+    const normalizedName = String(customer.name || '').trim().toLowerCase();
+    const normalizedNameToken = normalizedName.replace(/[^a-z]/g, '');
+
+    if (normalizedShortCode === 'wp' || normalizedName === 'wagen autos') {
+      return {
+        ...customer,
+        requiresDc: false,
+      };
+    }
+
+    if (
+      normalizedShortCode === 'nm' ||
+      normalizedNameToken.includes('mahaling') ||
+      normalizedNameToken.includes('mahalinham')
+    ) {
+      return {
+        ...customer,
+        requiresDc: true,
+      };
+    }
+
     const isCommissionDcCustomer = [1, 2, 17, 18].includes(customer.id);
     if (customer.id === 17 && !customer.shortCode) {
       return {
@@ -222,14 +244,16 @@ export const useDataStore = create<DataStore>()(
           }
 
           const hydrateFromApi = async () => {
-            const [customers, workTypes, jobs, payments, expenses] = await Promise.all([
+            const [customers, workTypes, jobs, payments, expenses, commissionWorkers, commissionPayments] = await Promise.all([
               apiClient.getCustomers(),
               apiClient.getWorkTypes(),
               apiClient.getJobs(),
               apiClient.getPayments(),
               apiClient.getExpenses(),
+              apiClient.getCommissionWorkers(),
+              apiClient.getCommissionPayments(),
             ]);
-            return { customers, workTypes, jobs, payments, expenses };
+            return { customers, workTypes, jobs, payments, expenses, commissionWorkers, commissionPayments };
           };
 
           let data = await hydrateFromApi();
@@ -260,8 +284,6 @@ export const useDataStore = create<DataStore>()(
 
           set({
             ...data,
-            commissionWorkers: legacy.commissionWorkers,
-            commissionPayments: legacy.commissionPayments,
             backendConnected: true,
             lastSyncAt: new Date().toISOString(),
             syncError: null,
@@ -288,12 +310,14 @@ export const useDataStore = create<DataStore>()(
           return;
         }
 
-        const [customers, workTypes, jobs, payments, expenses] = await Promise.all([
+        const [customers, workTypes, jobs, payments, expenses, commissionWorkers, commissionPayments] = await Promise.all([
           apiClient.getCustomers(),
           apiClient.getWorkTypes(),
           apiClient.getJobs(),
           apiClient.getPayments(),
           apiClient.getExpenses(),
+          apiClient.getCommissionWorkers(),
+          apiClient.getCommissionPayments(),
         ]);
 
         set({
@@ -302,6 +326,8 @@ export const useDataStore = create<DataStore>()(
           jobs: jobs.map((job) => normalizeLegacyJob(job as LegacyJobLike)),
           payments,
           expenses,
+          commissionWorkers,
+          commissionPayments,
           lastSyncAt: new Date().toISOString(),
           syncError: null,
         });
@@ -672,14 +698,9 @@ export const useDataStore = create<DataStore>()(
           return newWorker;
         }
 
-        // TODO: Add backend sync for commission workers
-        const newWorker: CommissionWorker = {
-          ...worker,
-          id: getNextId(get().commissionWorkers),
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({ commissionWorkers: [...state.commissionWorkers, newWorker] }));
-        return newWorker;
+        const created = await apiClient.createCommissionWorker(worker);
+        set((state) => ({ commissionWorkers: [...state.commissionWorkers, created] }));
+        return created;
       },
 
       updateCommissionWorker: async (id, updates) => {
@@ -693,10 +714,7 @@ export const useDataStore = create<DataStore>()(
           return updated;
         }
 
-        // TODO: Add backend sync for commission workers
-        const existing = get().commissionWorkers.find((w) => w.id === id);
-        if (!existing) throw new Error('Commission worker not found');
-        const updated = { ...existing, ...updates };
+        const updated = await apiClient.updateCommissionWorker(id, updates);
         set((state) => ({
           commissionWorkers: state.commissionWorkers.map((w) => (w.id === id ? updated : w)),
         }));
@@ -711,7 +729,7 @@ export const useDataStore = create<DataStore>()(
           return;
         }
 
-        // TODO: Add backend sync for commission workers
+        await apiClient.deleteCommissionWorker(id);
         set((state) => ({
           commissionWorkers: state.commissionWorkers.filter((w) => w.id !== id),
         }));
@@ -731,14 +749,9 @@ export const useDataStore = create<DataStore>()(
           return newPayment;
         }
 
-        // TODO: Add backend sync for commission payments
-        const newPayment: CommissionPayment = {
-          ...payment,
-          id: getNextId(get().commissionPayments),
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({ commissionPayments: [...state.commissionPayments, newPayment] }));
-        return newPayment;
+        const created = await apiClient.createCommissionPayment(payment);
+        set((state) => ({ commissionPayments: [...state.commissionPayments, created] }));
+        return created;
       },
 
       updateCommissionPayment: async (id, updates) => {
@@ -752,10 +765,7 @@ export const useDataStore = create<DataStore>()(
           return updated;
         }
 
-        // TODO: Add backend sync for commission payments
-        const existing = get().commissionPayments.find((p) => p.id === id);
-        if (!existing) throw new Error('Commission payment not found');
-        const updated = { ...existing, ...updates };
+        const updated = await apiClient.updateCommissionPayment(id, updates);
         set((state) => ({
           commissionPayments: state.commissionPayments.map((p) => (p.id === id ? updated : p)),
         }));
@@ -770,7 +780,7 @@ export const useDataStore = create<DataStore>()(
           return;
         }
 
-        // TODO: Add backend sync for commission payments
+        await apiClient.deleteCommissionPayment(id);
         set((state) => ({
           commissionPayments: state.commissionPayments.filter((p) => p.id !== id),
         }));

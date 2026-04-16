@@ -33,7 +33,7 @@ export const defaultCustomers: Customer[] = [
     shortCode: 'WP',
     type: 'Monthly',
     hasCommission: false,
-    requiresDc: true,
+    requiresDc: false,
     notes: 'Multi-brand',
     isActive: true,
   },

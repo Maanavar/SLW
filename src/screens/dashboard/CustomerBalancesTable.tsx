@@ -139,7 +139,10 @@ export function CustomerBalancesTable() {
   return (
     <div className="customer-balances">
       <div className="balances-header">
-        <h3 className="balances-title">Customer Balances</h3>
+        <div className="balances-title-wrap">
+          <h3 className="balances-title">Open Customer Positions</h3>
+          <p className="balances-subtitle">Showing customers with non-zero balance or advance.</p>
+        </div>
         <div className="type-filters">
           <input
             type="text"
@@ -148,41 +151,43 @@ export function CustomerBalancesTable() {
             value={customerFilter}
             onChange={(e) => setCustomerFilter(e.target.value)}
           />
-          <button
-            className={`filter-btn ${!typeFilter ? 'active' : ''}`}
-            onClick={() => setTypeFilter(null)}
-            type="button"
-          >
-            All Types
-          </button>
-          <button
-            className={`filter-btn ${typeFilter === 'Monthly' ? 'active' : ''}`}
-            onClick={() => setTypeFilter('Monthly')}
-            type="button"
-          >
-            Monthly
-          </button>
-          <button
-            className={`filter-btn ${typeFilter === 'Invoice' ? 'active' : ''}`}
-            onClick={() => setTypeFilter('Invoice')}
-            type="button"
-          >
-            Invoice
-          </button>
-          <button
-            className={`filter-btn ${typeFilter === 'Party-Credit' ? 'active' : ''}`}
-            onClick={() => setTypeFilter('Party-Credit')}
-            type="button"
-          >
-            Party-Credit
-          </button>
-          <button
-            className={`filter-btn ${typeFilter === 'Cash' ? 'active' : ''}`}
-            onClick={() => setTypeFilter('Cash')}
-            type="button"
-          >
-            Cash
-          </button>
+          <div className="type-filter-buttons">
+            <button
+              className={`filter-btn ${!typeFilter ? 'active' : ''}`}
+              onClick={() => setTypeFilter(null)}
+              type="button"
+            >
+              All Types
+            </button>
+            <button
+              className={`filter-btn ${typeFilter === 'Monthly' ? 'active' : ''}`}
+              onClick={() => setTypeFilter('Monthly')}
+              type="button"
+            >
+              Monthly
+            </button>
+            <button
+              className={`filter-btn ${typeFilter === 'Invoice' ? 'active' : ''}`}
+              onClick={() => setTypeFilter('Invoice')}
+              type="button"
+            >
+              Invoice
+            </button>
+            <button
+              className={`filter-btn ${typeFilter === 'Party-Credit' ? 'active' : ''}`}
+              onClick={() => setTypeFilter('Party-Credit')}
+              type="button"
+            >
+              Party-Credit
+            </button>
+            <button
+              className={`filter-btn ${typeFilter === 'Cash' ? 'active' : ''}`}
+              onClick={() => setTypeFilter('Cash')}
+              type="button"
+            >
+              Cash
+            </button>
+          </div>
         </div>
       </div>
 

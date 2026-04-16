@@ -9,6 +9,7 @@ import { JobsScreen } from './screens/jobs/JobsScreen';
 import { PaymentsScreen } from './screens/payments/PaymentsScreen';
 import { HistoryScreen } from './screens/history/HistoryScreen';
 import { ReportsScreen } from './screens/reports/ReportsScreen';
+import { RecordsScreen } from './screens/records/RecordsScreen';
 import { FinanceReports } from './screens/FinanceReports';
 import { ExpenseManager } from './screens/ExpenseManager';
 import { CommissionScreen } from './screens/commission/CommissionScreen';
@@ -47,6 +48,10 @@ const router = createHashRouter([
       {
         path: '/reports',
         element: <ReportsScreen />,
+      },
+      {
+        path: '/records',
+        element: <RecordsScreen />,
       },
       {
         path: '/finance',

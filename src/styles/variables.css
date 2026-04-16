@@ -20,6 +20,21 @@
   --border-color: #d7dee8;
   --border-light: rgba(15, 23, 42, 0.08);
 
+  /* Apple spacing scale (4px base unit) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* Legacy spacing for compatibility */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
@@ -28,9 +43,24 @@
   --space-2xl: 32px;
   --space-3xl: 48px;
 
-  --font-main: 'Segoe UI Variable', 'Segoe UI', 'SF Pro Text', 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', ui-monospace, monospace;
+  /* Apple system fonts */
+  --font-main: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
 
+  /* Apple typography scale */
+  --text-caption2: 11px;
+  --text-caption1: 12px;
+  --text-footnote: 13px;
+  --text-subhead: 15px;
+  --text-callout: 16px;
+  --text-body: 17px;
+  --text-headline: 17px;
+  --text-title3: 20px;
+  --text-title2: 22px;
+  --text-title1: 28px;
+  --text-large-title: 34px;
+
+  /* Legacy text sizes for compatibility */
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 14px;

@@ -35,6 +35,39 @@ function generateJobCardId(jobDate: string, existingJobs: Job[]) {
   return `${prefix}${String(maxSerial + 1).padStart(3, '0')}`;
 }
 
+function normalizeCustomerValue(value?: string) {
+  return (value || '').trim().toLowerCase();
+}
+
+function isWagenAutosCustomer(customer?: Customer | null) {
+  if (!customer) return false;
+  const name = normalizeCustomerValue(customer.name);
+  const shortCode = normalizeCustomerValue(customer.shortCode);
+  return shortCode === 'wp' || name === 'wagen autos';
+}
+
+function isMahalingamCustomer(customer?: Customer | null) {
+  if (!customer) return false;
+  const name = normalizeCustomerValue(customer.name).replace(/[^a-z]/g, '');
+  const shortCode = normalizeCustomerValue(customer.shortCode);
+  return (
+    shortCode === 'nm' ||
+    name.includes('mahaling') ||
+    name.includes('mahalinham')
+  );
+}
+
+function shouldShowDcFields(customer?: Customer | null) {
+  if (!customer) return false;
+  return isDcApplicableCustomer(customer) || isMahalingamCustomer(customer);
+}
+
+function formatCustomerLabel(customer: Customer) {
+  const code = String(customer.shortCode || '').trim();
+  const safeCode = code !== '0' ? code : '';
+  return safeCode ? `${customer.name} (${safeCode})` : customer.name;
+}
+
 export function JobForm() {
   const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer } = useDataStore();
   const toast = useToast();
@@ -71,9 +104,10 @@ export function JobForm() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingJobIds, setEditingJobIds] = useState<number[]>([]);
   const [cardCommissionWorker, setCardCommissionWorker] = useState<CommissionWorker | null>(null);
-  const [cardTotalCommission, setCardTotalCommission] = useState('');;
+  const [cardTotalCommission, setCardTotalCommission] = useState('');
 
-  const showDcFields = isDcApplicableCustomer(selectedCustomer);
+  const showDcFields = shouldShowDcFields(selectedCustomer);
+  const showVehicleNoField = showDcFields && !isWagenAutosCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
   const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
     ? getCommissionWorkersForCustomer(selectedCustomer.id)
@@ -127,6 +161,12 @@ export function JobForm() {
     }
   }, [showCommissionFields]);
 
+  useEffect(() => {
+    if (!showVehicleNoField && vehicleNo) {
+      setVehicleNo('');
+    }
+  }, [showVehicleNoField, vehicleNo]);
+
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
 
@@ -153,6 +193,29 @@ export function JobForm() {
     () => todayJobCards.find((group) => group.key === selectedCardKey) || null,
     [todayJobCards, selectedCardKey]
   );
+  const jobCardsMetrics = useMemo(() => {
+    let totalFinal = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+
+    todayJobCards.forEach((group) => {
+      const payment = getJobCardPaymentSummary(group.jobs);
+      totalFinal += payment.finalBill;
+      totalPaid += payment.paid;
+      totalPending += payment.pending;
+    });
+
+    return {
+      count: todayJobCards.length,
+      totalFinal,
+      totalPaid,
+      totalPending,
+    };
+  }, [todayJobCards]);
+  const emptyCardsMessage =
+    cardViewMode === 'today'
+      ? 'No JobCards created today.'
+      : 'No JobCards found for the selected date range.';
 
   const handleAddLine = () => {
     setJobLines([
@@ -288,7 +351,7 @@ export function JobForm() {
               notes: notes.trim() ? notes.trim() : null,
               ...(showDcFields && {
                 dcNo: dcNo || undefined,
-                vehicleNo: vehicleNo || undefined,
+                vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
                 dcDate: dcDate || undefined,
                 dcApproval: dcApproval || undefined,
               }),
@@ -352,7 +415,7 @@ export function JobForm() {
           notes: notes.trim() ? notes.trim() : null,
           ...(showDcFields && {
             dcNo: dcNo || undefined,
-            vehicleNo: vehicleNo || undefined,
+            vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
             dcDate: dcDate || undefined,
             dcApproval: dcApproval || undefined,
           }),
@@ -515,9 +578,19 @@ export function JobForm() {
 
   return (
     <div className="job-form-container">
+      <div className="jobs-page-header">
+        <div className="jobs-title-block">
+          <h2 className="form-title">{isEditMode ? 'Update JobCard' : 'Create Job'}</h2>
+          <p className="jobs-subtitle">
+            Capture job details quickly and track recent cards in one place.
+          </p>
+        </div>
+        <span className="jobs-header-pill">{jobCardsMetrics.count} cards in view</span>
+      </div>
+
       <form onSubmit={handleSubmit} className="job-form">
         <div className="form-section">
-          <h2 className="form-title">Create Job</h2>
+          <h3 className="section-title job-info-title">Job Information</h3>
 
           <div className="header-fields">
             <div className="form-group">
@@ -526,13 +599,13 @@ export function JobForm() {
                 items={customers}
                 value={selectedCustomer}
                 onChange={setSelectedCustomer}
-                getLabel={(c) => (c.shortCode ? `${c.name} (${c.shortCode})` : c.name)}
+                getLabel={formatCustomerLabel}
                 getKey={(c) => String(c.id)}
                 placeholder="Select customer..."
               />
               {selectedCustomer && (
                 <>
-                  {selectedCustomer.advanceBalance && selectedCustomer.advanceBalance > 0 && (
+                  {(selectedCustomer.advanceBalance || 0) > 0 && (
                     <div className="customer-info-banner advance">
                       ✓ {selectedCustomer.name} has {formatCurrency(selectedCustomer.advanceBalance)} advance. Apply it in the Payment section below.
                     </div>
@@ -704,19 +777,21 @@ export function JobForm() {
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="vehicle-no">
-                  Vehicle Number
-                </label>
-                <input
-                  id="vehicle-no"
-                  type="text"
-                  className="form-input"
-                  value={vehicleNo}
-                  onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-                  placeholder="Vehicle registration..."
-                />
-              </div>
+              {showVehicleNoField ? (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="vehicle-no">
+                    Vehicle Number
+                  </label>
+                  <input
+                    id="vehicle-no"
+                    type="text"
+                    className="form-input"
+                    value={vehicleNo}
+                    onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
+                    placeholder="Vehicle registration..."
+                  />
+                </div>
+              ) : null}
 
               <div className="form-group">
                 <label className="form-label" htmlFor="dc-date">
@@ -738,7 +813,7 @@ export function JobForm() {
                   checked={dcApproval}
                   onChange={setDcApproval}
                   id="dc-approval"
-                  disabled={!!(dcNo.trim() || vehicleNo.trim() || dcDate)}
+                  disabled={!!(dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate)}
                 />
               </div>
             </div>
@@ -942,66 +1017,90 @@ export function JobForm() {
       </form>
 
       <div className="form-section today-cards-section">
-        <div className="section-header">
-          <h3 className="section-title">JobCards</h3>
-          <div className="today-cards-header-controls">
-            <div className="view-mode-buttons">
-              <button
-                type="button"
-                className={`mode-btn ${cardViewMode === 'today' ? 'active' : ''}`}
-                onClick={() => {
-                  setCardViewMode('today');
-                  setSelectedCardKey(null);
-                }}
-                title="Show today's job cards only"
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                className={`mode-btn ${cardViewMode === 'range' ? 'active' : ''}`}
-                onClick={() => {
-                  setCardViewMode('range');
-                  setFilterStartDate(today);
-                  setFilterEndDate(today);
-                  setSelectedCardKey(null);
-                }}
-                title="Show job cards from a date range"
-              >
-                Range
-              </button>
+        <div className="jobs-cards-header">
+          <div className="jobs-cards-title-wrap">
+            <h3 className="section-title">JobCards</h3>
+            <p className="jobs-cards-subtitle">Click any card to view, edit, or delete.</p>
+          </div>
+          <div className="jobs-cards-toolbar">
+            <div className="jobs-cards-control-group">
+              <span className="jobs-control-label">Scope</span>
+              <div className="view-mode-buttons">
+                <button
+                  type="button"
+                  className={`mode-btn ${cardViewMode === 'today' ? 'active' : ''}`}
+                  onClick={() => {
+                    setCardViewMode('today');
+                    setSelectedCardKey(null);
+                  }}
+                  title="Show today's job cards only"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className={`mode-btn ${cardViewMode === 'range' ? 'active' : ''}`}
+                  onClick={() => {
+                    setCardViewMode('range');
+                    setFilterStartDate(today);
+                    setFilterEndDate(today);
+                    setSelectedCardKey(null);
+                  }}
+                  title="Show job cards from a date range"
+                >
+                  Range
+                </button>
+              </div>
             </div>
 
             {cardViewMode === 'range' && (
-              <div className="date-range-wrapper">
-                <input
-                  type="date"
-                  className="filter-date-input"
-                  value={filterStartDate}
-                  onChange={(e) => setFilterStartDate(e.target.value)}
-                  max={today}
-                  title="Start date"
-                  aria-label="From date"
-                />
-                <span className="date-range-separator">to</span>
-                <input
-                  type="date"
-                  className="filter-date-input"
-                  value={filterEndDate}
-                  onChange={(e) => setFilterEndDate(e.target.value)}
-                  max={today}
-                  title="End date"
-                  aria-label="To date"
-                />
+              <div className="jobs-cards-control-group">
+                <span className="jobs-control-label">Range</span>
+                <div className="date-range-wrapper">
+                  <input
+                    type="date"
+                    className="filter-date-input"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    max={today}
+                    title="Start date"
+                    aria-label="From date"
+                  />
+                  <span className="date-range-separator">to</span>
+                  <input
+                    type="date"
+                    className="filter-date-input"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    max={today}
+                    title="End date"
+                    aria-label="To date"
+                  />
+                </div>
               </div>
             )}
 
-            <span className="today-cards-count">{todayJobCards.length}</span>
+            <span className="jobs-results-pill">{jobCardsMetrics.count} cards</span>
+          </div>
+        </div>
+
+        <div className="jobs-cards-summary">
+          <div className="jobs-card-stat">
+            <span className="jobs-card-stat-label">Final Bill</span>
+            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalFinal)}</span>
+          </div>
+          <div className="jobs-card-stat jobs-card-stat--positive">
+            <span className="jobs-card-stat-label">Paid</span>
+            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPaid)}</span>
+          </div>
+          <div className="jobs-card-stat jobs-card-stat--warning">
+            <span className="jobs-card-stat-label">Pending</span>
+            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPending)}</span>
           </div>
         </div>
 
         {todayJobCards.length === 0 ? (
-          <p className="empty-today-cards">No JobCards created today.</p>
+          <p className="empty-today-cards">{emptyCardsMessage}</p>
         ) : (
           <div className="today-cards-list">
             {todayJobCards.map((group) => {

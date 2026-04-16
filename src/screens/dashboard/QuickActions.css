@@ -1,6 +1,6 @@
 .quick-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-sm);
 }
 
@@ -9,9 +9,11 @@
   border-radius: 12px;
   background: var(--bg-card);
   color: var(--text-secondary);
+  min-height: 40px;
   padding: 8px 12px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   cursor: pointer;
   font-size: var(--text-sm);
@@ -19,19 +21,27 @@
   transition:
     border-color var(--transition-fast),
     color var(--transition-fast),
+    background-color var(--transition-fast),
     transform var(--transition-fast);
 }
 
 .quick-action-btn:hover {
   color: var(--accent-primary);
   border-color: rgba(11, 102, 228, 0.38);
+  background: var(--bg-tertiary);
   transform: translateY(-1px);
 }
 
 .quick-action-btn.primary {
+  grid-column: 1 / -1;
   background: linear-gradient(135deg, var(--accent-primary), #3a7def);
   border-color: transparent;
   color: #fff;
+}
+
+.quick-action-btn.primary:hover {
+  color: #fff;
+  border-color: transparent;
 }
 
 .quick-action-icon {
@@ -44,4 +54,14 @@
 
 .quick-action-label {
   white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-action-btn.primary {
+    grid-column: auto;
+  }
 }

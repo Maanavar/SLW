@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { StatusBadge } from '@/components/ui/Badge';
+import { DataTable, Column } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobsInRange, getReportRange, groupJobsByCard } from '@/lib/reportUtils';
 import { getJobCardPaymentSummary, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import type { PaymentBreakdown } from '@/components/ui/StatCard';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import '../customers/CustomersScreen.css';
@@ -20,6 +22,28 @@ type PeriodType =
   | 'year'
   | 'all'
   | 'range';
+
+type PaymentFilter = 'all' | 'paid' | 'unpaid';
+type ReportViewMode = 'cards' | 'table';
+type ReportCustomerOption = {
+  id: number;
+  name: string;
+  shortCode?: string;
+};
+
+interface ReportCardRow {
+  id: string;
+  date: string;
+  cardId: string;
+  customer: string;
+  lineCount: number;
+  works: string;
+  net: number;
+  finalBill: number;
+  paid: number;
+  pending: number;
+  status: 'Paid' | 'Pending' | 'Partially Paid';
+}
 
 function downloadTextFile(fileName: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -62,6 +86,8 @@ const DEFAULT_EXPORT_FIELDS: ExportFieldSelection = {
 export function ReportsScreen() {
   const { jobs, getActiveCustomers, getCustomer, deleteJob } = useDataStore();
   const [period, setPeriod] = useState<PeriodType>('month');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
+  const [viewMode, setViewMode] = useState<ReportViewMode>('cards');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [rangeFrom, setRangeFrom] = useState('');
   const [rangeTo, setRangeTo] = useState(getLocalDateString(new Date()));
@@ -69,6 +95,7 @@ export function ReportsScreen() {
   const [editingCardKey, setEditingCardKey] = useState<string | null>(null);
   const [showExportFields, setShowExportFields] = useState(false);
   const [exportFields, setExportFields] = useState<ExportFieldSelection>(DEFAULT_EXPORT_FIELDS);
+  const [showReceivedBreakdown, setShowReceivedBreakdown] = useState(false);
   const today = getLocalDateString(new Date());
 
   const handleDeleteCard = async () => {
@@ -97,6 +124,10 @@ export function ReportsScreen() {
   };
 
   const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
+  const customerOptions = useMemo<ReportCustomerOption[]>(
+    () => [{ id: 0, name: 'All Clients' }, ...customers],
+    [customers]
+  );
 
   const range = useMemo(() => {
     if (period === 'all') {
@@ -115,7 +146,28 @@ export function ReportsScreen() {
     ? jobsInRange.filter((job) => job.customerId === selectedCustomerId)
     : jobsInRange;
 
-  const groupedJobs = groupJobsByCard(filteredJobs);
+  const groupedJobs = useMemo(
+    () =>
+      groupJobsByCard(filteredJobs)
+        .filter((group) => {
+          if (paymentFilter === 'all') {
+            return true;
+          }
+
+          const status = getJobCardPaymentSummary(group.jobs).status;
+          return paymentFilter === 'paid' ? status === 'Paid' : status !== 'Paid';
+        })
+        .sort((a, b) => {
+          if (a.primary.date !== b.primary.date) {
+            return b.primary.date.localeCompare(a.primary.date);
+          }
+
+          const aCreated = a.primary.createdAt ? new Date(a.primary.createdAt).getTime() : 0;
+          const bCreated = b.primary.createdAt ? new Date(b.primary.createdAt).getTime() : 0;
+          return bCreated - aCreated;
+        }),
+    [filteredJobs, paymentFilter]
+  );
   const selectedGroup = useMemo(
     () => groupedJobs.find((group) => group.key === selectedCardKey) || null,
     [groupedJobs, selectedCardKey]
@@ -144,7 +196,35 @@ export function ReportsScreen() {
       totalFinalBill,
       totalPaid,
     };
-  }, [groupedJobs, getCustomer]);
+  }, [groupedJobs]);
+
+  const pendingAmount = summary.totalFinalBill - summary.totalPaid;
+  const emptyStateMessage =
+    paymentFilter === 'all'
+      ? 'No jobs found for the selected filters'
+      : paymentFilter === 'paid'
+        ? 'No paid jobs found for the selected filters'
+        : 'No unpaid jobs found for the selected filters';
+
+  const receivedBreakdown = useMemo<PaymentBreakdown>(() => {
+    const bd: PaymentBreakdown = { cash: 0, upi: 0, bank: 0, cheque: 0 };
+    groupedJobs.forEach((group) => {
+      group.jobs.forEach((job) => {
+        const paid = getJobPaidAmount(job);
+        if (paid > 0 && job.paymentMode) {
+          if (job.paymentMode === 'Cash') bd.cash = (bd.cash || 0) + paid;
+          else if (job.paymentMode === 'UPI') bd.upi = (bd.upi || 0) + paid;
+          else if (job.paymentMode === 'Bank') bd.bank = (bd.bank || 0) + paid;
+          else if (job.paymentMode === 'Cheque') bd.cheque = (bd.cheque || 0) + paid;
+        }
+      });
+    });
+    return bd;
+  }, [groupedJobs]);
+
+  const hasReceivedBreakdown = Boolean(
+    receivedBreakdown.cash || receivedBreakdown.upi || receivedBreakdown.bank || receivedBreakdown.cheque
+  );
 
   const reportRows = useMemo(() => {
     return groupedJobs.flatMap((group) =>
@@ -166,6 +246,46 @@ export function ReportsScreen() {
       })
     );
   }, [groupedJobs, getCustomer]);
+
+  const reportCardRows = useMemo<ReportCardRow[]>(
+    () =>
+      groupedJobs.map((group) => {
+        const payment = getJobCardPaymentSummary(group.jobs);
+        const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
+        const works = group.jobs
+          .map((job) => job.workTypeName)
+          .filter((value, index, arr) => arr.indexOf(value) === index)
+          .join(', ');
+
+        return {
+          id: group.key,
+          date: group.primary.date,
+          cardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
+          customer: customerName,
+          lineCount: group.lineCount,
+          works,
+          net: payment.net,
+          finalBill: payment.finalBill,
+          paid: payment.paid,
+          pending: payment.pending,
+          status: payment.status,
+        };
+      }),
+    [groupedJobs, getCustomer]
+  );
+
+  const reportTableColumns: Column<ReportCardRow>[] = [
+    { key: 'date', label: 'Date', sortable: true },
+    { key: 'cardId', label: 'JobCard', sortable: true },
+    { key: 'customer', label: 'Customer', sortable: true },
+    { key: 'lineCount', label: 'Lines', sortable: true },
+    { key: 'works', label: 'Works' },
+    { key: 'net', label: 'Net', render: (value) => formatCurrency(value as number) },
+    { key: 'finalBill', label: 'Final Bill', render: (value) => formatCurrency(value as number) },
+    { key: 'paid', label: 'Paid', render: (value) => formatCurrency(value as number) },
+    { key: 'pending', label: 'Pending', render: (value) => formatCurrency(value as number) },
+    { key: 'status', label: 'Status', render: (value) => <StatusBadge status={value as string} /> },
+  ];
 
   const handleExportExcel = () => {
     const headers: string[] = [];
@@ -376,7 +496,7 @@ export function ReportsScreen() {
               <div class="summary-value">${formatCurrency(summary.totalFinalBill)}</div>
             </div>
             <div class="summary-card positive">
-              <span class="summary-label">Total Paid</span>
+              <span class="summary-label">Total Received</span>
               <div class="summary-value">${formatCurrency(summary.totalPaid)}</div>
             </div>
             <div class="summary-card ${summary.totalFinalBill - summary.totalPaid > 0 ? 'negative' : 'positive'}">
@@ -415,7 +535,7 @@ export function ReportsScreen() {
       `Job Cards: ${summary.totalCards}`,
       `Our Net Income: ${formatCurrency(summary.ourIncome)}`,
       `Final Bill: ${formatCurrency(summary.totalFinalBill)}`,
-      `Total Paid: ${formatCurrency(summary.totalPaid)}`,
+      `Total Received: ${formatCurrency(summary.totalPaid)}`,
       `Pending: ${formatCurrency(summary.totalFinalBill - summary.totalPaid)}`,
     ];
 
@@ -425,102 +545,162 @@ export function ReportsScreen() {
 
   return (
     <div className="customers-screen">
-      <div className="screen-header">
-        <h2 className="screen-title">Reports</h2>
-        <div className="screen-controls">
-          <div className="period-select">
-            <label className="filter-label" htmlFor="period-select">
-              Period
-            </label>
-            <select
-              id="period-select"
-              className="search-input"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as PeriodType)}
-              title="Select reporting period"
-            >
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-              <option value="halfyear">This Half-Year</option>
-              <option value="year">This Year</option>
-              <option value="range">Custom Date Range</option>
-              <option value="all">All Time</option>
-            </select>
-          </div>
+      <div className="screen-header reports-header">
+        <div className="reports-title-block">
+          <h2 className="screen-title">Reports</h2>
+          <p className="reports-subtitle">Track cards, revenue, and collections with flexible filters.</p>
+        </div>
+        <div className="reports-filters-panel">
+          <div className="screen-controls reports-filters">
+            <div className="period-select">
+              <label className="filter-label" htmlFor="period-select">
+                Period
+              </label>
+              <select
+                id="period-select"
+                className="search-input"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value as PeriodType)}
+                title="Select reporting period"
+              >
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="halfyear">This Half-Year</option>
+                <option value="year">This Year</option>
+                <option value="range">Custom Date Range</option>
+                <option value="all">All Time</option>
+              </select>
+            </div>
 
-          {period === 'range' ? (
-            <div className="range-controls">
-              <div className="period-select">
-                <label className="filter-label" htmlFor="range-from">
-                  From
-                </label>
-                <input
-                  id="range-from"
-                  type="date"
-                  className="search-input"
-                  value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
-                  max={today}
-                />
+            {period === 'range' ? (
+              <div className="range-controls">
+                <div className="period-select">
+                  <label className="filter-label" htmlFor="range-from">
+                    From
+                  </label>
+                  <input
+                    id="range-from"
+                    type="date"
+                    className="search-input"
+                    value={rangeFrom}
+                    onChange={(e) => setRangeFrom(e.target.value)}
+                    max={today}
+                  />
+                </div>
+                <div className="period-select">
+                  <label className="filter-label" htmlFor="range-to">
+                    To
+                  </label>
+                  <input
+                    id="range-to"
+                    type="date"
+                    className="search-input"
+                    value={rangeTo}
+                    onChange={(e) => setRangeTo(e.target.value)}
+                    max={today}
+                  />
+                </div>
               </div>
-              <div className="period-select">
-                <label className="filter-label" htmlFor="range-to">
-                  To
-                </label>
-                <input
-                  id="range-to"
-                  type="date"
-                  className="search-input"
-                  value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
-                  max={today}
-                />
+            ) : null}
+
+            <div className="customer-select">
+              <label className="filter-label">Customer</label>
+              <SearchableSelect<ReportCustomerOption>
+                items={customerOptions}
+                value={
+                  selectedCustomerId === null
+                    ? { id: 0, name: 'All Clients' }
+                    : customerOptions.find((c) => c.id === selectedCustomerId) || {
+                        id: 0,
+                        name: 'All Clients',
+                      }
+                }
+                onChange={(item) => setSelectedCustomerId(item.id === 0 ? null : item.id)}
+                getLabel={(item) => item.name}
+                getKey={(item) => String(item.id)}
+                getSearchText={(item) => `${item.name} ${item.shortCode || ''}`}
+                placeholder="Select customer..."
+              />
+            </div>
+
+            <div className="payment-filter-select">
+              <label className="filter-label">Payment</label>
+              <div className="payment-filter-toggle">
+                <button
+                  type="button"
+                  className={`payment-filter-btn ${paymentFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setPaymentFilter('all')}
+                  aria-pressed={paymentFilter === 'all'}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  className={`payment-filter-btn ${paymentFilter === 'paid' ? 'active' : ''}`}
+                  onClick={() => setPaymentFilter('paid')}
+                  aria-pressed={paymentFilter === 'paid'}
+                >
+                  Paid
+                </button>
+                <button
+                  type="button"
+                  className={`payment-filter-btn ${paymentFilter === 'unpaid' ? 'active' : ''}`}
+                  onClick={() => setPaymentFilter('unpaid')}
+                  aria-pressed={paymentFilter === 'unpaid'}
+                >
+                  Unpaid
+                </button>
               </div>
             </div>
-          ) : null}
-
-          <div className="customer-select">
-            <label className="filter-label">Customer</label>
-            <SearchableSelect
-              items={[{ id: 0, name: 'All Clients' }, ...customers]}
-              value={
-                selectedCustomerId === null
-                  ? { id: 0, name: 'All Clients' }
-                  : customers.find((c) => c.id === selectedCustomerId) || {
-                      id: 0,
-                      name: 'All Clients',
-                    }
-              }
-              onChange={(item) => setSelectedCustomerId(item.id === 0 ? null : item.id)}
-              getLabel={(item) => item.name}
-              getKey={(item) => String(item.id)}
-              placeholder="Select customer..."
-            />
           </div>
         </div>
       </div>
 
       <div className="screen-content">
-        <div className="report-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setShowExportFields(!showExportFields)}
-            title="Select which fields to include in export"
-          >
-            {showExportFields ? 'Hide Fields' : 'Select Fields'}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={handleExportPdf}>
-            Export PDF
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={handleExportExcel}>
-            Export Excel
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={handleExportWhatsApp}>
-            Share WhatsApp
-          </button>
+        <div className="reports-toolbar">
+          <div className="reports-toolbar-left">
+            <div className="reports-view-toggle">
+              <button
+                type="button"
+                className={`reports-view-btn ${viewMode === 'cards' ? 'active' : ''}`}
+                onClick={() => setViewMode('cards')}
+                aria-pressed={viewMode === 'cards'}
+              >
+                Card View
+              </button>
+              <button
+                type="button"
+                className={`reports-view-btn ${viewMode === 'table' ? 'active' : ''}`}
+                onClick={() => setViewMode('table')}
+                aria-pressed={viewMode === 'table'}
+              >
+                Table View
+              </button>
+            </div>
+            <span className="reports-results-count">{groupedJobs.length} cards</span>
+          </div>
+
+          <div className="report-actions reports-toolbar-right">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowExportFields(!showExportFields)}
+              title="Select which fields to include in export"
+            >
+              {showExportFields ? 'Hide Fields' : 'Select Fields'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={handleExportExcel}>
+              Export Excel
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={handleExportPdf}>
+              Export PDF
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={handleExportWhatsApp}>
+              Share WhatsApp
+            </button>
+          </div>
         </div>
 
         {showExportFields && (
@@ -647,73 +827,126 @@ export function ReportsScreen() {
             <h3 className="summary-card-label">Final Bill</h3>
             <p className="summary-card-value">{formatCurrency(summary.totalFinalBill)}</p>
           </div>
-          <div className="summary-card">
-            <h3 className="summary-card-label">Total Paid</h3>
+          <div
+            className={`summary-card${hasReceivedBreakdown ? ' summary-card--hoverable' : ''}`}
+            onMouseEnter={() => hasReceivedBreakdown && setShowReceivedBreakdown(true)}
+            onMouseLeave={() => setShowReceivedBreakdown(false)}
+          >
+            <h3 className="summary-card-label">Total Received</h3>
             <p className="summary-card-value">{formatCurrency(summary.totalPaid)}</p>
+            {hasReceivedBreakdown && showReceivedBreakdown && (
+              <div className="reports-breakdown-tooltip">
+                <div className="breakdown-header">Payment Breakdown</div>
+                <div className="breakdown-items">
+                  {(receivedBreakdown.cash || 0) > 0 && (
+                    <div className="breakdown-item">
+                      <span className="breakdown-label">Cash</span>
+                      <span className="breakdown-value">₹{receivedBreakdown.cash!.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  {(receivedBreakdown.upi || 0) > 0 && (
+                    <div className="breakdown-item">
+                      <span className="breakdown-label">UPI</span>
+                      <span className="breakdown-value">₹{receivedBreakdown.upi!.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  {(receivedBreakdown.bank || 0) > 0 && (
+                    <div className="breakdown-item">
+                      <span className="breakdown-label">Bank</span>
+                      <span className="breakdown-value">₹{receivedBreakdown.bank!.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  {(receivedBreakdown.cheque || 0) > 0 && (
+                    <div className="breakdown-item">
+                      <span className="breakdown-label">Cheque</span>
+                      <span className="breakdown-value">₹{receivedBreakdown.cheque!.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <div className="summary-card">
             <h3 className="summary-card-label">Pending</h3>
             <p className="summary-card-value">
-              {formatCurrency(summary.totalFinalBill - summary.totalPaid)}
+              {formatCurrency(pendingAmount)}
             </p>
           </div>
         </div>
 
         <div className="reports-details">
-          <h3 className="details-title">Job Cards</h3>
-          <div className="job-cards-grid">
-            {groupedJobs.length > 0 ? (
-              groupedJobs.map((group) => {
-                const payment = getJobCardPaymentSummary(group.jobs);
-                const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
-                return (
-                  <div
-                    key={group.key}
-                    className="job-card job-card-clickable"
-                    onClick={() => setSelectedCardKey(group.key)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setSelectedCardKey(group.key);
-                      }
-                    }}
-                  >
-                    <div className="card-header">
-                      <div>
-                        <h4 className="card-title">{customerName}</h4>
-                        <span className="card-subtitle">{group.primary.date}</span>
-                      </div>
-                      <div className="card-header-status">
-                        <StatusBadge status={payment.status} />
-                      </div>
-                    </div>
-                    <div className="card-body">
-                      {group.jobs.map((job) => (
-                        <div key={job.id} className="job-line">
-                          <span className="job-work">{job.workTypeName}</span>
-                          <span className="job-amount">{formatCurrency(getJobNetValue(job))}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="card-footer">
-                      <span className="footer-label">Our Net</span>
-                      <span className="footer-value">{formatCurrency(payment.net)}</span>
-                      <span className="footer-label">Final Bill</span>
-                      <span className="footer-value">{formatCurrency(payment.finalBill)}</span>
-                      <span className="footer-label">Paid</span>
-                      <span className="footer-value">{formatCurrency(payment.paid)}</span>
-                      <span className="footer-label">Pending</span>
-                      <span className="footer-value">{formatCurrency(payment.pending)}</span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="empty-state">No jobs found for the selected filters</div>
-            )}
+          <div className="reports-details-header">
+            <h3 className="details-title">Job Cards</h3>
+            <span className="details-hint">
+              {viewMode === 'table' ? 'Click a row to open job card details.' : 'Click a card to open details.'}
+            </span>
           </div>
+          {viewMode === 'cards' ? (
+            <div className="job-cards-grid">
+              {groupedJobs.length > 0 ? (
+                groupedJobs.map((group) => {
+                  const payment = getJobCardPaymentSummary(group.jobs);
+                  const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
+                  return (
+                    <div
+                      key={group.key}
+                      className="job-card job-card-clickable"
+                      onClick={() => setSelectedCardKey(group.key)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedCardKey(group.key);
+                        }
+                      }}
+                    >
+                      <div className="card-header">
+                        <div>
+                          <h4 className="card-title">{customerName}</h4>
+                          <span className="card-subtitle">{group.primary.date}</span>
+                        </div>
+                        <div className="card-header-status">
+                          <StatusBadge status={payment.status} />
+                        </div>
+                      </div>
+                      <div className="card-body">
+                        {group.jobs.map((job) => (
+                          <div key={job.id} className="job-line">
+                            <span className="job-work">{job.workTypeName}</span>
+                            <span className="job-amount">{formatCurrency(getJobNetValue(job))}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="card-footer">
+                        <span className="footer-label">Our Net</span>
+                        <span className="footer-value">{formatCurrency(payment.net)}</span>
+                        <span className="footer-label">Final Bill</span>
+                        <span className="footer-value">{formatCurrency(payment.finalBill)}</span>
+                        <span className="footer-label">Paid</span>
+                        <span className="footer-value">{formatCurrency(payment.paid)}</span>
+                        <span className="footer-label">Pending</span>
+                        <span className="footer-value">{formatCurrency(payment.pending)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="empty-state">{emptyStateMessage}</div>
+              )}
+            </div>
+          ) : (
+            <DataTable<ReportCardRow>
+              columns={reportTableColumns}
+              data={reportCardRows}
+              keyFn={(item) => item.id}
+              className="reports-data-table"
+              sortBy="date"
+              sortOrder="desc"
+              onRowClick={(row) => setSelectedCardKey(row.id)}
+              emptyMessage={emptyStateMessage}
+            />
+          )}
         </div>
       </div>
 

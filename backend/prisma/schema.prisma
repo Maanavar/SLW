@@ -33,8 +33,9 @@ model Customer {
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-  jobs           Job[]
-  payments       Payment[]
+  jobs               Job[]
+  payments           Payment[]
+  commissionWorkers  CommissionWorker[]
 
   @@index([name])
   @@index([shortCode])
@@ -99,6 +100,7 @@ model Payment {
   amount             Float
   date               String   @db.VarChar(10)
   paymentMode        String   @db.VarChar(20)
+  breakdown          Json?
   referenceNumber    String?  @db.VarChar(60)
   paymentForMonth    String?  @db.VarChar(20)
   paymentForDate     String?  @db.VarChar(10)
@@ -112,6 +114,40 @@ model Payment {
   @@index([date])
   @@index([customerId, date])
   @@map("payments")
+}
+
+model CommissionWorker {
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  name       String   @db.VarChar(120)
+  shareType  String   @db.VarChar(20)
+  shareValue Float
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([customerId])
+  @@map("commission_workers")
+}
+
+model CommissionPayment {
+  id         Int      @id @default(autoincrement())
+  workerId   Int
+  workerName String   @db.VarChar(120)
+  customerId Int
+  jobIds     Json
+  amount     Float
+  date       String   @db.VarChar(10)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([customerId])
+  @@index([date])
+  @@map("commission_payments")
 }
 
 model Expense {

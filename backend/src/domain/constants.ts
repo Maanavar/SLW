@@ -1,5 +1,5 @@
 export const CUSTOMER_TYPES = ['Monthly', 'Invoice', 'Party-Credit', 'Cash'] as const;
-export const PAYMENT_MODES = ['Cash', 'UPI', 'Bank', 'Cheque'] as const;
+export const PAYMENT_MODES = ['Cash', 'UPI', 'Bank', 'Cheque', 'Mixed'] as const;
 export const PAYMENT_STATUSES = ['Paid', 'Pending', 'Partially Paid'] as const;
 export const WORK_MODES = ['Workshop', 'Spot'] as const;
 export const EXPENSE_CATEGORIES = [
@@ -33,6 +33,8 @@ export const LOG_ENTITIES = [
   'JOB',
   'PAYMENT',
   'EXPENSE',
+  'COMMISSION_WORKER',
+  'COMMISSION_PAYMENT',
   'SYSTEM',
 ] as const;
 

@@ -21,7 +21,7 @@
 }
 
 .sidebar-header {
-  padding: var(--space-lg);
+  padding: var(--space-4);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -50,48 +50,48 @@
 }
 
 .logo-title {
-  font-size: 16px;
+  font-size: var(--text-callout);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.3px;
 }
 
 .logo-subtitle {
-  font-size: 12px;
+  font-size: var(--text-caption1);
   color: var(--text-muted);
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: var(--space-md);
+  padding: var(--space-3);
   overflow-y: auto;
 }
 
 .nav-section {
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-4);
 }
 
 .nav-section-title {
-  font-size: 11px;
+  font-size: var(--text-caption1);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  padding: var(--space-sm) var(--space-md);
-  margin-bottom: var(--space-xs);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md);
+  gap: var(--space-3);
+  padding: var(--space-3);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-fast);
   color: var(--text-secondary);
   font-weight: 500;
-  font-size: 14px;
+  font-size: var(--text-callout);
 }
 
 .nav-item:hover {

@@ -129,6 +129,7 @@ function formatRangeLabel(from: string, to: string): string {
 
 export function PeriodSummaryRow() {
   const { jobs, payments } = useDataStore();
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month'>('today');
   const [dayOffset, setDayOffset] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
@@ -189,95 +190,101 @@ export function PeriodSummaryRow() {
     return getPeriodStats(filteredJobs, filteredPayments);
   }, [jobs, payments, monthRange]);
 
+  const currentRange = activePeriod === 'today' ? dayRange : activePeriod === 'week' ? weekRange : monthRange;
+  const currentStats = activePeriod === 'today' ? todayStats : activePeriod === 'week' ? weekStats : monthStats;
+  const currentOffset =
+    activePeriod === 'today' ? dayOffset : activePeriod === 'week' ? weekOffset : monthOffset;
+  const currentTitle = activePeriod === 'today' ? 'Today' : activePeriod === 'week' ? 'This Week' : 'This Month';
+  const canGoNext = currentOffset > 0;
+  const collectionRate =
+    currentStats.totalRevenue > 0 ? (currentStats.received / currentStats.totalRevenue) * 100 : 0;
+  const marginRate =
+    currentStats.totalRevenue > 0 ? (currentStats.grossProfit / currentStats.totalRevenue) * 100 : 0;
+
+  const handlePrev = () => {
+    if (activePeriod === 'today') setDayOffset((value) => value + 1);
+    else if (activePeriod === 'week') setWeekOffset((value) => value + 1);
+    else setMonthOffset((value) => value + 1);
+  };
+
+  const handleNext = () => {
+    if (!canGoNext) return;
+    if (activePeriod === 'today') setDayOffset((value) => value - 1);
+    else if (activePeriod === 'week') setWeekOffset((value) => value - 1);
+    else setMonthOffset((value) => value - 1);
+  };
+
+  const handleReset = () => {
+    if (activePeriod === 'today') setDayOffset(0);
+    else if (activePeriod === 'week') setWeekOffset(0);
+    else setMonthOffset(0);
+  };
+
   return (
     <div className="period-summary">
-      <div className="summary-section">
+      <div className="summary-section summary-section--active">
         <div className="summary-section-header">
-          <div>
-            <h3 className="summary-section-title">Today</h3>
-            <p className="summary-range-label">{dayRange.label}</p>
+          <div className="summary-heading-block">
+            <h3 className="summary-section-title">{currentTitle}</h3>
+            <p className="summary-range-label">{currentRange.label}</p>
           </div>
-          <div className="summary-nav">
-            <button type="button" className="summary-nav-btn" onClick={() => setDayOffset((v) => v + 1)}>
-              Prev
-            </button>
-            <button
-              type="button"
-              className="summary-nav-btn"
-              onClick={() => setDayOffset((v) => v - 1)}
-              disabled={dayOffset === 0}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-        <div className="summary-cards">
-          <StatCard title="JobCards" value={todayStats.jobsCount} subtitle="Cards created" icon="J" />
-          <StatCard title="Revenue" value={formatCurrency(todayStats.totalRevenue)} subtitle="Total quoted amount" icon="R" />
-          <StatCard title="Commission" value={formatCurrency(todayStats.commissionExpense)} subtitle="Paid to managers" icon="C" />
-          <StatCard title="Gross Profit" value={formatCurrency(todayStats.grossProfit)} subtitle="Our actual income" icon="G" />
-          <StatCard title="Received" value={formatCurrency(todayStats.received)} subtitle="Cash collected" icon="P" breakdown={todayStats.receivedBreakdown} />
-          <StatCard title="Outstanding" value={formatCurrency(todayStats.outstanding)} subtitle="Still to collect" icon="O" />
-        </div>
-      </div>
 
-      <div className="summary-section">
-        <div className="summary-section-header">
-          <div>
-            <h3 className="summary-section-title">This Week</h3>
-            <p className="summary-range-label">{weekRange.label}</p>
-          </div>
-          <div className="summary-nav">
-            <button type="button" className="summary-nav-btn" onClick={() => setWeekOffset((v) => v + 1)}>
-              Prev
+          <div className="period-toggle">
+            <button
+              type="button"
+              className={`period-toggle-btn ${activePeriod === 'today' ? 'active' : ''}`}
+              onClick={() => setActivePeriod('today')}
+              aria-pressed={activePeriod === 'today'}
+            >
+              Today
             </button>
             <button
               type="button"
-              className="summary-nav-btn"
-              onClick={() => setWeekOffset((v) => v - 1)}
-              disabled={weekOffset === 0}
+              className={`period-toggle-btn ${activePeriod === 'week' ? 'active' : ''}`}
+              onClick={() => setActivePeriod('week')}
+              aria-pressed={activePeriod === 'week'}
             >
-              Next
+              Week
+            </button>
+            <button
+              type="button"
+              className={`period-toggle-btn ${activePeriod === 'month' ? 'active' : ''}`}
+              onClick={() => setActivePeriod('month')}
+              aria-pressed={activePeriod === 'month'}
+            >
+              Month
             </button>
           </div>
-        </div>
-        <div className="summary-cards">
-          <StatCard title="JobCards" value={weekStats.jobsCount} subtitle="Cards created" icon="J" />
-          <StatCard title="Revenue" value={formatCurrency(weekStats.totalRevenue)} subtitle="Total quoted amount" icon="R" />
-          <StatCard title="Commission" value={formatCurrency(weekStats.commissionExpense)} subtitle="Paid to managers" icon="C" />
-          <StatCard title="Gross Profit" value={formatCurrency(weekStats.grossProfit)} subtitle="Our actual income" icon="G" />
-          <StatCard title="Received" value={formatCurrency(weekStats.received)} subtitle="Cash collected" icon="P" breakdown={weekStats.receivedBreakdown} />
-          <StatCard title="Outstanding" value={formatCurrency(weekStats.outstanding)} subtitle="Still to collect" icon="O" />
-        </div>
-      </div>
 
-      <div className="summary-section">
-        <div className="summary-section-header">
-          <div>
-            <h3 className="summary-section-title">This Month</h3>
-            <p className="summary-range-label">{monthRange.label}</p>
-          </div>
           <div className="summary-nav">
-            <button type="button" className="summary-nav-btn" onClick={() => setMonthOffset((v) => v + 1)}>
+            <button type="button" className="summary-nav-btn" onClick={handlePrev}>
               Prev
+            </button>
+            <button type="button" className="summary-nav-btn" onClick={handleNext} disabled={!canGoNext}>
+              Next
             </button>
             <button
               type="button"
-              className="summary-nav-btn"
-              onClick={() => setMonthOffset((v) => v - 1)}
-              disabled={monthOffset === 0}
+              className="summary-nav-btn summary-nav-btn--soft"
+              onClick={handleReset}
+              disabled={!canGoNext}
             >
-              Next
+              Current
             </button>
           </div>
         </div>
         <div className="summary-cards">
-          <StatCard title="JobCards" value={monthStats.jobsCount} subtitle="Cards created" icon="J" />
-          <StatCard title="Revenue" value={formatCurrency(monthStats.totalRevenue)} subtitle="Total quoted amount" icon="R" />
-          <StatCard title="Commission" value={formatCurrency(monthStats.commissionExpense)} subtitle="Paid to managers" icon="C" />
-          <StatCard title="Gross Profit" value={formatCurrency(monthStats.grossProfit)} subtitle="Our actual income" icon="G" />
-          <StatCard title="Received" value={formatCurrency(monthStats.received)} subtitle="Cash collected" icon="P" breakdown={monthStats.receivedBreakdown} />
-          <StatCard title="Outstanding" value={formatCurrency(monthStats.outstanding)} subtitle="Still to collect" icon="O" />
+          <StatCard title="JobCards" value={currentStats.jobsCount} subtitle="Cards created" icon="J" />
+          <StatCard title="Revenue" value={formatCurrency(currentStats.totalRevenue)} subtitle="Total quoted amount" icon="R" />
+          <StatCard title="Commission" value={formatCurrency(currentStats.commissionExpense)} subtitle="Paid to managers" icon="C" />
+          <StatCard title="Gross Profit" value={formatCurrency(currentStats.grossProfit)} subtitle="Our actual income" icon="G" />
+          <StatCard title="Received" value={formatCurrency(currentStats.received)} subtitle="Cash collected" icon="P" breakdown={currentStats.receivedBreakdown} />
+          <StatCard title="Outstanding" value={formatCurrency(currentStats.outstanding)} subtitle="Still to collect" icon="O" />
+        </div>
+        <div className="summary-micro-metrics">
+          <span className="summary-micro-pill">Collection Rate: {collectionRate.toFixed(1)}%</span>
+          <span className="summary-micro-pill">Margin: {marginRate.toFixed(1)}%</span>
+          <span className="summary-micro-pill">Outstanding: {formatCurrency(currentStats.outstanding)}</span>
         </div>
       </div>
     </div>

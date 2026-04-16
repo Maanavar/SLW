@@ -57,26 +57,14 @@ const navSections: NavSection[] = [
     title: 'Reporting',
     items: [
       {
-        path: '/history',
-        label: 'Job History',
+        path: '/records',
+        label: 'Records',
         icon: (
           <svg {...iconProps}>
-            <path d="M3 12a9 9 0 1 0 3-6.7" />
-            <path d="M3 4v4h4" />
-            <path d="M12 7v6l3 2" />
-          </svg>
-        ),
-      },
-      {
-        path: '/reports',
-        label: 'Report',
-        icon: (
-          <svg {...iconProps}>
-            <path d="M4 20V4" />
-            <path d="M4 20h16" />
-            <path d="M8 16V9" />
-            <path d="M12 16V6" />
-            <path d="M16 16v-4" />
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M7 8h10M7 12h10M7 16h6" />
+            <path d="M16 2v4" />
+            <path d="M8 2v4" />
           </svg>
         ),
       },

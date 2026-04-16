@@ -48,7 +48,10 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   const [cardCommissionWorker, setCardCommissionWorker] = useState<typeof commissionWorkersForCustomer[0] | null>(null);
   const [cardTotalCommission, setCardTotalCommission] = useState('0');
 
-  const showDcFields = isDcApplicableCustomer(selectedCustomer);
+  const hasExistingDcValues = Boolean(
+    primary && (primary.dcNo || primary.vehicleNo || primary.dcDate || primary.dcApproval)
+  );
+  const showDcFields = isDcApplicableCustomer(selectedCustomer) || hasExistingDcValues;
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
   const commissionWorkersForCustomer = useMemo(
     () =>

@@ -128,7 +128,7 @@ html[data-theme='dark'] .top-header {
   }
 
   .page-title {
-    font-size: 24px;
+    font-size: var(--text-title2);
   }
 
   .page-description {

@@ -1,5 +1,7 @@
 import type {
   ActivityLog,
+  CommissionPayment,
+  CommissionWorker,
   Customer,
   Expense,
   Job,
@@ -245,6 +247,44 @@ export const apiClient = {
     }),
   deleteAllExpenses: () =>
     request<{ deleted: number }>('/expenses?all=true', {
+      method: 'DELETE',
+      includeAdminKey: true,
+    }),
+
+  getCommissionWorkers: () => request<CommissionWorker[]>('/commission-workers'),
+  createCommissionWorker: (payload: Omit<CommissionWorker, 'id' | 'createdAt'>) =>
+    request<CommissionWorker>('/commission-workers', {
+      method: 'POST',
+      includeAdminKey: true,
+      body: JSON.stringify(payload),
+    }),
+  updateCommissionWorker: (id: number, payload: Partial<CommissionWorker>) =>
+    request<CommissionWorker>(`/commission-workers/${id}`, {
+      method: 'PUT',
+      includeAdminKey: true,
+      body: JSON.stringify(payload),
+    }),
+  deleteCommissionWorker: (id: number) =>
+    request<void>(`/commission-workers/${id}`, {
+      method: 'DELETE',
+      includeAdminKey: true,
+    }),
+
+  getCommissionPayments: () => request<CommissionPayment[]>('/commission-payments'),
+  createCommissionPayment: (payload: Omit<CommissionPayment, 'id' | 'createdAt'>) =>
+    request<CommissionPayment>('/commission-payments', {
+      method: 'POST',
+      includeAdminKey: true,
+      body: JSON.stringify(payload),
+    }),
+  updateCommissionPayment: (id: number, payload: Partial<CommissionPayment>) =>
+    request<CommissionPayment>(`/commission-payments/${id}`, {
+      method: 'PUT',
+      includeAdminKey: true,
+      body: JSON.stringify(payload),
+    }),
+  deleteCommissionPayment: (id: number) =>
+    request<void>(`/commission-payments/${id}`, {
       method: 'DELETE',
       includeAdminKey: true,
     }),
