@@ -5,7 +5,7 @@
 
 const ENV = {
   // API Configuration
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || '',
   apiTimeout: import.meta.env.VITE_API_TIMEOUT ? parseInt(import.meta.env.VITE_API_TIMEOUT) : 30000,
   enableBackendSync: import.meta.env.VITE_ENABLE_BACKEND_SYNC !== 'false',
   adminApiKey: import.meta.env.VITE_ADMIN_API_KEY || '',

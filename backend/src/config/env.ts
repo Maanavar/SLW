@@ -22,7 +22,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parsePort(process.env.PORT),
   databaseUrl: process.env.DATABASE_URL ?? '',
-  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((o) => o.trim()),
   adminApiKey: process.env.ADMIN_API_KEY ?? '',
   authSessionSecret: process.env.AUTH_SESSION_SECRET ?? process.env.ADMIN_API_KEY ?? '',
   authSessionHours: parseSessionHours(process.env.AUTH_SESSION_HOURS),
