@@ -6,12 +6,39 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
+import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { calculateWorkerCommissionSummary } from '@/lib/financeUtils';
+import type { CommissionWorker, Job } from '@/types';
 import './CommissionScreen.css';
 
 type TabType = 'workers' | 'history';
+type WorkerJobCardDetail = {
+  jobCardId: string;
+  date: string;
+  commission: number;
+};
+
+function resolveCommissionWorkerId(job: Job, workers: CommissionWorker[]): number | null {
+  if (typeof job.commissionWorkerId === 'number') {
+    return job.commissionWorkerId;
+  }
+
+  const workerName = job.commissionWorkerName?.trim();
+  if (!workerName) {
+    return null;
+  }
+
+  const normalizedWorkerName = workerName.toLowerCase();
+  const matchedWorker = workers.find(
+    (worker) =>
+      worker.customerId === job.customerId &&
+      worker.name.toLowerCase() === normalizedWorkerName
+  );
+
+  return matchedWorker?.id ?? null;
+}
 
 export function CommissionScreen() {
   const { jobs, commissionWorkers, commissionPayments, addCommissionPayment, deleteCommissionPayment, getCustomer } =
@@ -27,10 +54,65 @@ export function CommissionScreen() {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [selectedWorkerForDetails, setSelectedWorkerForDetails] = useState<number | null>(null);
 
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
     [jobs, commissionPayments, commissionWorkers]
+  );
+  const workerJobCardDetails = useMemo(() => {
+    const groupedByWorker = new Map<number, Map<string, WorkerJobCardDetail>>();
+
+    jobs.forEach((job) => {
+      const commission = Number(job.commissionAmount) || 0;
+      if (commission <= 0) {
+        return;
+      }
+
+      const workerId = resolveCommissionWorkerId(job, commissionWorkers);
+      if (workerId === null) {
+        return;
+      }
+
+      if (!groupedByWorker.has(workerId)) {
+        groupedByWorker.set(workerId, new Map<string, WorkerJobCardDetail>());
+      }
+
+      const perWorkerMap = groupedByWorker.get(workerId)!;
+      const cardId = job.jobCardId?.trim() || `LEGACY-${job.id}`;
+      const detail = perWorkerMap.get(cardId);
+
+      if (detail) {
+        detail.commission += commission;
+      } else {
+        perWorkerMap.set(cardId, {
+          jobCardId: cardId,
+          date: job.date,
+          commission,
+        });
+      }
+    });
+
+    const normalized = new Map<number, WorkerJobCardDetail[]>();
+    groupedByWorker.forEach((cardMap, workerId) => {
+      const rows = Array.from(cardMap.values()).sort((a, b) =>
+        b.date.localeCompare(a.date) || b.commission - a.commission
+      );
+      normalized.set(workerId, rows);
+    });
+
+    return normalized;
+  }, [jobs, commissionWorkers]);
+  const selectedWorkerSummary = useMemo(
+    () => workerSummary.find((worker) => worker.workerId === selectedWorkerForDetails) ?? null,
+    [workerSummary, selectedWorkerForDetails]
+  );
+  const selectedWorkerJobCards = useMemo(
+    () =>
+      selectedWorkerForDetails === null
+        ? []
+        : (workerJobCardDetails.get(selectedWorkerForDetails) ?? []),
+    [workerJobCardDetails, selectedWorkerForDetails]
   );
 
   const handleRecordPayment = async () => {
@@ -185,7 +267,7 @@ export function CommissionScreen() {
                   return w ? (
                     <p className="form-hint">
                       Outstanding: <strong>{formatCurrency(w.outstanding)}</strong>
-                      {w.outstanding <= 0 && <span className="hint-settled"> — fully settled</span>}
+                      {w.outstanding <= 0 && <span className="hint-settled"> - fully settled</span>}
                     </p>
                   ) : null;
                 })()}
@@ -242,7 +324,16 @@ export function CommissionScreen() {
                 <tbody>
                   {workerSummary.map((worker) => (
                     <tr key={worker.workerId}>
-                      <td>{worker.workerName}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="worker-name-btn"
+                          onClick={() => setSelectedWorkerForDetails(worker.workerId)}
+                          title={`View commission details for ${worker.workerName}`}
+                        >
+                          {worker.workerName}
+                        </button>
+                      </td>
                       <td className="text-right">{formatCurrency(worker.totalDue)}</td>
                       <td className="text-right">{formatCurrency(worker.totalPaid)}</td>
                       <td className="text-right pending">
@@ -339,6 +430,63 @@ export function CommissionScreen() {
           )}
         </div>
       )}
+
+      <Modal
+        isOpen={selectedWorkerForDetails !== null}
+        onClose={() => setSelectedWorkerForDetails(null)}
+        title={
+          selectedWorkerSummary
+            ? `${selectedWorkerSummary.workerName} - Job Card Commission`
+            : 'Worker Commission Details'
+        }
+        size="lg"
+      >
+        {selectedWorkerSummary ? (
+          <div className="worker-detail-content">
+            <div className="worker-detail-summary">
+              <div className="worker-detail-summary-item">
+                <span className="worker-detail-summary-label">Total Due</span>
+                <strong>{formatCurrency(selectedWorkerSummary.totalDue)}</strong>
+              </div>
+              <div className="worker-detail-summary-item">
+                <span className="worker-detail-summary-label">Total Paid</span>
+                <strong className="paid">{formatCurrency(selectedWorkerSummary.totalPaid)}</strong>
+              </div>
+              <div className="worker-detail-summary-item">
+                <span className="worker-detail-summary-label">Outstanding</span>
+                <strong className="pending">{formatCurrency(selectedWorkerSummary.outstanding)}</strong>
+              </div>
+            </div>
+
+            {selectedWorkerJobCards.length === 0 ? (
+              <div className="worker-detail-empty">
+                <p>No job card commission entries found for this worker.</p>
+              </div>
+            ) : (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>JobCard ID</th>
+                      <th>Date</th>
+                      <th className="text-right">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWorkerJobCards.map((jobCard) => (
+                      <tr key={jobCard.jobCardId}>
+                        <td>{jobCard.jobCardId}</td>
+                        <td>{new Date(jobCard.date).toLocaleDateString('en-IN')}</td>
+                        <td className="text-right">{formatCurrency(jobCard.commission)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

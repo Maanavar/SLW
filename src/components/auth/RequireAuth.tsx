@@ -24,13 +24,6 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (apiClient.hasOfflineSession()) {
-        if (active) {
-          setAuthState('authenticated');
-        }
-        return;
-      }
-
       try {
         await apiClient.getAuthSession();
         if (active) {

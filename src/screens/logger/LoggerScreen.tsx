@@ -244,6 +244,10 @@ export function LoggerScreen() {
     if (isLoadingRef.current) {
       return;
     }
+    if (apiClient.hasOfflineSession()) {
+      setLoading(false);
+      return;
+    }
     isLoadingRef.current = true;
     setLoading(true);
     try {
@@ -626,7 +630,7 @@ export function LoggerScreen() {
           sortBy="createdAt"
           sortOrder="desc"
           loading={loading}
-          emptyMessage="No logs found"
+          emptyMessage={apiClient.hasOfflineSession() ? 'Logs unavailable in offline mode' : 'No logs found'}
           onRowClick={(row) => setSelectedLog(row)}
         />
 

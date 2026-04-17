@@ -12,14 +12,14 @@
     z-index: 120;
     border: 1px solid var(--border-color);
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--surface-glass);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-md);
   }
 
   html[data-theme='dark'] .mobile-nav {
-    background: rgba(16, 23, 35, 0.9);
+    box-shadow: var(--shadow-lg);
   }
 
   .mobile-nav-list {
