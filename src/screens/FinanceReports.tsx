@@ -29,7 +29,7 @@ import './FinanceReports.css';
 
 type ReportTab = 'revenue' | 'payments' | 'commission' | 'customers' | 'methods' | 'ageing' | 'cashflow';
 
-type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all';
+type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all' | 'range';
 
 interface DateRange {
   from: string;
@@ -81,6 +81,7 @@ function getDateRange(period: PeriodType): DateRange | undefined {
       };
 
     case 'all':
+    case 'range':
       return undefined;
 
     default:
@@ -92,8 +93,17 @@ export function FinanceReports() {
   const { jobs, payments, customers, commissionPayments, commissionWorkers } = useDataStore();
   const [activeTab, setActiveTab] = useState<ReportTab>('revenue');
   const [period, setPeriod] = useState<PeriodType>('month');
+  const today = new Date().toISOString().split('T')[0];
+  const [rangeFrom, setRangeFrom] = useState(today);
+  const [rangeTo, setRangeTo] = useState(today);
 
-  const dateRange = useMemo(() => getDateRange(period), [period]);
+  const dateRange = useMemo(() => {
+    if (period === 'range') {
+      if (rangeFrom && rangeTo) return { from: rangeFrom, to: rangeTo };
+      return undefined;
+    }
+    return getDateRange(period);
+  }, [period, rangeFrom, rangeTo]);
 
   // Calculate all metrics
   const revenueMetrics = useMemo(
@@ -132,7 +142,7 @@ export function FinanceReports() {
   );
 
   const dailyCashFlow = useMemo(
-    () => calculateDailyCashFlow(jobs, payments, period === 'month' ? 30 : period === 'year' ? 365 : 7),
+    () => calculateDailyCashFlow(jobs, payments, period === 'month' ? 30 : period === 'year' ? 365 : period === 'range' ? 90 : 7),
     [jobs, payments, period]
   );
 
@@ -147,18 +157,42 @@ export function FinanceReports() {
       <div className="period-filter">
         <label>Period:</label>
         <div className="period-buttons">
-          {(['today', 'week', 'month', 'quarter', 'year', 'all'] as PeriodType[]).map(
+          {(['today', 'week', 'month', 'quarter', 'year', 'all', 'range'] as PeriodType[]).map(
             (p) => (
               <button
                 key={p}
                 className={`period-btn ${period === p ? 'active' : ''}`}
                 onClick={() => setPeriod(p)}
               >
-                {p.charAt(0).toUpperCase() + p.slice(1)}
+                {p === 'range' ? 'Date Range' : p.charAt(0).toUpperCase() + p.slice(1)}
               </button>
             )
           )}
         </div>
+        {period === 'range' && (
+          <div className="period-range-inputs">
+            <input
+              type="date"
+              className="period-range-date"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              max={rangeTo || today}
+              title="From date"
+              placeholder="From"
+            />
+            <span className="period-range-sep">–</span>
+            <input
+              type="date"
+              className="period-range-date"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              min={rangeFrom}
+              max={today}
+              title="To date"
+              placeholder="To"
+            />
+          </div>
+        )}
       </div>
 
       {/* Report Tabs */}
@@ -167,43 +201,43 @@ export function FinanceReports() {
           className={`tab-btn ${activeTab === 'revenue' ? 'active' : ''}`}
           onClick={() => setActiveTab('revenue')}
         >
-          📊 Revenue & Profit
+          Revenue & Profit
         </button>
         <button
           className={`tab-btn ${activeTab === 'payments' ? 'active' : ''}`}
           onClick={() => setActiveTab('payments')}
         >
-          💰 Payments
+          Payments
         </button>
         <button
           className={`tab-btn ${activeTab === 'commission' ? 'active' : ''}`}
           onClick={() => setActiveTab('commission')}
         >
-          💳 Commission
+          Commission
         </button>
         <button
           className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
           onClick={() => setActiveTab('customers')}
         >
-          🤝 Customers
+          Customers
         </button>
         <button
           className={`tab-btn ${activeTab === 'methods' ? 'active' : ''}`}
           onClick={() => setActiveTab('methods')}
         >
-          🏦 Methods
+          Methods
         </button>
         <button
           className={`tab-btn ${activeTab === 'ageing' ? 'active' : ''}`}
           onClick={() => setActiveTab('ageing')}
         >
-          ⏳ Ageing
+          Ageing
         </button>
         <button
           className={`tab-btn ${activeTab === 'cashflow' ? 'active' : ''}`}
           onClick={() => setActiveTab('cashflow')}
         >
-          📈 Cashflow
+          Cashflow
         </button>
       </div>
 
@@ -384,7 +418,7 @@ function CommissionReport({
                       {formatCurrency(worker.outstanding)}
                     </td>
                     <td className="text-center">
-                      {worker.outstanding > 0 ? '⏳ Pending' : '✓ Settled'}
+                      {worker.outstanding > 0 ? 'Pending' : 'Settled'}
                     </td>
                   </tr>
                 ))}

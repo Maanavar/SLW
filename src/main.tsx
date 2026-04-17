@@ -2,24 +2,33 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createHashRouter } from 'react-router-dom';
 import App from './App';
+import { RequireAuth } from './components/auth/RequireAuth';
 import { DashboardScreen } from './screens/dashboard/DashboardScreen';
 import { CustomersScreen } from './screens/customers/CustomersScreen';
 import { WorkTypesScreen } from './screens/worktypes/WorkTypesScreen';
 import { JobsScreen } from './screens/jobs/JobsScreen';
 import { PaymentsScreen } from './screens/payments/PaymentsScreen';
 import { HistoryScreen } from './screens/history/HistoryScreen';
-import { ReportsScreen } from './screens/reports/ReportsScreen';
 import { RecordsScreen } from './screens/records/RecordsScreen';
 import { FinanceReports } from './screens/FinanceReports';
 import { ExpenseManager } from './screens/ExpenseManager';
 import { CommissionScreen } from './screens/commission/CommissionScreen';
 import { LoggerScreen } from './screens/logger/LoggerScreen';
+import { LoginScreen } from './screens/auth/LoginScreen';
 import './styles/index.css';
 
 const router = createHashRouter([
   {
+    path: '/login',
+    element: <LoginScreen />,
+  },
+  {
     path: '/',
-    element: <App />,
+    element: (
+      <RequireAuth>
+        <App />
+      </RequireAuth>
+    ),
     children: [
       {
         path: '/',
@@ -46,10 +55,6 @@ const router = createHashRouter([
         element: <HistoryScreen />,
       },
       {
-        path: '/reports',
-        element: <ReportsScreen />,
-      },
-      {
         path: '/records',
         element: <RecordsScreen />,
       },
@@ -72,6 +77,12 @@ const router = createHashRouter([
     ],
   },
 ]);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js');
+  });
+}
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(

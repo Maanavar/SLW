@@ -90,13 +90,27 @@ export function WorkTypesScreen() {
       </div>
 
       <div className="screen-content">
-        <DataTable<WorkType>
-          columns={columns}
-          data={filtered}
-          keyFn={(item) => item.id}
-          onRowClick={handleRowClick}
-          emptyMessage="No work types found"
-        />
+        {workTypes.length === 0 ? (
+          <div className="empty-screen-state">
+            <p className="empty-screen-title">No work types yet</p>
+            <p className="empty-screen-desc">Add work types to use them when creating job lines.</p>
+            <button
+              className="btn btn-primary"
+              onClick={() => openModal('worktype', 0)}
+              type="button"
+            >
+              Add Work Type
+            </button>
+          </div>
+        ) : (
+          <DataTable<WorkType>
+            columns={columns}
+            data={filtered}
+            keyFn={(item) => item.id}
+            onRowClick={handleRowClick}
+            emptyMessage="No work types match your search"
+          />
+        )}
       </div>
     </div>
   );

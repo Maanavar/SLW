@@ -1,24 +1,30 @@
 :root {
-  --bg-primary: #f3f5f8;
-  --bg-secondary: #fdfdfd;
-  --bg-tertiary: #eef2f7;
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #fbfbfd;
+  --bg-tertiary: #f0f1f5;
   --bg-card: #ffffff;
   --bg-input: #ffffff;
+  --bg-hover: #f2f4f8;
+  --bg-elevated: #ffffff;
+  --surface-1: #ffffff;
+  --surface-glass: rgba(255, 255, 255, 0.74);
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-primary: #1d1d1f;
+  --text-secondary: #424245;
+  --text-muted: #6e6e73;
 
-  --accent-primary: #0b66e4;
-  --accent-secondary: #22a3f0;
-  --accent-green: #1f845a;
-  --accent-red: #c9372c;
-  --accent-blue: #2d5bd1;
-  --accent-yellow: #ae6d04;
-  --accent-soft: rgba(11, 102, 228, 0.1);
+  --accent-primary: #0071e3;
+  --accent-primary-strong: #0058b0;
+  --accent-secondary: #4b9dff;
+  --accent-green: #248a3d;
+  --accent-red: #d7423a;
+  --accent-blue: #007aff;
+  --accent-yellow: #b07606;
+  --accent-soft: rgba(0, 113, 227, 0.1);
+  --accent-ring: rgba(0, 113, 227, 0.24);
 
-  --border-color: #d7dee8;
-  --border-light: rgba(15, 23, 42, 0.08);
+  --border-color: #d2d2d7;
+  --border-light: rgba(29, 29, 31, 0.1);
 
   /* Apple spacing scale (4px base unit) */
   --space-1: 4px;
@@ -76,10 +82,10 @@
   --radius-xl: 24px;
   --radius-full: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 12px 28px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 24px 48px rgba(15, 23, 42, 0.14);
-  --shadow-xl: 0 32px 60px rgba(15, 23, 42, 0.18);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 12px 28px rgba(15, 23, 42, 0.09);
+  --shadow-lg: 0 22px 44px rgba(15, 23, 42, 0.14);
+  --shadow-xl: 0 30px 60px rgba(15, 23, 42, 0.2);
 
   --transition-fast: 180ms cubic-bezier(0.2, 0, 0, 1);
   --transition-normal: 280ms cubic-bezier(0.2, 0, 0, 1);
@@ -95,18 +101,24 @@ html[data-theme='dark'] {
   --bg-tertiary: #172131;
   --bg-card: #111b2b;
   --bg-input: #162132;
+  --bg-hover: #1c2738;
+  --bg-elevated: #182338;
+  --surface-1: #182338;
+  --surface-glass: rgba(16, 23, 35, 0.86);
 
   --text-primary: #e6edf7;
   --text-secondary: #b2c1d6;
   --text-muted: #8ea0b9;
 
   --accent-primary: #6ca8ff;
+  --accent-primary-strong: #99c2ff;
   --accent-secondary: #5fc5ff;
   --accent-green: #4ac288;
   --accent-red: #ff8f86;
   --accent-blue: #83a8ff;
   --accent-yellow: #ffc36c;
   --accent-soft: rgba(108, 168, 255, 0.18);
+  --accent-ring: rgba(108, 168, 255, 0.4);
 
   --border-color: #26364d;
   --border-light: rgba(230, 237, 247, 0.14);
@@ -140,6 +152,13 @@ body {
   line-height: 1.45;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(1100px 520px at 100% -6%, rgba(0, 113, 227, 0.06), transparent 62%),
+    radial-gradient(760px 420px at -12% -10%, rgba(75, 157, 255, 0.05), transparent 66%),
+    var(--bg-primary);
+}
+
+html[data-theme='dark'] body {
   background:
     radial-gradient(1000px 500px at 100% 0, rgba(11, 102, 228, 0.08), transparent 60%),
     radial-gradient(700px 380px at -8% 0, rgba(34, 163, 240, 0.08), transparent 60%),

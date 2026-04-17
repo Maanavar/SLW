@@ -125,51 +125,34 @@
   cursor: not-allowed;
 }
 
-.records-date-label {
-  position: relative;
+.records-day-nav-shell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 13px;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--bg-card);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.records-date-label:hover {
-  border-color: rgba(11, 102, 228, 0.4);
-  background: var(--bg-tertiary);
 }
 
 .records-date-input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: transparent;
-  font-size: 0;
+  width: 150px;
+  min-width: 150px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-input);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.records-cal-icon {
-  flex-shrink: 0;
-  opacity: 0.5;
-  pointer-events: none;
-  transition: opacity var(--transition-fast);
-}
-
-.records-date-label:hover .records-cal-icon {
-  opacity: 0.8;
+.records-date-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(11, 102, 228, 0.1);
 }
 
 .records-today-btn {

@@ -70,6 +70,10 @@ export function JobCardDetailsModal({
               <strong>{primary.date}</strong>
             </div>
             <div>
+              <span className="job-card-detail-label">Work Mode</span>
+              <strong>{primary.workMode || 'Workshop'}</strong>
+            </div>
+            <div>
               <span className="job-card-detail-label">Payment Status</span>
               <StatusBadge status={payment.status} />
             </div>
@@ -102,7 +106,7 @@ export function JobCardDetailsModal({
                 <strong>{primary.dcDate || '-'}</strong>
               </div>
               <div>
-                <span className="job-card-detail-label">Approved Without DC</span>
+                <span className="job-card-detail-label">DC-Exempt</span>
                 <strong>{primary.dcApproval ? 'Yes' : 'No'}</strong>
               </div>
             </div>

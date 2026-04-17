@@ -22,6 +22,36 @@ interface PaymentDisplay extends Payment {
   jobCardKey?: string;
 }
 
+function shiftDate(value: string, days: number): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return getLocalDateString(new Date());
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) {
+    return getLocalDateString(new Date());
+  }
+  date.setDate(date.getDate() + days);
+  return getLocalDateString(date);
+}
+
+function formatDayLabel(dateStr: string): string {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return '';
+  }
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function PaymentForm() {
   const { payments, jobs, getCustomer, deletePayment } = useDataStore();
   const toast = useToast();
@@ -29,11 +59,13 @@ export function PaymentForm() {
 
   // Payment Report state
   const [reportPeriod, setReportPeriod] = useState<PeriodType>('today');
+  const [selectedDay, setSelectedDay] = useState(today);
   const [reportRangeFrom, setReportRangeFrom] = useState('');
   const [reportRangeTo, setReportRangeTo] = useState(today);
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PaymentDisplay | null>(null);
+  const [filterCustomer, setFilterCustomer] = useState('');
 
   // Payment Report calculations
   const reportRange = useMemo(() => {
@@ -43,9 +75,12 @@ export function PaymentForm() {
     if (reportPeriod === 'range') {
       return { from: reportRangeFrom || undefined, to: reportRangeTo || undefined, label: 'Custom Range' };
     }
+    if (reportPeriod === 'today') {
+      return { from: selectedDay, to: selectedDay, label: formatDayLabel(selectedDay) };
+    }
     const mapped = getReportRange(reportPeriod);
     return { from: mapped.from, to: mapped.to, label: reportPeriod };
-  }, [reportPeriod, reportRangeFrom, reportRangeTo]);
+  }, [reportPeriod, reportRangeFrom, reportRangeTo, selectedDay]);
 
   const jobsInReportRange = useMemo(() => getJobsInRange(jobs, reportRange.from, reportRange.to), [jobs, reportRange.from, reportRange.to]);
 
@@ -149,6 +184,26 @@ export function PaymentForm() {
     return fallbackJobPayments;
   }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
 
+  const paymentCustomerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { name: string }[] = [];
+    reportPaymentsWithNames.forEach((p) => {
+      if (!seen.has(p.customerName)) {
+        seen.add(p.customerName);
+        opts.push({ name: p.customerName });
+      }
+    });
+    return opts.sort((a, b) => a.name.localeCompare(b.name));
+  }, [reportPaymentsWithNames]);
+
+  const filteredPayments = useMemo(
+    () =>
+      filterCustomer
+        ? reportPaymentsWithNames.filter((p) => p.customerName === filterCustomer)
+        : reportPaymentsWithNames,
+    [reportPaymentsWithNames, filterCustomer]
+  );
+
   const reportSummary = useMemo(() => {
     const totalReceived = reportPaymentsWithNames.reduce((sum, p) => sum + (p.amount || 0), 0);
     const byCash = reportPaymentsWithNames
@@ -173,6 +228,7 @@ export function PaymentForm() {
 
     return { totalReceived, byCash, byBank, byUPI, byCheque, totalWorkAmount, balanceToReceive };
   }, [reportPaymentsWithNames, groupedJobCards]);
+  const selectedDayLabel = formatDayLabel(selectedDay);
 
   return (
     <div className="payment-form-container">
@@ -207,6 +263,54 @@ export function PaymentForm() {
               <option value="all">All Time</option>
             </select>
           </div>
+
+          {reportPeriod === 'today' ? (
+            <div className="payment-day-selector">
+              <label className="form-label" htmlFor="payment-day-input">Date</label>
+              <div className="payment-day-nav">
+                <div className="payment-day-nav-shell">
+                  <button
+                    type="button"
+                    className="payment-day-nav-btn"
+                    onClick={() => setSelectedDay(shiftDate(selectedDay, -1))}
+                    aria-label="Previous day"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M8.75 3L4.75 7L8.75 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <input
+                    id="payment-day-input"
+                    type="date"
+                    className="form-input payment-day-input"
+                    value={selectedDay}
+                    onChange={(e) => setSelectedDay(e.target.value)}
+                    max={today}
+                    aria-label={selectedDayLabel || 'Selected date'}
+                  />
+                  <button
+                    type="button"
+                    className="payment-day-nav-btn"
+                    onClick={() => setSelectedDay(shiftDate(selectedDay, 1))}
+                    disabled={selectedDay >= today}
+                    aria-label="Next day"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M5.25 3L9.25 7L5.25 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="payment-day-today-btn"
+                  onClick={() => setSelectedDay(today)}
+                  disabled={selectedDay === today}
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {reportPeriod === 'range' ? (
             <>
@@ -267,6 +371,30 @@ export function PaymentForm() {
           </div>
         </div>
 
+        <div className="payment-filters">
+          <select
+            className="form-input payment-filter-select"
+            value={filterCustomer}
+            onChange={(e) => setFilterCustomer(e.target.value)}
+            title="Filter by customer"
+          >
+            <option value="">All Customers</option>
+            {paymentCustomerOptions.map((c) => (
+              <option key={c.name} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+          {filterCustomer && (
+            <button
+              type="button"
+              className="payment-filter-clear"
+              onClick={() => setFilterCustomer('')}
+              title="Clear filter"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+
         <DataTable<PaymentDisplay>
           columns={[
             { key: 'date', label: 'Date', sortable: true },
@@ -315,20 +443,23 @@ export function PaymentForm() {
                 const isJobPayment = row.source !== 'Payment Voucher';
                 return (
                   <div className="payment-table-actions">
-                    {!isJobPayment && (
-                      <button
-                        type="button"
-                        className="icon-btn icon-edit"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedPayment(row);
-                        }}
-                        title="Edit payment"
-                        aria-label="Edit"
-                      >
-                        ✎
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="icon-btn icon-edit"
+                      onClick={(e) => {
+                        if (isJobPayment) return;
+                        e.stopPropagation();
+                        setSelectedPayment(row);
+                      }}
+                      title={isJobPayment ? 'Auto-recorded job payments cannot be edited — edit from the job card' : 'Edit payment'}
+                      aria-label="Edit"
+                      disabled={isJobPayment}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    </button>
                     <button
                       type="button"
                       className="icon-btn icon-delete"
@@ -336,17 +467,22 @@ export function PaymentForm() {
                         e.stopPropagation();
                         handleDeletePayment(row);
                       }}
-                      title="Delete payment"
+                      title={isJobPayment ? 'Delete auto-recorded job payment' : 'Delete payment'}
                       aria-label="Delete"
                     >
-                      🗑
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
                     </button>
                   </div>
                 );
               },
             },
           ]}
-          data={reportPaymentsWithNames}
+          data={filteredPayments}
           keyFn={(item) => item.id}
           sortBy="date"
           sortOrder="desc"

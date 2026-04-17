@@ -227,7 +227,7 @@ export function CustomerBalancesTable() {
           keyFn={(item) => item.id}
           sortBy="balance"
           sortOrder="desc"
-          emptyMessage="No customers found"
+          emptyMessage={customers.length === 0 ? 'No customers yet — add customers to track balances' : 'All customers are fully settled'}
         />
       </div>
     </div>

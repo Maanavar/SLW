@@ -1,10 +1,11 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
 import { groupJobsByCard } from '@/lib/reportUtils';
+import { apiClient } from '@/lib/apiClient';
 import './TopHeader.css';
 
 interface PageInfo {
@@ -13,19 +14,14 @@ interface PageInfo {
 }
 
 const pageMap: Record<string, PageInfo> = {
-  '/': { title: 'Jobs', description: 'Create and manage job entries' },
-  '/dashboard': { title: 'Dashboard', description: 'Business overview and key metrics' },
-  '/customers': { title: 'Customers', description: 'Customer accounts and settings' },
-  '/work-types': { title: 'Work Types', description: 'Rate cards and work catalog' },
-  '/jobs': { title: 'Jobs', description: 'Create and manage job entries' },
-  '/payments': { title: 'Payments', description: 'Record incoming payments' },
-  '/history': { title: 'History', description: 'Track completed and pending work' },
-  '/reports': { title: 'Reports', description: 'Operational and financial insights' },
-  '/logger': { title: 'Logger', description: 'Audit trail and controlled data operations' },
-  '/payment-report': {
-    title: 'Payment Report',
-    description: 'Mode-wise and period-wise payment view',
-  },
+  '/': { title: '', description: 'Create and manage job entries' },
+  '/dashboard': { title: '', description: '' },
+  '/customers': { title: '', description: 'Customer accounts and settings' },
+  '/work-types': { title: ' ', description: 'Rate cards and work catalog' },
+  '/jobs': { title: '', description: 'Create and manage job entries' },
+  '/payments': { title: '', description: 'Record incoming payments' },
+  '/history': { title: '', description: 'Track completed and pending work' },
+  '/logger': { title: '', description: 'Audit trail and controlled data operations' },
 };
 
 const iconProps = {
@@ -74,7 +70,18 @@ function MoonIcon() {
   );
 }
 
+function LogoutIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
+      <path d="M10 16l4-4-4-4" />
+      <path d="M14 12H3" />
+    </svg>
+  );
+}
+
 export function TopHeader() {
+  const navigate = useNavigate();
   const location = useLocation();
   const { jobs, payments } = useDataStore();
   const { theme, toggleTheme, sidebarCollapsed, toggleSidebar } = useUIStore();
@@ -107,6 +114,14 @@ export function TopHeader() {
   const todayPaymentsCount =
     todayPayments.length > 0 ? todayPayments.length : todayPaymentsCountFromJobs;
 
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+    } finally {
+      navigate('/login', { replace: true });
+    }
+  };
+
   return (
     <header className="top-header">
       <div className="header-top">
@@ -136,34 +151,18 @@ export function TopHeader() {
           >
             {theme === 'light' ? <MoonIcon /> : <SunIcon />}
           </button>
+          <button
+            className="header-icon-button"
+            onClick={() => void handleLogout()}
+            title="Sign out"
+            type="button"
+          >
+            <LogoutIcon />
+          </button>
         </div>
       </div>
 
-      <div className="header-pills">
-        <div className="header-pill">
-          <span className="pill-label">Jobs Today</span>
-          <span className="pill-value">{todayJobCards.length}</span>
-          <span className="pill-subvalue">{formatCurrency(todayJobsNet)}</span>
-        </div>
-        <div className="header-pill">
-          <span className="pill-label">Payments Today</span>
-          <span className="pill-value">{todayPaymentsCount}</span>
-          <span className="pill-subvalue">{formatCurrency(todayPaymentsAmount)}</span>
-        </div>
-        <div className="header-pill">
-          <span className="pill-label">Date</span>
-          <span className="pill-value">
-            {new Date().toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </span>
-          <span className="pill-subvalue">
-            {new Date().toLocaleDateString('en-IN', { weekday: 'long' })}
-          </span>
-        </div>
-      </div>
+     
     </header>
   );
 }

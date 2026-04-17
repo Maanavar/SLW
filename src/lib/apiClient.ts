@@ -1,5 +1,6 @@
 import type {
   ActivityLog,
+  AuthUser,
   CommissionPayment,
   CommissionWorker,
   Customer,
@@ -19,6 +20,16 @@ interface LogsResponse {
   limit: number;
   offset: number;
   items: ActivityLog[];
+}
+
+interface LoginResponse {
+  token: string;
+  expiresAt: string;
+  user: AuthUser;
+}
+
+interface SessionResponse {
+  user: AuthUser;
 }
 
 export interface LegacyImportPayload {
@@ -41,7 +52,16 @@ export interface PurgeScope {
 }
 
 const ADMIN_KEY_STORAGE = 'slw_admin_api_key';
+const AUTH_TOKEN_STORAGE = 'slw_auth_token';
+const OFFLINE_AUTH_PREFIX = 'slw-offline::';
 let runtimeAdminApiKey = '';
+let runtimeAuthToken = '';
+
+function emitAuthChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('slw-auth-changed'));
+  }
+}
 
 function getApiBaseUrl(): string {
   return `${ENV.apiBaseUrl.replace(/\/+$/, '')}/api`;
@@ -76,6 +96,51 @@ function clearAdminApiKey() {
   }
 }
 
+function getAuthToken(): string {
+  if (runtimeAuthToken) {
+    return runtimeAuthToken;
+  }
+
+  const fromStorage =
+    typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_TOKEN_STORAGE) : '';
+  if (fromStorage) {
+    runtimeAuthToken = fromStorage;
+    return runtimeAuthToken;
+  }
+
+  return '';
+}
+
+function isOfflineAuthToken(token: string): boolean {
+  return token.startsWith(OFFLINE_AUTH_PREFIX);
+}
+
+function createOfflineSession(displayName?: string) {
+  const name = (displayName || 'Offline Admin').trim() || 'Offline Admin';
+  const offlineToken = `${OFFLINE_AUTH_PREFIX}${encodeURIComponent(name)}`;
+  setAuthToken(offlineToken);
+}
+
+function setAuthToken(token: string) {
+  runtimeAuthToken = token.trim();
+  if (typeof window !== 'undefined') {
+    if (runtimeAuthToken) {
+      window.localStorage.setItem(AUTH_TOKEN_STORAGE, runtimeAuthToken);
+    } else {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE);
+    }
+  }
+  emitAuthChange();
+}
+
+function clearAuthToken() {
+  runtimeAuthToken = '';
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE);
+  }
+  emitAuthChange();
+}
+
 async function request<T = void>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), ENV.apiTimeout);
@@ -89,6 +154,10 @@ async function request<T = void>(path: string, options: RequestOptions = {}): Pr
     }
     if (isMutation) {
       headers.set('x-actor-name', 'SLW Frontend');
+    }
+    const authToken = getAuthToken();
+    if (authToken && !isOfflineAuthToken(authToken)) {
+      headers.set('authorization', `Bearer ${authToken}`);
     }
 
     if (options.includeAdminKey) {
@@ -112,6 +181,9 @@ async function request<T = void>(path: string, options: RequestOptions = {}): Pr
     const body = text ? JSON.parse(text) : null;
 
     if (!response.ok) {
+      if (response.status === 401 && authToken && !isOfflineAuthToken(authToken)) {
+        clearAuthToken();
+      }
       const message =
         body && typeof body.error === 'string'
           ? body.error
@@ -131,9 +203,30 @@ async function request<T = void>(path: string, options: RequestOptions = {}): Pr
 }
 
 export const apiClient = {
+  hasAuthToken: () => Boolean(getAuthToken()),
+  hasOfflineSession: () => isOfflineAuthToken(getAuthToken()),
+  createOfflineSession,
+  setAuthToken,
+  clearAuthToken,
   hasAdminApiKey: () => Boolean(getAdminApiKey()),
   setAdminApiKey,
   clearAdminApiKey,
+  login: async (payload: { password: string; name?: string }) => {
+    const response = await request<LoginResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    setAuthToken(response.token);
+    return response;
+  },
+  getAuthSession: () => request<SessionResponse>('/auth/session'),
+  logout: async () => {
+    try {
+      await request<void>('/auth/logout', { method: 'POST' });
+    } finally {
+      clearAuthToken();
+    }
+  },
 
   getCustomers: () => request<Customer[]>('/customers'),
   createCustomer: (payload: Omit<Customer, 'id'>) =>

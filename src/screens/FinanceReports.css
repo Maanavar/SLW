@@ -28,11 +28,40 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  flex-wrap: wrap;
   margin-bottom: var(--space-lg);
   padding: var(--space-md);
   background: var(--bg-card);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
+}
+
+.period-range-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-range-sep {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.period-range-date {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.period-range-date:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(11, 102, 228, 0.1);
 }
 
 .period-filter label {

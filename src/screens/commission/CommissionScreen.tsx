@@ -6,12 +6,39 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
+import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { calculateWorkerCommissionSummary } from '@/lib/financeUtils';
+import type { CommissionWorker, Job } from '@/types';
 import './CommissionScreen.css';
 
 type TabType = 'workers' | 'history';
+type WorkerJobCardDetail = {
+  jobCardId: string;
+  date: string;
+  commission: number;
+};
+
+function resolveCommissionWorkerId(job: Job, workers: CommissionWorker[]): number | null {
+  if (typeof job.commissionWorkerId === 'number') {
+    return job.commissionWorkerId;
+  }
+
+  const workerName = job.commissionWorkerName?.trim();
+  if (!workerName) {
+    return null;
+  }
+
+  const normalizedWorkerName = workerName.toLowerCase();
+  const matchedWorker = workers.find(
+    (worker) =>
+      worker.customerId === job.customerId &&
+      worker.name.toLowerCase() === normalizedWorkerName
+  );
+
+  return matchedWorker?.id ?? null;
+}
 
 export function CommissionScreen() {
   const { jobs, commissionWorkers, commissionPayments, addCommissionPayment, deleteCommissionPayment, getCustomer } =
@@ -26,10 +53,66 @@ export function CommissionScreen() {
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentNotes, setPaymentNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [selectedWorkerForDetails, setSelectedWorkerForDetails] = useState<number | null>(null);
 
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
     [jobs, commissionPayments, commissionWorkers]
+  );
+  const workerJobCardDetails = useMemo(() => {
+    const groupedByWorker = new Map<number, Map<string, WorkerJobCardDetail>>();
+
+    jobs.forEach((job) => {
+      const commission = Number(job.commissionAmount) || 0;
+      if (commission <= 0) {
+        return;
+      }
+
+      const workerId = resolveCommissionWorkerId(job, commissionWorkers);
+      if (workerId === null) {
+        return;
+      }
+
+      if (!groupedByWorker.has(workerId)) {
+        groupedByWorker.set(workerId, new Map<string, WorkerJobCardDetail>());
+      }
+
+      const perWorkerMap = groupedByWorker.get(workerId)!;
+      const cardId = job.jobCardId?.trim() || `LEGACY-${job.id}`;
+      const detail = perWorkerMap.get(cardId);
+
+      if (detail) {
+        detail.commission += commission;
+      } else {
+        perWorkerMap.set(cardId, {
+          jobCardId: cardId,
+          date: job.date,
+          commission,
+        });
+      }
+    });
+
+    const normalized = new Map<number, WorkerJobCardDetail[]>();
+    groupedByWorker.forEach((cardMap, workerId) => {
+      const rows = Array.from(cardMap.values()).sort((a, b) =>
+        b.date.localeCompare(a.date) || b.commission - a.commission
+      );
+      normalized.set(workerId, rows);
+    });
+
+    return normalized;
+  }, [jobs, commissionWorkers]);
+  const selectedWorkerSummary = useMemo(
+    () => workerSummary.find((worker) => worker.workerId === selectedWorkerForDetails) ?? null,
+    [workerSummary, selectedWorkerForDetails]
+  );
+  const selectedWorkerJobCards = useMemo(
+    () =>
+      selectedWorkerForDetails === null
+        ? []
+        : (workerJobCardDetails.get(selectedWorkerForDetails) ?? []),
+    [workerJobCardDetails, selectedWorkerForDetails]
   );
 
   const handleRecordPayment = async () => {
@@ -76,16 +159,14 @@ export function CommissionScreen() {
   };
 
   const handleDeletePayment = async (paymentId: number) => {
-    if (!confirm('Are you sure you want to delete this payment record?')) {
-      return;
-    }
-
     try {
       await deleteCommissionPayment(paymentId);
       toast.success('Success', 'Payment deleted successfully');
     } catch (error) {
       console.error('Error deleting payment:', error);
       toast.error('Error', 'Failed to delete payment');
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -126,13 +207,13 @@ export function CommissionScreen() {
           className={`tab-btn ${activeTab === 'workers' ? 'active' : ''}`}
           onClick={() => setActiveTab('workers')}
         >
-          👥 Workers
+          Workers
         </button>
         <button
           className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
-          📋 Payment History
+          Payment History
         </button>
       </div>
 
@@ -181,6 +262,15 @@ export function CommissionScreen() {
                   step="0.01"
                   min="0"
                 />
+                {selectedWorker && (() => {
+                  const w = workerSummary.find((ws) => ws.workerId === selectedWorker);
+                  return w ? (
+                    <p className="form-hint">
+                      Outstanding: <strong>{formatCurrency(w.outstanding)}</strong>
+                      {w.outstanding <= 0 && <span className="hint-settled"> - fully settled</span>}
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="form-group">
@@ -234,14 +324,27 @@ export function CommissionScreen() {
                 <tbody>
                   {workerSummary.map((worker) => (
                     <tr key={worker.workerId}>
-                      <td>{worker.workerName}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="worker-name-btn"
+                          onClick={() => setSelectedWorkerForDetails(worker.workerId)}
+                          title={`View commission details for ${worker.workerName}`}
+                        >
+                          {worker.workerName}
+                        </button>
+                      </td>
                       <td className="text-right">{formatCurrency(worker.totalDue)}</td>
                       <td className="text-right">{formatCurrency(worker.totalPaid)}</td>
                       <td className="text-right pending">
                         {formatCurrency(worker.outstanding)}
                       </td>
                       <td className="text-center">
-                        {worker.outstanding > 0 ? '⏳ Pending' : '✓ Settled'}
+                        {worker.outstanding > 0 ? (
+                          <span className="status-badge status-badge--pending">Pending</span>
+                        ) : (
+                          <span className="status-badge status-badge--paid">Settled</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -285,13 +388,39 @@ export function CommissionScreen() {
                         <td className="text-right">{formatCurrency(payment.amount)}</td>
                         <td>{payment.notes || '-'}</td>
                         <td className="text-center">
-                          <button
-                            className="icon-btn icon-delete"
-                            onClick={() => handleDeletePayment(payment.id)}
-                            title="Delete payment"
-                          >
-                            🗑
-                          </button>
+                          {confirmDeleteId === payment.id ? (
+                            <span className="inline-confirm">
+                              <span className="inline-confirm-text">Delete?</span>
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-xs"
+                                onClick={() => void handleDeletePayment(payment.id)}
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-xs"
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                No
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="icon-btn icon-delete"
+                              onClick={() => setConfirmDeleteId(payment.id)}
+                              title="Delete payment"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -301,6 +430,63 @@ export function CommissionScreen() {
           )}
         </div>
       )}
+
+      <Modal
+        isOpen={selectedWorkerForDetails !== null}
+        onClose={() => setSelectedWorkerForDetails(null)}
+        title={
+          selectedWorkerSummary
+            ? `${selectedWorkerSummary.workerName} - Job Card Commission`
+            : 'Worker Commission Details'
+        }
+        size="lg"
+      >
+        {selectedWorkerSummary ? (
+          <div className="worker-detail-content">
+            <div className="worker-detail-summary">
+              <div className="worker-detail-summary-item">
+                <span className="worker-detail-summary-label">Total Due</span>
+                <strong>{formatCurrency(selectedWorkerSummary.totalDue)}</strong>
+              </div>
+              <div className="worker-detail-summary-item">
+                <span className="worker-detail-summary-label">Total Paid</span>
+                <strong className="paid">{formatCurrency(selectedWorkerSummary.totalPaid)}</strong>
+              </div>
+              <div className="worker-detail-summary-item">
+                <span className="worker-detail-summary-label">Outstanding</span>
+                <strong className="pending">{formatCurrency(selectedWorkerSummary.outstanding)}</strong>
+              </div>
+            </div>
+
+            {selectedWorkerJobCards.length === 0 ? (
+              <div className="worker-detail-empty">
+                <p>No job card commission entries found for this worker.</p>
+              </div>
+            ) : (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>JobCard ID</th>
+                      <th>Date</th>
+                      <th className="text-right">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWorkerJobCards.map((jobCard) => (
+                      <tr key={jobCard.jobCardId}>
+                        <td>{jobCard.jobCardId}</td>
+                        <td>{new Date(jobCard.date).toLocaleDateString('en-IN')}</td>
+                        <td className="text-right">{formatCurrency(jobCard.commission)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

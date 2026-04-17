@@ -22,6 +22,13 @@
   padding: 20px 28px 40px;
 }
 
+.auth-check-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 1024px) {
   .app-main,
   .app-main.sidebar-collapsed {

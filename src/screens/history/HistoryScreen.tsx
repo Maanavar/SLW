@@ -64,7 +64,7 @@ export function HistoryScreen() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<HistoryViewMode>('cards');
+  const [viewMode, setViewMode] = useState<HistoryViewMode>('table');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
 
   const jobsInRange = getJobsInRange(jobs, selectedDate, selectedDate);
@@ -259,8 +259,7 @@ export function HistoryScreen() {
                   aria-label="Select history date"
                 />
                 <span className="history-date-readable">
-                  {isToday ? 'Today - ' : ''}
-                  {formatDisplayDate(selectedDate)}
+                  {isToday ? 'Today' : formatDisplayDate(selectedDate).split(',')[0]}
                 </span>
               </div>
 

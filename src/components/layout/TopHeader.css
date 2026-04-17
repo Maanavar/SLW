@@ -6,14 +6,14 @@
   padding: var(--space-lg);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface-glass);
+  box-shadow: var(--shadow-md);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
 html[data-theme='dark'] .top-header {
-  background: rgba(16, 23, 35, 0.86);
+  box-shadow: var(--shadow-sm);
 }
 
 .header-top {
@@ -59,7 +59,7 @@ html[data-theme='dark'] .top-header {
   border-radius: 10px;
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -72,7 +72,7 @@ html[data-theme='dark'] .top-header {
 
 .header-icon-button:hover {
   color: var(--accent-primary);
-  background: var(--bg-tertiary);
+  background: var(--bg-hover);
   transform: translateY(-1px);
 }
 

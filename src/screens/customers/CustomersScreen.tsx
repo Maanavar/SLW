@@ -75,13 +75,27 @@ export function CustomersScreen() {
       </div>
 
       <div className="screen-content">
-        <DataTable<Customer>
-          columns={columns}
-          data={filtered}
-          keyFn={(item) => item.id}
-          onRowClick={handleRowClick}
-          emptyMessage="No customers found"
-        />
+        {customers.length === 0 ? (
+          <div className="empty-screen-state">
+            <p className="empty-screen-title">No customers yet</p>
+            <p className="empty-screen-desc">Add your first customer to start creating job cards.</p>
+            <button
+              className="btn btn-primary"
+              onClick={() => openModal('customer', 0)}
+              type="button"
+            >
+              Add Customer
+            </button>
+          </div>
+        ) : (
+          <DataTable<Customer>
+            columns={columns}
+            data={filtered}
+            keyFn={(item) => item.id}
+            onRowClick={handleRowClick}
+            emptyMessage="No customers match your search"
+          />
+        )}
       </div>
     </div>
   );
