@@ -4,6 +4,10 @@
   margin: 0 auto;
 }
 
+.section-subheading {
+  margin-top: 2rem;
+}
+
 .finance-header {
   margin-bottom: var(--space-xl);
 }
@@ -359,6 +363,7 @@
 
 .method-fill {
   height: 100%;
+  width: var(--bar-width, 0%);
   background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
   border-radius: 4px;
 }
@@ -412,6 +417,7 @@
 
 .ageing-fill {
   height: 100%;
+  width: var(--bar-width, 0%);
   background: linear-gradient(90deg, #f59e0b, #ef4444);
   border-radius: 3px;
 }

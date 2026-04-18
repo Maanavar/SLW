@@ -266,12 +266,20 @@ export function calculateWorkerCommissionSummary(
 export function calculateCustomerFinancials(
   jobs: Job[],
   payments: Payment[],
-  customers: Customer[]
+  customers: Customer[],
+  filterByDate?: { from: string; to: string }
 ): CustomerFinancials[] {
+  const filteredJobs = filterByDate
+    ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
+    : jobs;
+  const filteredPayments = filterByDate
+    ? payments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
+    : payments;
+
   const customerMap = new Map<number, CustomerFinancials>();
 
   // Process jobs
-  jobs.forEach((job) => {
+  filteredJobs.forEach((job) => {
     const existing = customerMap.get(job.customerId) || {
       customerId: job.customerId,
       customerName: customers.find((c) => c.id === job.customerId)?.name || 'Unknown',
@@ -299,7 +307,7 @@ export function calculateCustomerFinancials(
   });
 
   // Process additional payments (vouchers)
-  payments.forEach((payment) => {
+  filteredPayments.forEach((payment) => {
     const existing = customerMap.get(payment.customerId);
     if (existing) {
       existing.totalReceived += payment.amount || 0;

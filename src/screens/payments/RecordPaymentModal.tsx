@@ -282,7 +282,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
             getJobFinalBillValue(job) - getJobPaidAmount(job) > 0
         );
 
-        let remainingAmount = parseFloat(amount);
+        let remainingAmount = totalAmount;
 
         for (const job of customerOutstandingJobs) {
           if (remainingAmount <= 0) break;
@@ -379,17 +379,15 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           />
         </div>
 
-        {selectedCustomer && (
+        {selectedCustomer && customerBalance.balance > 0 && (
           <div className="balance-info">
             <div className="balance-item">
               <span className="balance-label">Outstanding Balance (Backlog)</span>
-              <span
-                className={`balance-amount ${customerBalance.balance > 0 ? 'positive' : ''}`}
-              >
-                {formatCurrency(Math.max(0, customerBalance.balance))}
+              <span className="balance-amount positive">
+                {formatCurrency(customerBalance.balance)}
               </span>
             </div>
-            {selectedCustomer.advanceBalance && selectedCustomer.advanceBalance > 0 && (
+            {(selectedCustomer.advanceBalance ?? 0) > 0 && (
               <>
                 <div className="balance-item">
                   <span className="balance-label">Available Advance (Credit)</span>
@@ -504,17 +502,29 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
 
         {paymentScope === 'month' && !isSettled && (
           <div className="form-group">
-            <label className="form-label" htmlFor="payment-month">
-              Month
-            </label>
-            <input
-              id="payment-month"
-              type="month"
-              className="form-input"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              max={currentMonth}
-            />
+            <label className="form-label">Month</label>
+            <div className="month-selects">
+              <select
+                className="form-input"
+                value={selectedMonth.split('-')[0]}
+                onChange={(e) => setSelectedMonth(`${e.target.value}-${selectedMonth.split('-')[1]}`)}
+                aria-label="Year"
+              >
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <select
+                className="form-input"
+                value={selectedMonth.split('-')[1]}
+                onChange={(e) => setSelectedMonth(`${selectedMonth.split('-')[0]}-${e.target.value}`)}
+                aria-label="Month"
+              >
+                {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
+                  <option key={m} value={m}>{new Date(2000, Number(m)-1).toLocaleString('en-IN', { month: 'long' })}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
@@ -643,7 +653,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
                 min="0"
                 required
               />
-              {selectedCustomer && (
+              {selectedCustomer && customerBalance.balance > 0 && (
                 <div className="quick-fill-buttons">
                   <button
                     type="button"
@@ -653,7 +663,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
                   >
                     Balance: {formatCurrency(customerBalance.balance)}
                   </button>
-                  {selectedCustomer.advanceBalance && selectedCustomer.advanceBalance > 0 && (
+                  {(selectedCustomer.advanceBalance ?? 0) > 0 && (
                     <button
                       type="button"
                       className="quick-fill-small-btn"

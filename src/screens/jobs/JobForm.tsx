@@ -46,6 +46,13 @@ function isWagenAutosCustomer(customer?: Customer | null) {
   return shortCode === 'wp' || name === 'wagen autos';
 }
 
+function isRmpCustomer(customer?: Customer | null) {
+  if (!customer) return false;
+  const shortCode = normalizeCustomerValue(customer.shortCode);
+  const name = normalizeCustomerValue(customer.name);
+  return shortCode === 'rmp' || name.includes('ramani motors');
+}
+
 function isMahalingamCustomer(customer?: Customer | null) {
   if (!customer) return false;
   const name = normalizeCustomerValue(customer.name).replace(/[^a-z]/g, '');
@@ -102,6 +109,7 @@ export function JobForm() {
   const [vehicleNo, setVehicleNo] = useState('');
   const [dcDate, setDcDate] = useState('');
   const [dcApproval, setDcApproval] = useState(false);
+  const [rmpHandler, setRmpHandler] = useState<'Bhai' | 'Raja' | null>(null);
   const [paidAmount, setPaidAmount] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Pending');
   const [notes, setNotes] = useState('');
@@ -118,6 +126,7 @@ export function JobForm() {
   const showDcFields = shouldShowDcFields(selectedCustomer);
   const showVehicleNoField = showDcFields && !isWagenAutosCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
+  const showRmpHandlerField = isRmpCustomer(selectedCustomer);
   const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
     ? getCommissionWorkersForCustomer(selectedCustomer.id)
     : [];
@@ -147,6 +156,18 @@ export function JobForm() {
     }
   }, [showCommissionFields, sortedCommissionWorkers, cardCommissionWorker]);
 
+  useEffect(() => {
+    if (!showRmpHandlerField || !rmpHandler) return;
+    const matched = sortedCommissionWorkers.find(
+      (w) => w.name.trim().toLowerCase() === rmpHandler.toLowerCase()
+    );
+    if (matched) setCardCommissionWorker(matched);
+  }, [rmpHandler, showRmpHandlerField, sortedCommissionWorkers]);
+
+  useEffect(() => {
+    if (!showRmpHandlerField) setRmpHandler(null);
+  }, [showRmpHandlerField]);
+
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
   const totalCommission = parseFloat(cardTotalCommission) || 0;
   const summary = {
@@ -169,6 +190,12 @@ export function JobForm() {
       setCardTotalCommission('');
     }
   }, [showCommissionFields]);
+
+  useEffect(() => {
+    if (dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate) {
+      setDcApproval(false);
+    }
+  }, [dcNo, vehicleNo, dcDate, showVehicleNoField]);
 
   useEffect(() => {
     if (!showVehicleNoField && vehicleNo) {
@@ -384,6 +411,7 @@ export function JobForm() {
                 dcDate: dcDate || undefined,
                 dcApproval: dcApproval || undefined,
               }),
+              rmpHandler: showRmpHandlerField ? rmpHandler : null,
             })
           )
         );
@@ -448,6 +476,7 @@ export function JobForm() {
             dcDate: dcDate || undefined,
             dcApproval: dcApproval || undefined,
           }),
+          rmpHandler: showRmpHandlerField ? rmpHandler : null,
         }));
 
         await addJobsBulk(newJobs);
@@ -500,6 +529,7 @@ export function JobForm() {
       setVehicleNo('');
       setDcDate('');
       setDcApproval(false);
+      setRmpHandler(null);
       setNotes('');
       setCardCommissionWorker(null);
       setCardTotalCommission('');
@@ -569,6 +599,10 @@ export function JobForm() {
       setVehicleNo(cardToEdit.primary.vehicleNo || '');
       setDcDate(cardToEdit.primary.dcDate || '');
       setDcApproval(cardToEdit.primary.dcApproval || false);
+    }
+
+    if (cardToEdit.primary.rmpHandler) {
+      setRmpHandler(cardToEdit.primary.rmpHandler as 'Bhai' | 'Raja');
     }
 
     if (cardToEdit.primary.paymentStatus === 'Paid' && cardToEdit.primary.paidAmount) {
@@ -748,6 +782,27 @@ export function JobForm() {
             </div>
           </div>
         </div>
+
+        {showRmpHandlerField && (
+          <div className="form-section">
+            <h3 className="section-title">RMP Handler</h3>
+            <div className="rmp-handler-buttons">
+              {(['Bhai', 'Raja'] as const).map((handler) => (
+                <button
+                  key={handler}
+                  type="button"
+                  className={`status-btn${rmpHandler === handler ? ' active' : ''}`}
+                  onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
+                >
+                  {handler}
+                </button>
+              ))}
+            </div>
+            <p className="dc-validation-note">
+              Bhai handles people vehicles · Raja handles commercial vehicles. Commission is auto-assigned.
+            </p>
+          </div>
+        )}
 
         {showCommissionFields && (
           <div className="form-section commission-assignment-section">
@@ -1039,6 +1094,7 @@ export function JobForm() {
                 setVehicleNo('');
                 setDcDate('');
                 setDcApproval(false);
+                setRmpHandler(null);
                 setNotes('');
                 setCardCommissionWorker(null);
                 setCardTotalCommission('');
@@ -1196,7 +1252,20 @@ export function JobForm() {
                         title="Edit this job card"
                         aria-label="Edit"
                       >
-                        ✎
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
                       </button>
                       <button
                         type="button"
@@ -1208,7 +1277,22 @@ export function JobForm() {
                         title="Delete this job card"
                         aria-label="Delete"
                       >
-                        🗑
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -1235,3 +1319,4 @@ export function JobForm() {
     </div>
   );
 }
+

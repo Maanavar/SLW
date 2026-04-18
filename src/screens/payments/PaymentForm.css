@@ -1,18 +1,21 @@
 .payment-form-container {
   display: grid;
-  gap: 32px;
-  padding: 24px;
+  gap: var(--space-xl);
+  width: min(1240px, 100%);
+  margin-inline: auto;
+  padding: 22px;
 }
 
 .payment-report-container {
   display: grid;
-  gap: 20px;
+  gap: 18px;
 }
 
 .payment-report-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
+  flex-wrap: wrap;
   gap: 16px;
 }
 
@@ -22,19 +25,21 @@
 
 .btn-record-payment {
   white-space: nowrap;
-  height: 44px;
+  min-height: 44px;
+  padding-inline: 18px;
 }
 
-.form-section {
+.payment-form-container .form-section {
   display: grid;
   gap: 16px;
 }
 
-.form-title {
-  font-size: 32px;
+.payment-form-container .form-title {
+  font-size: clamp(30px, 3vw, 40px);
   font-weight: 700;
   margin: 0;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.55px;
+  line-height: 1.08;
   color: var(--text-primary);
 }
 
@@ -43,12 +48,12 @@
   gap: 20px;
 }
 
-.form-group {
+.payment-form-container .form-group {
   display: grid;
   gap: 8px;
 }
 
-.form-label {
+.payment-form-container .form-label {
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
@@ -56,8 +61,8 @@
   color: var(--text-muted);
 }
 
-.form-input,
-.form-textarea {
+.payment-form-container .form-input,
+.payment-form-container .form-textarea {
   min-height: 44px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -67,14 +72,14 @@
   font-family: inherit;
 }
 
-.form-input:focus,
-.form-textarea:focus {
+.payment-form-container .form-input:focus,
+.payment-form-container .form-textarea:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(11, 102, 228, 0.1);
 }
 
-.form-textarea {
+.payment-form-container .form-textarea {
   resize: vertical;
   min-height: 80px;
 }
@@ -153,7 +158,13 @@
   gap: 8px;
 }
 
-.btn {
+.month-selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.payment-form-container .btn {
   min-height: 44px;
   border-radius: 8px;
   border: none;
@@ -166,35 +177,35 @@
   transition: all 0.2s ease;
 }
 
-.btn:hover {
+.payment-form-container .btn:hover {
   background: var(--border-color);
 }
 
-.btn:active {
+.payment-form-container .btn:active {
   transform: scale(0.98);
 }
 
-.btn-primary {
+.payment-form-container .btn-primary {
   background: var(--accent-primary);
   color: #fff;
 }
 
-.btn-primary:hover {
+.payment-form-container .btn-primary:hover {
   background: #2563eb;
 }
 
-.btn-primary:disabled {
+.payment-form-container .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn-submit {
+.payment-form-container .btn-submit {
   width: 100%;
   height: 48px;
   font-size: 16px;
 }
 
-.section-title {
+.payment-form-container .section-title {
   font-size: 18px;
   font-weight: 700;
   margin: 24px 0 16px 0;
@@ -211,32 +222,44 @@
 }
 
 .report-controls {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
   align-items: flex-end;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .report-controls > div {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .payment-day-selector {
-  min-width: 330px;
+  min-width: 0;
+  grid-column: span 2;
 }
 
 .payment-day-nav {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .payment-day-nav-shell {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 6px;
+  min-width: 270px;
   padding: 4px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -244,8 +267,8 @@
 }
 
 .payment-day-input {
-  width: 170px;
-  min-width: 170px;
+  width: 100%;
+  min-width: 0;
   min-height: 34px;
   height: 34px;
   padding: 0 10px;
@@ -280,6 +303,16 @@
   transition: all 0.18s ease;
 }
 
+.payment-day-nav-btn {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.payment-day-today-btn {
+  white-space: nowrap;
+}
+
 .payment-day-nav-btn:hover,
 .payment-day-today-btn:hover {
   background: var(--bg-tertiary);
@@ -295,23 +328,18 @@
 
 .payment-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .payment-summary-item {
-  padding: 16px;
+  padding: 14px;
   background: var(--bg-card);
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--border-color);
   text-align: center;
   transition: all 0.2s ease;
-}
-
-.payment-summary-item:hover {
-  border-color: var(--accent-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .payment-summary-item h3 {
@@ -388,8 +416,8 @@
 }
 
 .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -401,6 +429,7 @@
   transition: all 0.15s ease;
   padding: 0;
   min-height: unset;
+  line-height: 1;
 }
 
 .icon-edit {
@@ -468,11 +497,20 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .payment-filter-select {
-  min-width: 200px;
+  min-width: min(200px, 100%);
+  flex: 1 1 240px;
   height: 36px;
   min-height: 36px;
   padding: 0 10px;
@@ -531,8 +569,8 @@
 
 @media (max-width: 768px) {
   .payment-form-container {
-    gap: 24px;
-    padding: 16px;
+    gap: 18px;
+    padding: 14px 12px;
   }
 
   .scope-buttons {
@@ -544,37 +582,38 @@
   }
 
   .report-controls {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
   }
 
   .report-controls > div {
-    min-width: 100%;
+    min-width: 0;
   }
 
   .payment-day-selector {
-    min-width: 100%;
+    grid-column: auto;
+    min-width: 0;
   }
 
   .payment-day-nav {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
     flex-wrap: wrap;
   }
 
   .payment-day-nav-shell {
     width: 100%;
-    justify-content: stretch;
+    min-width: 0;
   }
 
   .payment-day-input {
     width: 100%;
     min-width: 0;
-    flex: 1 1 180px;
   }
 
-  .form-title {
-    font-size: 24px;
+  .payment-form-container .form-title {
+    font-size: clamp(26px, 8vw, 32px);
   }
 
   .payment-summary {
@@ -588,5 +627,84 @@
   .quick-fill-small-btn {
     flex: 1;
     min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .scope-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-day-nav {
+    gap: 6px;
+  }
+
+  .payment-day-nav-btn,
+  .payment-day-today-btn {
+    flex: 0 0 auto;
+  }
+
+  .payment-day-today-btn {
+    width: 100%;
+  }
+
+  .quick-fill-buttons {
+    flex-direction: column;
+  }
+
+  .payment-filter-clear {
+    width: 100%;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .payment-form-container {
+    gap: 26px;
+    padding: 18px;
+  }
+
+  .report-controls {
+    gap: 12px;
+  }
+
+  .payment-day-selector {
+    width: 100%;
+    grid-column: auto;
+    min-width: 0;
+  }
+
+  .payment-day-nav {
+    width: 100%;
+  }
+
+  .payment-day-nav-shell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .payment-day-nav-btn,
+  .payment-day-today-btn {
+    flex: 0 0 auto;
+  }
+
+  .payment-filter-select {
+    flex: 1 1 220px;
+  }
+}
+
+@media (hover: hover) {
+  .report-controls:hover,
+  .payment-filters:hover {
+    border-color: rgba(11, 102, 228, 0.3);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .payment-summary-item:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   }
 }

@@ -89,10 +89,15 @@
 
   --transition-fast: 180ms cubic-bezier(0.2, 0, 0, 1);
   --transition-normal: 280ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-slow: 420ms cubic-bezier(0.2, 0, 0, 1);
+  --focus-ring: 0 0 0 3px var(--accent-ring);
+  --motion-distance-sm: 8px;
+  --motion-distance-md: 14px;
+  --motion-duration-enter: 380ms;
 
   --sidebar-width: 272px;
   --sidebar-collapsed-width: 92px;
-  --mobile-nav-height: 68px;
+  --mobile-nav-height: 84px;
 }
 
 html[data-theme='dark'] {

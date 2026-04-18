@@ -11,6 +11,7 @@ import { getLocalDateString } from '@/lib/dateUtils';
 import type { Payment } from '@/types';
 import { RecordPaymentModal } from './RecordPaymentModal';
 import { PaymentEditModal } from './PaymentEditModal';
+import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import './PaymentForm.css';
 
 type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'halfyear' | 'year' | 'range' | 'all';
@@ -53,7 +54,7 @@ function formatDayLabel(dateStr: string): string {
 }
 
 export function PaymentForm() {
-  const { payments, jobs, getCustomer, deletePayment } = useDataStore();
+  const { payments, jobs, getCustomer, deletePayment, updateJob } = useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
 
@@ -63,6 +64,7 @@ export function PaymentForm() {
   const [reportRangeFrom, setReportRangeFrom] = useState('');
   const [reportRangeTo, setReportRangeTo] = useState(today);
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
+  const [editingCardKey, setEditingCardKey] = useState<string | null>(null);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PaymentDisplay | null>(null);
   const [filterCustomer, setFilterCustomer] = useState('');
@@ -108,24 +110,32 @@ export function PaymentForm() {
     () => groupedJobCards.find((group) => group.key === selectedCardKey) || null,
     [groupedJobCards, selectedCardKey]
   );
+  const editingGroup = useMemo(
+    () => groupedJobCards.find((group) => group.key === editingCardKey) || null,
+    [groupedJobCards, editingCardKey]
+  );
 
   const handleDeletePayment = async (payment: PaymentDisplay) => {
-    if (payment.id <= 0) {
-      toast.error('Error', 'Invalid payment ID');
+    if (payment.source === 'Job Paid Entry') {
+      const confirmed = window.confirm(
+        `Clear payment of ${formatCurrency(payment.amount)} from job card ${payment.jobCardId}?\n\nThis will reset all lines on this card to unpaid. Cannot be undone.`
+      );
+      if (!confirmed) return;
+      try {
+        const group = groupedJobCards.find(g => g.key === payment.jobCardKey);
+        const jobsToReset = group ? group.jobs : jobs.filter(j => (j.jobCardId || `LEGACY-${j.id}`) === payment.jobCardId);
+        await Promise.all(jobsToReset.map(j => updateJob(j.id, { paidAmount: 0, paymentStatus: 'Pending', paymentMode: undefined })));
+        toast.success('Success', 'Job card payment cleared');
+      } catch {
+        toast.error('Error', 'Failed to clear job payment');
+      }
       return;
     }
 
-    const isJobPayment = payment.source === 'Job Paid Entry';
-    const jobPaymentWarning = isJobPayment
-      ? '\n\nNote: This only removes the payment record. Edit the job if you need to change the job amount.'
-      : '';
-
     const confirmed = window.confirm(
-      `Delete payment of ${formatCurrency(payment.amount)}?${jobPaymentWarning}\n\nThis action cannot be undone.`
+      `Delete payment of ${formatCurrency(payment.amount)}?\n\nThis action cannot be undone.`
     );
-
     if (!confirmed) return;
-
     try {
       await deletePayment(payment.id);
       toast.success('Success', 'Payment deleted successfully');
@@ -148,19 +158,21 @@ export function PaymentForm() {
     return match?.[1];
   };
 
+  // One fallback entry per card (not per job line), for customers with no Payment Voucher.
   const fallbackJobPayments = useMemo(() => {
-    const paidJobs = jobsInReportRange.filter((job) => getJobPaidAmount(job) > 0);
-
-    return paidJobs.map<PaymentDisplay>((job) => {
-      const cardId = job.jobCardId || `LEGACY-${job.id}`;
+    const groups = groupJobsByCard(jobsInReportRange.filter(j => getJobPaidAmount(j) > 0));
+    return groups.map<PaymentDisplay>((group) => {
+      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+      const totalPaid = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
+      const mode = (group.primary.paymentMode as Payment['paymentMode']) || 'Cash';
       return {
-        id: -Math.abs(job.id),
-        customerId: job.customerId,
-        amount: getJobPaidAmount(job),
-        date: job.date,
-        paymentMode: (job.paymentMode as Payment['paymentMode']) || 'Cash',
+        id: -Math.abs(group.primary.id),
+        customerId: group.primary.customerId,
+        amount: totalPaid,
+        date: group.primary.date,
+        paymentMode: mode,
         notes: `From JobCard ${cardId}`,
-        customerName: getCustomer(job.customerId)?.name || 'Unknown',
+        customerName: getCustomer(group.primary.customerId)?.name || 'Unknown',
         source: 'Job Paid Entry',
         jobCardId: cardId,
         jobCardKey: cardKeyById.get(cardId),
@@ -169,19 +181,24 @@ export function PaymentForm() {
   }, [jobsInReportRange, getCustomer, cardKeyById]);
 
   const reportPaymentsWithNames: PaymentDisplay[] = useMemo(() => {
-    if (filteredReportPayments.length > 0) {
-      return filteredReportPayments.map((payment) => {
-        const linkedCardId = getCardIdFromNotes(payment.notes);
-        return {
-          ...payment,
-          customerName: getCustomer(payment.customerId)?.name || 'Unknown',
-          source: 'Payment Voucher',
-          jobCardId: linkedCardId || '-',
-          jobCardKey: linkedCardId ? cardKeyById.get(linkedCardId) : undefined,
-        };
-      });
-    }
-    return fallbackJobPayments;
+    // Customers who already have Payment Voucher records — use those, skip fallback for them.
+    const customersWithVouchers = new Set(filteredReportPayments.map(p => p.customerId));
+
+    const vouchers = filteredReportPayments.map((payment) => {
+      const linkedCardId = getCardIdFromNotes(payment.notes);
+      return {
+        ...payment,
+        customerName: getCustomer(payment.customerId)?.name || 'Unknown',
+        source: 'Payment Voucher' as const,
+        jobCardId: linkedCardId || '-',
+        jobCardKey: linkedCardId ? cardKeyById.get(linkedCardId) : undefined,
+      };
+    });
+
+    // Only include fallback entries for customers who have NO vouchers in this period.
+    const fallbacks = fallbackJobPayments.filter(p => !customersWithVouchers.has(p.customerId));
+
+    return [...vouchers, ...fallbacks];
   }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
 
   const paymentCustomerOptions = useMemo(() => {
@@ -447,13 +464,15 @@ export function PaymentForm() {
                       type="button"
                       className="icon-btn icon-edit"
                       onClick={(e) => {
-                        if (isJobPayment) return;
                         e.stopPropagation();
-                        setSelectedPayment(row);
+                        if (isJobPayment) {
+                          if (row.jobCardKey) setSelectedCardKey(row.jobCardKey);
+                        } else {
+                          setSelectedPayment(row);
+                        }
                       }}
-                      title={isJobPayment ? 'Auto-recorded job payments cannot be edited — edit from the job card' : 'Edit payment'}
+                      title={isJobPayment ? 'Edit via job card' : 'Edit payment'}
                       aria-label="Edit"
-                      disabled={isJobPayment}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -507,7 +526,14 @@ export function PaymentForm() {
         jobs={selectedGroup?.jobs || null}
         onClose={() => setSelectedCardKey(null)}
         getCustomer={getCustomer}
+        onEdit={() => { if (selectedGroup) { setEditingCardKey(selectedGroup.key); setSelectedCardKey(null); } }}
         onDelete={undefined}
+      />
+      <JobCardEditOverlay
+        isOpen={Boolean(editingGroup)}
+        jobs={editingGroup?.jobs || null}
+        onClose={() => setEditingCardKey(null)}
+        onSave={() => setEditingCardKey(null)}
       />
     </div>
   );

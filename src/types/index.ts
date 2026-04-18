@@ -47,6 +47,8 @@ export interface Job {
   vehicleNo?: string;
   dcDate?: string;
   dcApproval?: boolean;
+  // RMP handler tag (Bhai = people vehicles, Raja = commercial vehicles)
+  rmpHandler?: 'Bhai' | 'Raja' | null;
   // Commission Worker Tagging
   commissionWorkerId?: number;
   commissionWorkerName?: string;

@@ -279,6 +279,31 @@ html[data-theme='dark'] .edit-payment-btn.active {
   gap: 8px;
 }
 
+.edit-paid-chips {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.edit-paid-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 0.15s, color 0.15s;
+}
+
+.edit-paid-chip:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .edit-input,
 .edit-select,
 .edit-textarea {
@@ -391,6 +416,17 @@ html[data-theme='dark'] .edit-payment-btn.active {
 .edit-assignment-note {
   font-size: var(--text-xs);
   color: var(--text-muted);
+}
+
+.edit-rmp-handler-buttons {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.edit-rmp-handler-note {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: 6px;
 }
 
 .edit-assignment-empty {

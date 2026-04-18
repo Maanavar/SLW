@@ -48,11 +48,20 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   const [cardCommissionWorker, setCardCommissionWorker] = useState<typeof commissionWorkersForCustomer[0] | null>(null);
   const [cardTotalCommission, setCardTotalCommission] = useState('0');
 
+  const [rmpHandler, setRmpHandler] = useState<'Bhai' | 'Raja' | null>(
+    (primary?.rmpHandler as 'Bhai' | 'Raja' | null) || null
+  );
+
   const hasExistingDcValues = Boolean(
     primary && (primary.dcNo || primary.vehicleNo || primary.dcDate || primary.dcApproval)
   );
   const showDcFields = isDcApplicableCustomer(selectedCustomer) || hasExistingDcValues;
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
+  const showRmpHandlerField = Boolean(
+    selectedCustomer &&
+    ((selectedCustomer.shortCode || '').toLowerCase() === 'rmp' ||
+     (selectedCustomer.name || '').toLowerCase().includes('ramani motors'))
+  );
   const commissionWorkersForCustomer = useMemo(
     () =>
       showCommissionFields && selectedCustomer
@@ -86,6 +95,22 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
     }
   }, [showCommissionFields, sortedCommissionWorkers, cardCommissionWorker]);
 
+  // Auto-deselect DC exempt when DC details are filled
+  useEffect(() => {
+    if (dcNo.trim() || vehicleNo.trim() || dcDate) {
+      setDcApproval(false);
+    }
+  }, [dcNo, vehicleNo, dcDate]);
+
+  // Auto-assign commission worker when RMP handler is selected
+  useEffect(() => {
+    if (!showRmpHandlerField || !rmpHandler) return;
+    const matched = sortedCommissionWorkers.find(
+      (w) => w.name.trim().toLowerCase() === rmpHandler.toLowerCase()
+    );
+    if (matched) setCardCommissionWorker(matched);
+  }, [rmpHandler, showRmpHandlerField, sortedCommissionWorkers]);
+
   // Initialize when modal opens
   useEffect(() => {
     if (jobs && isOpen && jobs.length > 0) {
@@ -105,6 +130,8 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
         setDcDate(firstJob.dcDate || '');
         setDcApproval(firstJob.dcApproval || false);
       }
+
+      setRmpHandler((firstJob.rmpHandler as 'Bhai' | 'Raja' | null) || null);
 
       const lines: JobLineState[] = jobs.map((job) => {
         return {
@@ -161,19 +188,6 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
       ? updatedLine
       : { ...updatedLine, commission: '0', commissionWorker: null };
     setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
-  };
-
-  const handleCommissionWorkerChange = (lineId: string, workerId: string) => {
-    const worker = sortedCommissionWorkers.find((item) => String(item.id) === workerId) || null;
-    setJobLines((prev) =>
-      prev.map((line) => (line.id === lineId ? { ...line, commissionWorker: worker } : line))
-    );
-  };
-
-  const handleCommissionValueChange = (lineId: string, value: string) => {
-    setJobLines((prev) =>
-      prev.map((line) => (line.id === lineId ? { ...line, commission: value } : line))
-    );
   };
 
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
@@ -266,6 +280,8 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           updates.dcApproval = dcApproval;
         }
 
+        updates.rmpHandler = showRmpHandlerField ? rmpHandler : null;
+
         await updateJob(job.id, updates);
       }
 
@@ -345,6 +361,27 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           ))}
         </div>
 
+        {showRmpHandlerField && (
+          <div className="edit-section">
+            <h3 className="edit-section-title">RMP Handler</h3>
+            <div className="edit-rmp-handler-buttons">
+              {(['Bhai', 'Raja'] as const).map((handler) => (
+                <button
+                  key={handler}
+                  type="button"
+                  className={`edit-mode-btn${rmpHandler === handler ? ' active' : ''}`}
+                  onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
+                >
+                  {handler}
+                </button>
+              ))}
+            </div>
+            <p className="edit-rmp-handler-note">
+              Bhai — people vehicles · Raja — commercial vehicles. Commission auto-assigned.
+            </p>
+          </div>
+        )}
+
         {showCommissionFields && (
           <div className="edit-commission-assignment edit-section">
             <div className="edit-job-details-header">
@@ -423,12 +460,14 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
         {showDcFields && (
           <div className="edit-dc-fields edit-section">
             <div className="edit-field-group">
-              <label className="edit-field-label">DC Number</label>
+              <label className="edit-field-label" htmlFor="edit-dc-no">DC Number</label>
               <input
+                id="edit-dc-no"
                 type="text"
                 value={dcNo}
                 onChange={(e) => setDcNo(e.target.value)}
                 className="edit-input"
+                placeholder="e.g. DC-001"
               />
             </div>
             <div className="edit-field-group">
@@ -477,6 +516,8 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
                   if (status === 'Pending') {
                     setPaymentMode('');
                     setPaidAmount('0');
+                  } else {
+                    setPaidAmount(String(summary.finalValue));
                   }
                 }}
                 className={`edit-payment-btn ${paymentStatus === status ? 'active' : ''}`}
@@ -489,11 +530,32 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           {paymentStatus === 'Paid' && (
             <div className="edit-paid-fields">
               <div className="edit-field-group">
-                <label className="edit-field-label">Paid Amount (INR)</label>
+                <label className="edit-field-label">
+                  Paid Amount (INR)
+                  <span className="edit-paid-chips">
+                    <button
+                      type="button"
+                      className="edit-paid-chip"
+                      onClick={() => setPaidAmount(String(summary.finalValue))}
+                    >
+                      Full {formatCurrency(summary.finalValue)}
+                    </button>
+                    {summary.totalCommission > 0 && (
+                      <button
+                        type="button"
+                        className="edit-paid-chip"
+                        onClick={() => setPaidAmount(String(summary.netValue))}
+                      >
+                        Net {formatCurrency(summary.netValue)}
+                      </button>
+                    )}
+                  </span>
+                </label>
                 <input
                   type="number"
                   value={paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   step="0.01"
                   min="0"
                   className="edit-input"

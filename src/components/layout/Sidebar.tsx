@@ -201,6 +201,8 @@ export function Sidebar() {
                   <NavLink
                     to={item.path}
                     end={item.path === '/'}
+                    title={item.label}
+                    aria-label={item.label}
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                   >
                     <span className="nav-icon">{item.icon}</span>

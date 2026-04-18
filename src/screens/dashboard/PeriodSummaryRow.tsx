@@ -201,6 +201,15 @@ export function PeriodSummaryRow() {
   const marginRate =
     currentStats.totalRevenue > 0 ? (currentStats.grossProfit / currentStats.totalRevenue) * 100 : 0;
 
+  const daysInRange = useMemo(() => {
+    const from = new Date(`${currentRange.from}T00:00:00`);
+    const to   = new Date(`${currentRange.to}T00:00:00`);
+    return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1);
+  }, [currentRange]);
+
+  const avgPerDay  = currentStats.grossProfit / daysInRange;
+  const avgPerWeek = currentStats.grossProfit / Math.max(1, daysInRange / 7);
+
   const handlePrev = () => {
     if (activePeriod === 'today') setDayOffset((value) => value + 1);
     else if (activePeriod === 'week') setWeekOffset((value) => value + 1);
@@ -285,6 +294,10 @@ export function PeriodSummaryRow() {
           <span className="summary-micro-pill">Collection Rate: {collectionRate.toFixed(1)}%</span>
           <span className="summary-micro-pill">Margin: {marginRate.toFixed(1)}%</span>
           <span className="summary-micro-pill">Outstanding: {formatCurrency(currentStats.outstanding)}</span>
+          <span className="summary-micro-pill">Avg / Day: {formatCurrency(avgPerDay)}</span>
+          {activePeriod === 'month' && (
+            <span className="summary-micro-pill">Avg / Week: {formatCurrency(avgPerWeek)}</span>
+          )}
         </div>
       </div>
     </div>

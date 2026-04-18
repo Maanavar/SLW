@@ -1,6 +1,8 @@
 .dashboard-screen {
   display: grid;
   gap: var(--space-xl);
+  width: min(1280px, 100%);
+  margin-inline: auto;
 }
 
 .dashboard-hero {
@@ -16,9 +18,13 @@
   background:
     radial-gradient(500px 180px at 0% 0%, rgba(11, 102, 228, 0.12), transparent 60%),
     var(--bg-secondary);
-  padding: var(--space-lg);
+  padding: var(--space-xl);
   display: grid;
   gap: var(--space-sm);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .dashboard-eyebrow {
@@ -30,8 +36,9 @@
 }
 
 .dashboard-title {
-  font-size: var(--text-title1);
+  font-size: clamp(28px, 3.1vw, 38px);
   letter-spacing: -0.45px;
+  line-height: 1.07;
 }
 
 .dashboard-subtitle {
@@ -64,10 +71,14 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
-  padding: var(--space-lg);
+  padding: var(--space-xl);
   display: grid;
   gap: var(--space-md);
   align-content: start;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .dashboard-actions-header {
@@ -101,7 +112,8 @@
 }
 
 .dashboard-section-title {
-  font-size: var(--text-lg);
+  font-size: clamp(18px, 1.4vw, 24px);
+  letter-spacing: -0.24px;
 }
 
 .dashboard-section-subtitle {
@@ -118,7 +130,10 @@
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  padding: var(--space-xl);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .summary-section--active {
@@ -237,7 +252,10 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
-  padding: var(--space-lg);
+  padding: var(--space-xl);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .balances-header {
@@ -254,7 +272,8 @@
 }
 
 .balances-title {
-  font-size: var(--text-xl);
+  font-size: clamp(20px, 1.8vw, 28px);
+  letter-spacing: -0.3px;
 }
 
 .balances-subtitle {
@@ -300,6 +319,20 @@
   border-color: transparent;
   background: linear-gradient(135deg, var(--accent-primary), #3a7def);
   color: #fff;
+}
+
+@media (hover: hover) {
+  .dashboard-hero-main:hover,
+  .dashboard-actions-panel:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .summary-section:hover,
+  .customer-balances:hover {
+    box-shadow: var(--shadow-sm);
+    border-color: rgba(11, 102, 228, 0.28);
+  }
 }
 
 .balances-summary {
@@ -358,6 +391,21 @@
 }
 
 @media (max-width: 1024px) {
+  .dashboard-screen {
+    gap: var(--space-lg);
+  }
+
+  .dashboard-hero-main,
+  .dashboard-actions-panel,
+  .summary-section,
+  .customer-balances {
+    padding: var(--space-lg);
+  }
+
+  .dashboard-subtitle {
+    font-size: var(--text-subhead);
+  }
+
   .summary-section-header {
     flex-direction: column;
     align-items: stretch;
@@ -382,5 +430,78 @@
   .type-filters .search-input {
     min-width: 0;
     width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-screen {
+    gap: var(--space-md);
+  }
+
+  .dashboard-hero-main,
+  .dashboard-actions-panel,
+  .summary-section,
+  .customer-balances {
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+  }
+
+  .dashboard-hero-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dashboard-hero-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dashboard-hero-pill {
+    white-space: nowrap;
+  }
+
+  .dashboard-subtitle {
+    font-size: var(--text-subhead);
+  }
+
+  .dashboard-section-header {
+    gap: 4px;
+    padding: 0;
+  }
+
+  .balances-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .type-filter-buttons {
+    width: 100%;
+  }
+
+  .filter-btn {
+    min-height: 34px;
+    flex: 1 1 120px;
+  }
+
+  .balances-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-title {
+    font-size: clamp(24px, 8vw, 30px);
+  }
+
+  .dashboard-subtitle,
+  .dashboard-section-subtitle,
+  .balances-subtitle {
+    font-size: var(--text-footnote);
+  }
+
+  .filter-btn {
+    flex: 1 1 100%;
   }
 }

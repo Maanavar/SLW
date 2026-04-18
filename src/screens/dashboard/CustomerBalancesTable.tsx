@@ -8,7 +8,7 @@ import { useDataStore } from '@/stores/dataStore';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { TypeBadge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { calculateCustomerBalance, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
 import { Customer } from '@/types';
 
 interface CustomerBalance extends Customer {
@@ -20,44 +20,55 @@ interface CustomerBalance extends Customer {
   advance: number;
 }
 
-export function CustomerBalancesTable() {
-  const { getActiveCustomers, jobs, payments } = useDataStore();
+interface CustomerBalancesTableProps {
+  showFilters?: boolean;
+  dateRange?: { from: string; to: string };
+}
+
+export function CustomerBalancesTable({ showFilters = true, dateRange }: CustomerBalancesTableProps) {
+  const { getActiveCustomers, jobs } = useDataStore();
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [customerFilter, setCustomerFilter] = useState('');
 
   const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
 
+  const scopedJobs = useMemo(
+    () => dateRange ? jobs.filter(j => j.date >= dateRange.from && j.date <= dateRange.to) : jobs,
+    [jobs, dateRange]
+  );
+
   // Calculate balances for all customers
+  // Paid is derived from job.paidAmount only (same as Records page) to avoid
+  // double-counting payment records that were already allocated back to jobs.
   const customersWithBalances: CustomerBalance[] = useMemo(() => {
     return customers.map((customer) => {
-      const customerJobs = jobs.filter((j) => j.customerId === customer.id);
-      const customerPayments = payments.filter((p) => p.customerId === customer.id);
+      const customerJobs = scopedJobs.filter((j) => j.customerId === customer.id);
 
       const totalNet = customerJobs.reduce((sum, j) => sum + getJobNetValue(j), 0);
       const totalCommission = customerJobs.reduce(
         (sum, j) => sum + (Number(j.commissionAmount) || 0),
         0
       );
+      const finalBill = totalNet + totalCommission;
       const paidFromJobs = customerJobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
-      const paidFromPayments = customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-      const balance = calculateCustomerBalance(jobs, payments, customer.id);
+      const balance = finalBill - paidFromJobs;
 
       return {
         ...customer,
         ourIncome: totalNet,
         commission: totalCommission,
-        finalBill: totalNet + totalCommission,
-        paidAmount: paidFromJobs + paidFromPayments,
+        finalBill,
+        paidAmount: paidFromJobs,
         balance,
         advance: customer.advanceBalance || 0,
       };
     });
-  }, [customers, jobs, payments]);
+  }, [customers, scopedJobs]);
 
   // Filter by type if selected, and show only customers with non-zero balance or advance
   const filteredByType = typeFilter
-    ? customersWithBalances.filter((c) => c.type === typeFilter && (c.balance !== 0 || c.advance > 0))
-    : customersWithBalances.filter((c) => c.balance !== 0 || c.advance > 0);
+    ? customersWithBalances.filter((c) => c.type === typeFilter && (c.balance !== 0 || c.advance > 0 || c.ourIncome > 0))
+    : customersWithBalances.filter((c) => c.balance !== 0 || c.advance > 0 || c.ourIncome > 0);
 
   const filtered = customerFilter.trim()
     ? filteredByType.filter((c) =>
@@ -115,6 +126,7 @@ export function CustomerBalancesTable() {
     {
       key: 'balance',
       label: 'Balance',
+      sortable: true,
       render: (value) => {
         const balance = value as number;
         const className = balance > 0 ? 'balance-positive' : balance < 0 ? 'balance-negative' : '';
@@ -138,58 +150,30 @@ export function CustomerBalancesTable() {
 
   return (
     <div className="customer-balances">
-      <div className="balances-header">
-        <div className="balances-title-wrap">
-          <h3 className="balances-title">Open Customer Positions</h3>
-          <p className="balances-subtitle">Showing customers with non-zero balance or advance.</p>
-        </div>
-        <div className="type-filters">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Filter customer name..."
-            value={customerFilter}
-            onChange={(e) => setCustomerFilter(e.target.value)}
-          />
-          <div className="type-filter-buttons">
-            <button
-              className={`filter-btn ${!typeFilter ? 'active' : ''}`}
-              onClick={() => setTypeFilter(null)}
-              type="button"
-            >
-              All Types
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Monthly' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Monthly')}
-              type="button"
-            >
-              Monthly
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Invoice' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Invoice')}
-              type="button"
-            >
-              Invoice
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Party-Credit' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Party-Credit')}
-              type="button"
-            >
-              Party-Credit
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Cash' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Cash')}
-              type="button"
-            >
-              Cash
-            </button>
+      {showFilters && (
+        <div className="balances-header">
+          <div className="balances-title-wrap">
+            <h3 className="balances-title">Open Customer Positions</h3>
+            <p className="balances-subtitle">Showing customers with non-zero balance or advance.</p>
+          </div>
+          <div className="type-filters">
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Filter customer name..."
+              value={customerFilter}
+              onChange={(e) => setCustomerFilter(e.target.value)}
+            />
+            <div className="type-filter-buttons">
+              <button className={`filter-btn ${!typeFilter ? 'active' : ''}`} onClick={() => setTypeFilter(null)} type="button">All Types</button>
+              <button className={`filter-btn ${typeFilter === 'Monthly' ? 'active' : ''}`} onClick={() => setTypeFilter('Monthly')} type="button">Pay by month</button>
+              <button className={`filter-btn ${typeFilter === 'Invoice' ? 'active' : ''}`} onClick={() => setTypeFilter('Invoice')} type="button">Pay by Invoice</button>
+              <button className={`filter-btn ${typeFilter === 'Party-Credit' ? 'active' : ''}`} onClick={() => setTypeFilter('Party-Credit')} type="button">Party-Credit</button>
+              <button className={`filter-btn ${typeFilter === 'Cash' ? 'active' : ''}`} onClick={() => setTypeFilter('Cash')} type="button">Cash</button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="balances-summary">
         <div className="summary-stat">

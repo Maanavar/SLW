@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
+import { CustomerBalancesTable } from './dashboard/CustomerBalancesTable';
 import {
   calculateRevenueMetrics,
   calculatePaymentMetrics,
@@ -27,7 +28,7 @@ import {
 } from '@/lib/financeUtils';
 import './FinanceReports.css';
 
-type ReportTab = 'revenue' | 'payments' | 'commission' | 'customers' | 'methods' | 'ageing' | 'cashflow';
+type ReportTab = 'revenue' | 'payments' | 'commission' | 'customers' | 'methods' | 'ageing' | 'cashflow' | 'balances';
 
 type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all' | 'range';
 
@@ -127,8 +128,8 @@ export function FinanceReports() {
   );
 
   const customerFinancials = useMemo(
-    () => calculateCustomerFinancials(jobs, payments, customers),
-    [jobs, payments, customers]
+    () => calculateCustomerFinancials(jobs, payments, customers, dateRange),
+    [jobs, payments, customers, dateRange]
   );
 
   const paymentMethodBreakdown = useMemo(
@@ -161,6 +162,7 @@ export function FinanceReports() {
             (p) => (
               <button
                 key={p}
+                type="button"
                 className={`period-btn ${period === p ? 'active' : ''}`}
                 onClick={() => setPeriod(p)}
               >
@@ -197,59 +199,26 @@ export function FinanceReports() {
 
       {/* Report Tabs */}
       <div className="report-tabs">
-        <button
-          className={`tab-btn ${activeTab === 'revenue' ? 'active' : ''}`}
-          onClick={() => setActiveTab('revenue')}
-        >
-          Revenue & Profit
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'payments' ? 'active' : ''}`}
-          onClick={() => setActiveTab('payments')}
-        >
-          Payments
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'commission' ? 'active' : ''}`}
-          onClick={() => setActiveTab('commission')}
-        >
-          Commission
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
-          onClick={() => setActiveTab('customers')}
-        >
-          Customers
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'methods' ? 'active' : ''}`}
-          onClick={() => setActiveTab('methods')}
-        >
-          Methods
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'ageing' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ageing')}
-        >
-          Ageing
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'cashflow' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cashflow')}
-        >
-          Cashflow
-        </button>
+        <button type="button" className={`tab-btn ${activeTab === 'revenue' ? 'active' : ''}`} onClick={() => setActiveTab('revenue')}>Revenue & Profit</button>
+        <button type="button" className={`tab-btn ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>Payments</button>
+        <button type="button" className={`tab-btn ${activeTab === 'commission' ? 'active' : ''}`} onClick={() => setActiveTab('commission')}>Commission</button>
+        <button type="button" className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}>Customers</button>
+        <button type="button" className={`tab-btn ${activeTab === 'methods' ? 'active' : ''}`} onClick={() => setActiveTab('methods')}>Methods</button>
+        <button type="button" className={`tab-btn ${activeTab === 'ageing' ? 'active' : ''}`} onClick={() => setActiveTab('ageing')}>Ageing</button>
+        <button type="button" className={`tab-btn ${activeTab === 'balances' ? 'active' : ''}`} onClick={() => setActiveTab('balances')}>Customer Balance</button>
+        <button type="button" className={`tab-btn ${activeTab === 'cashflow' ? 'active' : ''}`} onClick={() => setActiveTab('cashflow')}>Cashflow</button>
       </div>
 
       {/* Report Content */}
       <div className="report-content">
-        {activeTab === 'revenue' && <RevenueReport metrics={revenueMetrics} />}
+        {activeTab === 'revenue' && <RevenueReport metrics={revenueMetrics} dateRange={dateRange} />}
         {activeTab === 'payments' && <PaymentReport metrics={paymentMetrics} />}
         {activeTab === 'commission' && <CommissionReport metrics={commissionMetrics} workers={workerCommissionSummary} />}
         {activeTab === 'customers' && <CustomerReport customers={customerFinancials} />}
         {activeTab === 'methods' && <PaymentMethodReport breakdown={paymentMethodBreakdown} />}
         {activeTab === 'ageing' && <AgeingReport buckets={outstandingAgeing} />}
         {activeTab === 'cashflow' && <CashFlowReport flows={dailyCashFlow} />}
+        {activeTab === 'balances' && <CustomerBalancesTable showFilters={false} dateRange={dateRange} />}
       </div>
     </div>
   );
@@ -259,7 +228,16 @@ export function FinanceReports() {
 // REVENUE & PROFIT REPORT
 // ============================================================================
 
-function RevenueReport({ metrics }: { metrics: RevenueMetrics }) {
+function daysInDateRange(dateRange: DateRange | undefined): number {
+  if (!dateRange) return 1;
+  const from = new Date(`${dateRange.from}T00:00:00`);
+  const to   = new Date(`${dateRange.to}T00:00:00`);
+  return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1);
+}
+
+function RevenueReport({ metrics, dateRange }: { metrics: RevenueMetrics; dateRange: DateRange | undefined }) {
+  const days  = daysInDateRange(dateRange);
+  const weeks = Math.max(1, Math.round(days / 7));
   return (
     <div className="report-section">
       <h2>Revenue & Profit Analysis</h2>
@@ -314,6 +292,26 @@ function RevenueReport({ metrics }: { metrics: RevenueMetrics }) {
                 {formatCurrency(metrics.jobCount > 0 ? metrics.grossProfit / metrics.jobCount : 0)}
               </td>
             </tr>
+            <tr>
+              <td>Average Revenue / Day</td>
+              <td className="value">{formatCurrency(metrics.totalRevenue / days)}</td>
+            </tr>
+            <tr>
+              <td>Average Profit / Day</td>
+              <td className="value">{formatCurrency(metrics.grossProfit / days)}</td>
+            </tr>
+            {days > 7 && (
+              <tr>
+                <td>Average Revenue / Week</td>
+                <td className="value">{formatCurrency(metrics.totalRevenue / weeks)}</td>
+              </tr>
+            )}
+            {days > 7 && (
+              <tr>
+                <td>Average Profit / Week</td>
+                <td className="value">{formatCurrency(metrics.grossProfit / weeks)}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -396,7 +394,7 @@ function CommissionReport({
 
       {workers.length > 0 && (
         <>
-          <h3 style={{ marginTop: '2rem' }}>Worker-wise Breakdown</h3>
+          <h3 className="section-subheading">Worker-wise Breakdown</h3>
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
@@ -492,7 +490,7 @@ function PaymentMethodReport({ breakdown }: { breakdown: PaymentMethodBreakdown[
               <div className="method-name">{method.method}</div>
               <div className="method-amount">{formatCurrency(method.amount)}</div>
               <div className="method-bar">
-                <div className="method-fill" style={{ width: `${method.percentage}%` }}></div>
+                <div className="method-fill" style={{ '--bar-width': `${method.percentage}%` } as React.CSSProperties}></div>
               </div>
               <div className="method-details">
                 <span>{method.percentage.toFixed(1)}%</span>
@@ -533,7 +531,7 @@ function AgeingReport({ buckets }: { buckets: AgeingBucket[] }) {
               <div className="ageing-range">{bucket.range}</div>
               <div className="ageing-amount">{formatCurrency(bucket.amount)}</div>
               <div className="ageing-bar">
-                <div className="ageing-fill" style={{ width: `${bucket.percentage}%` }}></div>
+                <div className="ageing-fill" style={{ '--bar-width': `${bucket.percentage}%` } as React.CSSProperties}></div>
               </div>
               <div className="ageing-details">
                 <span>{bucket.percentage.toFixed(1)}%</span>

@@ -52,12 +52,29 @@ interface ExportFields {
   paid: boolean;
   dcNo: boolean;
   dcDate: boolean;
+  vehicleNo: boolean;
+}
+
+interface ExportSummaryFields {
+  totalCards: boolean;
+  totalBill: boolean;
+  totalNet: boolean;
+  totalPaid: boolean;
+  totalPending: boolean;
 }
 
 const DEFAULT_EXPORT_FIELDS: ExportFields = {
   cardId: true, date: true, customer: true, workType: true,
   quantity: true, amount: true, commission: false, paid: true,
-  dcNo: true, dcDate: true,
+  dcNo: true, dcDate: true, vehicleNo: true,
+};
+
+const DEFAULT_EXPORT_SUMMARY_FIELDS: ExportSummaryFields = {
+  totalCards: true,
+  totalBill: true,
+  totalNet: true,
+  totalPaid: true,
+  totalPending: true,
 };
 
 const PERIOD_TABS: { mode: PeriodMode; label: string }[] = [
@@ -92,14 +109,79 @@ function formatShortDate(dateStr: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
+function computeOffsetPeriod(
+  mode: Exclude<PeriodMode, 'day' | 'all' | 'range'>,
+  offset: number
+): { from: string; to: string; label: string } {
+  const now = new Date();
+  const todayStr = getLocalDateString(now);
+
+  if (mode === 'week') {
+    const dow = now.getDay();
+    const daysToMon = (dow + 6) % 7;
+    const wStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysToMon + offset * 7);
+    const wEnd   = new Date(wStart.getFullYear(), wStart.getMonth(), wStart.getDate() + 6);
+    const from   = getLocalDateString(wStart);
+    const to     = getLocalDateString(wEnd) > todayStr ? todayStr : getLocalDateString(wEnd);
+    const label  = `${formatShortDate(from)} – ${formatShortDate(to)}`;
+    return { from, to, label };
+  }
+
+  if (mode === 'month') {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const mStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const mEnd   = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const from   = getLocalDateString(mStart);
+    const to     = getLocalDateString(mEnd) > todayStr ? todayStr : getLocalDateString(mEnd);
+    const label  = mStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    return { from, to, label };
+  }
+
+  if (mode === 'quarter') {
+    const curQ = Math.floor(now.getMonth() / 3);
+    const totalQ = curQ + offset;
+    const yearOff = totalQ < 0 ? Math.floor(totalQ / 4) : Math.floor(totalQ / 4);
+    const q = ((totalQ % 4) + 4) % 4;
+    const yr = now.getFullYear() + yearOff;
+    const qStart = new Date(yr, q * 3, 1);
+    const qEnd   = new Date(yr, q * 3 + 3, 0);
+    const from   = getLocalDateString(qStart);
+    const to     = getLocalDateString(qEnd) > todayStr ? todayStr : getLocalDateString(qEnd);
+    const label  = `Q${q + 1} ${yr}`;
+    return { from, to, label };
+  }
+
+  if (mode === 'halfyear') {
+    const curH = Math.floor(now.getMonth() / 6);
+    const totalH = curH + offset;
+    const yearOff = totalH < 0 ? Math.floor(totalH / 2) : Math.floor(totalH / 2);
+    const h = ((totalH % 2) + 2) % 2;
+    const yr = now.getFullYear() + yearOff;
+    const hStart = new Date(yr, h * 6, 1);
+    const hEnd   = new Date(yr, h * 6 + 6, 0);
+    const from   = getLocalDateString(hStart);
+    const to     = getLocalDateString(hEnd) > todayStr ? todayStr : getLocalDateString(hEnd);
+    const label  = `H${h + 1} ${yr}`;
+    return { from, to, label };
+  }
+
+  // year
+  const yr = now.getFullYear() + offset;
+  const yStart = new Date(yr, 0, 1);
+  const yEnd   = new Date(yr, 11, 31);
+  const from   = getLocalDateString(yStart);
+  const to     = getLocalDateString(yEnd) > todayStr ? todayStr : getLocalDateString(yEnd);
+  return { from, to, label: String(yr) };
+}
+
 function computeDateRange(
-  mode: PeriodMode, selectedDate: string, rangeFrom: string, rangeTo: string
+  mode: PeriodMode, selectedDate: string, rangeFrom: string, rangeTo: string, offset: number
 ): { from?: string; to?: string } {
   if (mode === 'day')   return { from: selectedDate, to: selectedDate };
   if (mode === 'all')   return { from: undefined, to: undefined };
   if (mode === 'range') return { from: rangeFrom || undefined, to: rangeTo || undefined };
-  const r = getReportRange(mode as Parameters<typeof getReportRange>[0]);
-  return { from: r.from, to: r.to };
+  const { from, to } = computeOffsetPeriod(mode, offset);
+  return { from, to };
 }
 
 function downloadText(name: string, content: string, mime: string) {
@@ -126,13 +208,20 @@ export function RecordsScreen() {
 
   // — Period / date state
   const [periodMode, setPeriodMode]   = useState<PeriodMode>('day');
+  const [periodOffset, setPeriodOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
   const [rangeFrom, setRangeFrom]     = useState('');
   const [rangeTo, setRangeTo]         = useState(today);
 
+  const handleSetPeriodMode = (mode: PeriodMode) => {
+    setPeriodMode(mode);
+    setPeriodOffset(0);
+  };
+
   // — Filter state
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [paymentFilter, setPaymentFilter]           = useState<PaymentFilter>('all');
+  const [rmpHandlerFilter, setRmpHandlerFilter]     = useState<'Bhai' | 'Raja' | null>(null);
   const [viewMode, setViewMode]                     = useState<ViewMode>('table');
 
   // — Modal state
@@ -147,6 +236,9 @@ export function RecordsScreen() {
   const [showExportMenu, setShowExportMenu]     = useState(false);
   const [showExportFields, setShowExportFields] = useState(false);
   const [exportFields, setExportFields]         = useState<ExportFields>(DEFAULT_EXPORT_FIELDS);
+  const [exportSummaryFields, setExportSummaryFields] = useState<ExportSummaryFields>(
+    DEFAULT_EXPORT_SUMMARY_FIELDS
+  );
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Close export menu on outside click
@@ -164,18 +256,16 @@ export function RecordsScreen() {
   // ─── Date range ────────────────────────────────────────────────────────────
 
   const { from: rangeStart, to: rangeEnd } = useMemo(
-    () => computeDateRange(periodMode, selectedDate, rangeFrom, rangeTo),
-    [periodMode, selectedDate, rangeFrom, rangeTo]
+    () => computeDateRange(periodMode, selectedDate, rangeFrom, rangeTo, periodOffset),
+    [periodMode, selectedDate, rangeFrom, rangeTo, periodOffset]
   );
 
   const periodSubtitle = useMemo(() => {
     if (periodMode === 'day')   return null;
     if (periodMode === 'all')   return 'All records';
     if (periodMode === 'range') return rangeFrom && rangeTo ? `${rangeFrom} → ${rangeTo}` : 'Pick a date range below';
-    if (!rangeStart || !rangeEnd) return null;
-    const year = new Date(`${rangeEnd}T00:00:00`).getFullYear();
-    return `${formatShortDate(rangeStart)} – ${formatShortDate(rangeEnd)}, ${year}`;
-  }, [periodMode, rangeStart, rangeEnd, rangeFrom, rangeTo]);
+    return computeOffsetPeriod(periodMode, periodOffset).label;
+  }, [periodMode, periodOffset, rangeFrom, rangeTo]);
 
   const isToday = periodMode === 'day' && selectedDate === today;
 
@@ -225,15 +315,28 @@ export function RecordsScreen() {
     );
   }, [customerOptions, selectedCustomerId]);
 
+  const isRmpSelected = useMemo(() => {
+    if (!selectedCustomerId) return false;
+    const c = customers.find(x => x.id === selectedCustomerId);
+    if (!c) return false;
+    return (c.shortCode || '').toLowerCase() === 'rmp' ||
+           (c.name || '').toLowerCase().includes('ramani motors');
+  }, [selectedCustomerId, customers]);
+
   const jobsInRange = useMemo(
     () => getJobsInRange(jobs, rangeStart, rangeEnd),
     [jobs, rangeStart, rangeEnd]
   );
 
-  const jobsForCustomer = useMemo(
-    () => selectedCustomerId ? jobsInRange.filter(j => j.customerId === selectedCustomerId) : jobsInRange,
-    [jobsInRange, selectedCustomerId]
-  );
+  const jobsForCustomer = useMemo(() => {
+    let filtered = selectedCustomerId
+      ? jobsInRange.filter(j => j.customerId === selectedCustomerId)
+      : jobsInRange;
+    if (isRmpSelected && rmpHandlerFilter) {
+      filtered = filtered.filter(j => j.rmpHandler === rmpHandlerFilter);
+    }
+    return filtered;
+  }, [jobsInRange, selectedCustomerId, isRmpSelected, rmpHandlerFilter]);
 
   const groupedJobs = useMemo(() =>
     groupJobsByCard(jobsForCustomer)
@@ -270,14 +373,18 @@ export function RecordsScreen() {
     [groupedJobs, getCustomer]
   );
 
-  const summary = useMemo(() => ({
-    totalCards:      rows.length,
-    totalBill:       rows.reduce((s, r) => s + r.finalBill,  0),
-    totalNet:        rows.reduce((s, r) => s + r.ourNet,     0),
-    totalPaid:       rows.reduce((s, r) => s + r.paid,       0),
-    totalPending:    rows.reduce((s, r) => s + r.pending,    0),
-    totalCommission: rows.reduce((s, r) => s + r.commission, 0),
-  }), [rows]);
+  const summary = useMemo(() => {
+    const totalCards      = rows.length;
+    const totalBill       = rows.reduce((s, r) => s + r.finalBill,  0);
+    const totalNet        = rows.reduce((s, r) => s + r.ourNet,     0);
+    const totalPaid       = rows.reduce((s, r) => s + r.paid,       0);
+    const totalPending    = rows.reduce((s, r) => s + r.pending,    0);
+    const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+    const uniqueDates = new Set(groupedJobs.flatMap(g => g.jobs.map(j => j.date)));
+    const workDays = uniqueDates.size;
+    const avgPerDay = workDays > 0 ? totalNet / workDays : 0;
+    return { totalCards, totalBill, totalNet, totalPaid, totalPending, totalCommission, workDays, avgPerDay };
+  }, [rows, groupedJobs]);
 
   const receivedBreakdown = useMemo<PaymentBreakdown>(() => {
     const bd: PaymentBreakdown = { cash: 0, upi: 0, bank: 0, cheque: 0 };
@@ -295,6 +402,47 @@ export function RecordsScreen() {
 
   const hasReceivedBreakdown = Boolean(
     receivedBreakdown.cash || receivedBreakdown.upi || receivedBreakdown.bank || receivedBreakdown.cheque
+  );
+
+  const exportSummaryMetrics = useMemo(
+    () => [
+      {
+        key: 'totalCards' as const,
+        label: 'Job Cards',
+        value: String(summary.totalCards),
+        cssClass: 'n',
+      },
+      {
+        key: 'totalBill' as const,
+        label: 'Final Bill',
+        value: formatCurrency(summary.totalBill),
+        cssClass: '',
+      },
+      {
+        key: 'totalNet' as const,
+        label: 'Net Income',
+        value: formatCurrency(summary.totalNet),
+        cssClass: '',
+      },
+      {
+        key: 'totalPaid' as const,
+        label: 'Received',
+        value: formatCurrency(summary.totalPaid),
+        cssClass: 'g',
+      },
+      {
+        key: 'totalPending' as const,
+        label: 'Outstanding',
+        value: formatCurrency(summary.totalPending),
+        cssClass: summary.totalPending > 0 ? 'r' : 'g',
+      },
+    ],
+    [summary.totalCards, summary.totalBill, summary.totalNet, summary.totalPaid, summary.totalPending]
+  );
+
+  const selectedExportSummaryMetrics = useMemo(
+    () => exportSummaryMetrics.filter(metric => exportSummaryFields[metric.key]),
+    [exportSummaryMetrics, exportSummaryFields]
   );
 
   // ─── Modals ────────────────────────────────────────────────────────────────
@@ -328,12 +476,12 @@ export function RecordsScreen() {
     { key: 'date',          label: 'Date',       sortable: true },
     { key: 'jobCardId',     label: 'JobCard',    sortable: true },
     { key: 'customerName',  label: 'Customer',   sortable: true },
-    { key: 'workSummary',   label: 'Works',      render: v => String(v) },
+    { key: 'workSummary',   label: 'Works',      sortable: true, render: v => String(v) },
     { key: 'finalBill',     label: 'Final Bill', render: v => formatCurrency(v as number) },
     { key: 'commission',    label: 'Commission', render: v => formatCurrency(v as number) },
     { key: 'ourNet',        label: 'Our Net',    render: v => formatCurrency(v as number) },
     { key: 'paid',          label: 'Paid',       render: v => formatCurrency(v as number) },
-    { key: 'pending',       label: 'Pending',    render: v => formatCurrency(v as number) },
+    { key: 'pending',       label: 'Pending',    sortable: true, render: v => formatCurrency(v as number) },
     { key: 'paymentStatus', label: 'Status',     render: v => <StatusBadge status={v as string} /> },
   ];
 
@@ -349,6 +497,7 @@ export function RecordsScreen() {
           workType: job.workTypeName, quantity: job.quantity,
           amount: getJobNetValue(job), commission: job.commissionAmount || 0,
           paid: getJobPaidAmount(job), dcNo: job.dcNo || '-', dcDate: job.dcDate || '-',
+          vehicleNo: job.vehicleNo || '-',
         };
       })
     ),
@@ -356,7 +505,7 @@ export function RecordsScreen() {
   );
 
   function buildHeadersAndIndices() {
-    const headers: string[] = [];
+    const headers: string[] = ['S.No'];
     const keys: (keyof typeof reportRows[0])[] = [];
     if (exportFields.cardId)    { headers.push('Card ID');    keys.push('cardId'); }
     if (exportFields.date)      { headers.push('Date');       keys.push('date'); }
@@ -368,15 +517,28 @@ export function RecordsScreen() {
     if (exportFields.paid)      { headers.push('Paid');       keys.push('paid'); }
     if (exportFields.dcNo)      { headers.push('DC No');      keys.push('dcNo'); }
     if (exportFields.dcDate)    { headers.push('DC Date');    keys.push('dcDate'); }
+    if (exportFields.vehicleNo) { headers.push('Vehicle No'); keys.push('vehicleNo'); }
     return { headers, keys };
   }
 
   const handleExportCsv = () => {
     const { headers, keys } = buildHeadersAndIndices();
+    const summaryLines =
+      selectedExportSummaryMetrics.length > 0
+        ? [
+            '"Summary Metric","Value"',
+            ...selectedExportSummaryMetrics.map(
+              metric => `"${metric.label.replace(/"/g, '""')}","${metric.value.replace(/"/g, '""')}"`
+            ),
+            '',
+          ]
+        : [];
+
     const lines = [
+      ...summaryLines,
       headers.join(','),
-      ...reportRows.map(row =>
-        keys.map(k => `"${String(row[k] || '').replace(/"/g, '""')}"`).join(',')
+      ...reportRows.map((row, i) =>
+        [`"${i + 1}"`, ...keys.map(k => `"${String(row[k] || '').replace(/"/g, '""')}"`).join(',')].join(',')
       ),
     ];
     downloadText(`slw-records-${today}.csv`, lines.join('\n'), 'text/csv;charset=utf-8;');
@@ -386,9 +548,18 @@ export function RecordsScreen() {
   const handleExportPdf = () => {
     const { headers, keys } = buildHeadersAndIndices();
     const headerRow = headers.map(h => `<th>${h}</th>`).join('');
-    const bodyRows  = reportRows.map(row =>
-      `<tr>${keys.map(k => `<td>${row[k] ?? '-'}</td>`).join('')}</tr>`
+    const bodyRows  = reportRows.map((row, i) =>
+      `<tr><td>${i + 1}</td>${keys.map(k => `<td>${row[k] ?? '-'}</td>`).join('')}</tr>`
     ).join('');
+    const summaryGridHtml =
+      selectedExportSummaryMetrics.length > 0
+        ? `<div class="stats">${selectedExportSummaryMetrics
+            .map(
+              metric =>
+                `<div class="sc ${metric.cssClass}"><span>${metric.label}</span><strong>${metric.value}</strong></div>`
+            )
+            .join('')}</div>`
+        : '';
     const periodStr = periodSubtitle ?? (periodMode === 'day' ? formatDayLabel(selectedDate) : '');
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Siva Lathe Works – Job Records</title>
@@ -413,13 +584,7 @@ export function RecordsScreen() {
   @media print{body{background:#fff;padding:0}.wrap{box-shadow:none;padding:0}}
 </style></head><body><div class="wrap">
 <div class="hdr"><h1>Siva Lathe Works</h1><p class="sub">Job Records · ${periodStr} · Generated ${new Date().toLocaleDateString('en-IN',{year:'numeric',month:'long',day:'numeric'})}</p></div>
-<div class="stats">
-  <div class="sc n"><span>Job Cards</span><strong>${summary.totalCards}</strong></div>
-  <div class="sc"><span>Final Bill</span><strong>${formatCurrency(summary.totalBill)}</strong></div>
-  <div class="sc"><span>Net Income</span><strong>${formatCurrency(summary.totalNet)}</strong></div>
-  <div class="sc g"><span>Received</span><strong>${formatCurrency(summary.totalPaid)}</strong></div>
-  <div class="sc r"><span>Outstanding</span><strong>${formatCurrency(summary.totalPending)}</strong></div>
-</div>
+${summaryGridHtml}
 <table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>
 <div class="foot">Generated ${new Date().toLocaleString('en-IN')} · Siva Lathe Works</div>
 </div></body></html>`;
@@ -433,14 +598,11 @@ export function RecordsScreen() {
   };
 
   const handleExportWhatsApp = () => {
-    const text = [
-      `SLW Records (${periodSubtitle ?? formatDayLabel(selectedDate)})`,
-      `Job Cards: ${summary.totalCards}`,
-      `Final Bill: ${formatCurrency(summary.totalBill)}`,
-      `Net Income: ${formatCurrency(summary.totalNet)}`,
-      `Received: ${formatCurrency(summary.totalPaid)}`,
-      `Outstanding: ${formatCurrency(summary.totalPending)}`,
-    ].join('\n');
+    const lines = [`SLW Records (${periodSubtitle ?? formatDayLabel(selectedDate)})`];
+    selectedExportSummaryMetrics.forEach(metric => {
+      lines.push(`${metric.label}: ${metric.value}`);
+    });
+    const text = lines.join('\n');
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     setShowExportMenu(false);
   };
@@ -508,7 +670,7 @@ export function RecordsScreen() {
                 key={mode}
                 type="button"
                 className={`records-period-tab ${periodMode === mode ? 'active' : ''}`}
-                onClick={() => setPeriodMode(mode)}
+                onClick={() => handleSetPeriodMode(mode)}
               >
                 {label}
               </button>
@@ -593,8 +755,42 @@ export function RecordsScreen() {
           </div>
         )}
 
-        {periodMode !== 'day' && periodMode !== 'range' && periodSubtitle && (
-          <p className="records-period-subtitle">{periodSubtitle}</p>
+        {periodMode !== 'day' && periodMode !== 'range' && periodMode !== 'all' && (
+          <div className="records-day-nav">
+            <div className="records-day-nav-shell">
+              <button
+                type="button"
+                className="records-nav-btn"
+                onClick={() => setPeriodOffset(o => o - 1)}
+                aria-label="Previous period"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <span className="records-period-label">{periodSubtitle}</span>
+              <button
+                type="button"
+                className="records-nav-btn"
+                onClick={() => setPeriodOffset(o => o + 1)}
+                disabled={periodOffset >= 0}
+                aria-label="Next period"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            {periodOffset < 0 && (
+              <button type="button" className="records-today-btn" onClick={() => setPeriodOffset(0)}>
+                Current
+              </button>
+            )}
+          </div>
+        )}
+
+        {periodMode === 'all' && (
+          <p className="records-period-subtitle">All records</p>
         )}
       </div>
 
@@ -604,12 +800,30 @@ export function RecordsScreen() {
           <SearchableSelect<RecordCustomerOption>
             items={customerOptions}
             value={selectedCustomerOption}
-            onChange={item => setSelectedCustomerId(item.id === 0 ? null : item.id)}
+            onChange={item => {
+              setSelectedCustomerId(item.id === 0 ? null : item.id);
+              setRmpHandlerFilter(null);
+            }}
             getLabel={item => item.name}
             getKey={item => String(item.id)}
             getSearchText={item => `${item.name} ${item.shortCode || ''}`}
             placeholder="All Clients"
           />
+
+          {isRmpSelected && (
+            <div className="records-payment-filter">
+              {(['all', 'Bhai', 'Raja'] as const).map(h => (
+                <button
+                  key={h}
+                  type="button"
+                  className={`records-pf-btn ${(h === 'all' ? rmpHandlerFilter === null : rmpHandlerFilter === h) ? 'active' : ''}`}
+                  onClick={() => setRmpHandlerFilter(h === 'all' ? null : h)}
+                >
+                  {h === 'all' ? 'All' : h}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="records-payment-filter">
             {(['all', 'paid', 'unpaid'] as PaymentFilter[]).map(f => (
@@ -623,6 +837,7 @@ export function RecordsScreen() {
               </button>
             ))}
           </div>
+
         </div>
 
         <div className="records-filter-right">
@@ -718,6 +933,13 @@ export function RecordsScreen() {
             <span className="records-stat-label">Outstanding</span>
             <span className="records-stat-value">{formatCurrency(summary.totalPending)}</span>
           </div>
+          {summary.workDays > 1 && (
+            <div className="records-stat records-stat--slate">
+              <span className="records-stat-label">Avg / Day</span>
+              <span className="records-stat-value">{formatCurrency(summary.avgPerDay)}</span>
+              <span className="records-stat-sub">{summary.workDays} days</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -728,17 +950,75 @@ export function RecordsScreen() {
             <span>Select Export Fields</span>
             <button type="button" className="btn-text" onClick={() => setShowExportFields(false)}>Done</button>
           </div>
-          <div className="records-export-fields-grid">
-            {(Object.keys(exportFields) as (keyof ExportFields)[]).map(key => (
-              <label key={key} className="records-field-check">
+          <div className="records-export-fields-section">
+            <p className="records-export-fields-title">Row Columns</p>
+            <div className="records-export-fields-grid">
+              {(Object.keys(exportFields) as (keyof ExportFields)[]).map(key => (
+                <label key={key} className="records-field-check">
+                  <input
+                    type="checkbox"
+                    checked={exportFields[key]}
+                    onChange={e => setExportFields(prev => ({ ...prev, [key]: e.target.checked }))}
+                  />
+                  {key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="records-export-fields-section">
+            <p className="records-export-fields-title">Summary Metrics (Export Header)</p>
+            <div className="records-export-fields-grid">
+              <label className="records-field-check">
                 <input
                   type="checkbox"
-                  checked={exportFields[key]}
-                  onChange={e => setExportFields(prev => ({ ...prev, [key]: e.target.checked }))}
+                  checked={exportSummaryFields.totalCards}
+                  onChange={e =>
+                    setExportSummaryFields(prev => ({ ...prev, totalCards: e.target.checked }))
+                  }
                 />
-                {key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                Job Cards
               </label>
-            ))}
+              <label className="records-field-check">
+                <input
+                  type="checkbox"
+                  checked={exportSummaryFields.totalBill}
+                  onChange={e =>
+                    setExportSummaryFields(prev => ({ ...prev, totalBill: e.target.checked }))
+                  }
+                />
+                Final Bill
+              </label>
+              <label className="records-field-check">
+                <input
+                  type="checkbox"
+                  checked={exportSummaryFields.totalNet}
+                  onChange={e =>
+                    setExportSummaryFields(prev => ({ ...prev, totalNet: e.target.checked }))
+                  }
+                />
+                Net Income
+              </label>
+              <label className="records-field-check">
+                <input
+                  type="checkbox"
+                  checked={exportSummaryFields.totalPaid}
+                  onChange={e =>
+                    setExportSummaryFields(prev => ({ ...prev, totalPaid: e.target.checked }))
+                  }
+                />
+                Received
+              </label>
+              <label className="records-field-check">
+                <input
+                  type="checkbox"
+                  checked={exportSummaryFields.totalPending}
+                  onChange={e =>
+                    setExportSummaryFields(prev => ({ ...prev, totalPending: e.target.checked }))
+                  }
+                />
+                Outstanding
+              </label>
+            </div>
           </div>
         </div>
       )}

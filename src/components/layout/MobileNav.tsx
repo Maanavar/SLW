@@ -5,6 +5,7 @@ import './MobileNav.css';
 interface MobileNavItem {
   path: string;
   label: string;
+  mobileLabel?: string;
   icon: ReactNode;
 }
 
@@ -24,6 +25,7 @@ const navItems: MobileNavItem[] = [
   {
     path: '/dashboard',
     label: 'Dashboard',
+    mobileLabel: 'Dash',
     icon: (
       <svg {...iconProps}>
         <rect x="3" y="3" width="8" height="8" rx="2" />
@@ -60,6 +62,7 @@ const navItems: MobileNavItem[] = [
   {
     path: '/payments',
     label: 'Payments',
+    mobileLabel: 'Pay',
     icon: (
       <svg {...iconProps}>
         <path d="M12 2v20" />
@@ -70,6 +73,7 @@ const navItems: MobileNavItem[] = [
   {
     path: '/finance',
     label: 'Finance',
+    mobileLabel: 'Fin',
     icon: (
       <svg {...iconProps}>
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -82,6 +86,7 @@ const navItems: MobileNavItem[] = [
   {
     path: '/commission',
     label: 'Commission',
+    mobileLabel: 'Comm',
     icon: (
       <svg {...iconProps}>
         <circle cx="9" cy="8" r="2.5" />
@@ -95,6 +100,7 @@ const navItems: MobileNavItem[] = [
   {
     path: '/expenses',
     label: 'Expenses',
+    mobileLabel: 'Exp',
     icon: (
       <svg {...iconProps}>
         <circle cx="12" cy="12" r="9" />
@@ -106,6 +112,7 @@ const navItems: MobileNavItem[] = [
   {
     path: '/logger',
     label: 'Logger',
+    mobileLabel: 'Logs',
     icon: (
       <svg {...iconProps}>
         <path d="M4 4h16v16H4z" />
@@ -124,12 +131,14 @@ export function MobileNav() {
             <NavLink
               to={item.path}
               end={item.path === '/'}
+              title={item.label}
+              aria-label={item.label}
               className={({ isActive }) =>
                 `mobile-nav-link ${isActive ? 'active' : ''}`
               }
             >
               <span className="mobile-nav-icon">{item.icon}</span>
-              <span className="mobile-nav-label">{item.label}</span>
+              <span className="mobile-nav-label">{item.mobileLabel ?? item.label}</span>
             </NavLink>
           </li>
         ))}

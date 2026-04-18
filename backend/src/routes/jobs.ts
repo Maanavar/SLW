@@ -42,6 +42,7 @@ const createJobSchema = z.object({
   vehicleNo: z.string().trim().max(40).nullable().optional(),
   dcDate: localDateSchema.nullable().optional(),
   dcApproval: z.boolean().nullable().optional(),
+  rmpHandler: z.enum(['Bhai', 'Raja']).nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
 });
 

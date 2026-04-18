@@ -9,7 +9,7 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 720px;
+  min-width: 640px;
 }
 
 .table-header {
@@ -104,12 +104,24 @@
 
 @media (max-width: 768px) {
   .table {
-    min-width: 620px;
+    min-width: 520px;
   }
 
   .table-header,
   .table-cell {
     padding: 10px 8px;
     font-size: var(--text-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .table {
+    min-width: 460px;
+  }
+}
+
+@media (max-width: 400px) {
+  .table {
+    min-width: 400px;
   }
 }

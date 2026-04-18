@@ -2,16 +2,18 @@
   display: none;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 767px) {
   .mobile-nav {
     display: block;
     position: fixed;
-    left: 10px;
-    right: 10px;
-    bottom: 10px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
     z-index: 120;
+    min-height: var(--mobile-nav-height);
+    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
     border: 1px solid var(--border-color);
-    border-radius: 16px;
+    border-radius: 18px;
     background: var(--surface-glass);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
@@ -25,10 +27,22 @@
   .mobile-nav-list {
     list-style: none;
     margin: 0;
-    padding: 8px 6px;
+    padding: 8px;
+    height: 100%;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 4px;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(72px, 1fr);
+    align-items: stretch;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .mobile-nav-list::-webkit-scrollbar {
+    display: none;
   }
 
   .mobile-nav-item {
@@ -41,18 +55,31 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    min-height: 50px;
+    min-height: 100%;
+    padding: 6px 4px;
     text-decoration: none;
     color: var(--text-muted);
     border-radius: 10px;
+    scroll-snap-align: center;
     transition:
       background-color var(--transition-fast),
-      color var(--transition-fast);
+      color var(--transition-fast),
+      transform var(--transition-fast),
+      box-shadow var(--transition-fast);
   }
 
   .mobile-nav-link.active {
     color: var(--accent-primary);
     background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+  }
+
+  .mobile-nav-link:active {
+    transform: scale(0.96);
+  }
+
+  .mobile-nav-link:focus-visible {
+    border-color: var(--accent-primary);
   }
 
   .mobile-nav-icon {
@@ -64,8 +91,9 @@
   }
 
   .mobile-nav-label {
-    font-size: var(--text-caption2);
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.2px;
+    white-space: nowrap;
   }
 }

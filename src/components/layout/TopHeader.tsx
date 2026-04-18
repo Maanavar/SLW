@@ -135,7 +135,7 @@ export function TopHeader() {
 
         <div className="header-actions">
           <button
-            className="header-icon-button"
+            className="header-icon-button header-icon-button--sidebar"
             onClick={toggleSidebar}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             type="button"

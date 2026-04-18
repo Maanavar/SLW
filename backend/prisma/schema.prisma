@@ -81,6 +81,7 @@ model Job {
   vehicleNo        String?   @db.VarChar(40)
   dcDate           String?   @db.VarChar(10)
   dcApproval       Boolean?
+  rmpHandler       String?   @db.VarChar(20)
   notes            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
