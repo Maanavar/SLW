@@ -2,17 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
-import { DataTable, Column } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobsInRange, getReportRange, groupJobsByCard } from '@/lib/reportUtils';
+import { getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
 import { getJobCardPaymentSummary, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
 import type { PaymentBreakdown } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/Badge';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import '../customers/CustomersScreen.css';
 import './RecordsScreen.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -40,6 +38,14 @@ interface RecordRow {
   pending: number;
   paymentStatus: 'Paid' | 'Pending' | 'Partially Paid';
 }
+
+type RecordTableSortKey = 'customer' | 'lines' | 'finalBill' | 'status';
+
+const recordStatusOrder: Record<RecordRow['paymentStatus'], number> = {
+  Pending: 0,
+  'Partially Paid': 1,
+  Paid: 2,
+};
 
 interface ExportFields {
   cardId: boolean;
@@ -107,6 +113,13 @@ function formatDayLabel(dateStr: string): string {
 function formatShortDate(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function formatCardDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
 }
 
 function computeOffsetPeriod(
@@ -223,6 +236,7 @@ export function RecordsScreen() {
   const [paymentFilter, setPaymentFilter]           = useState<PaymentFilter>('all');
   const [rmpHandlerFilter, setRmpHandlerFilter]     = useState<'Bhai' | 'Raja' | null>(null);
   const [viewMode, setViewMode]                     = useState<ViewMode>('table');
+  const [tableSort, setTableSort]                   = useState<{ key: RecordTableSortKey; order: 'asc' | 'desc' } | null>(null);
 
   // — Modal state
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
@@ -385,6 +399,28 @@ export function RecordsScreen() {
     const avgPerDay = workDays > 0 ? totalNet / workDays : 0;
     return { totalCards, totalBill, totalNet, totalPaid, totalPending, totalCommission, workDays, avgPerDay };
   }, [rows, groupedJobs]);
+  const sortedTableRows = useMemo(() => {
+    if (!tableSort) return rows;
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
+    const direction = tableSort.order === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (tableSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * direction;
+      if (tableSort.key === 'lines') return (a.lineCount - b.lineCount) * direction;
+      if (tableSort.key === 'finalBill') return (a.finalBill - b.finalBill) * direction;
+      return (recordStatusOrder[a.paymentStatus] - recordStatusOrder[b.paymentStatus]) * direction;
+    });
+  }, [rows, tableSort]);
+  const toggleTableSort = (key: RecordTableSortKey) => {
+    setTableSort((prev) =>
+      prev && prev.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'finalBill' ? 'desc' : 'asc' }
+    );
+  };
+  const tableSortMark = (key: RecordTableSortKey) => {
+    if (!tableSort || tableSort.key !== key) return '↕';
+    return tableSort.order === 'asc' ? '↑' : '↓';
+  };
 
   const receivedBreakdown = useMemo<PaymentBreakdown>(() => {
     const bd: PaymentBreakdown = { cash: 0, upi: 0, bank: 0, cheque: 0 };
@@ -470,20 +506,7 @@ export function RecordsScreen() {
     }
   };
 
-  // ─── Table columns ─────────────────────────────────────────────────────────
-
-  const columns: Column<RecordRow>[] = [
-    { key: 'date',          label: 'Date',       sortable: true },
-    { key: 'jobCardId',     label: 'JobCard',    sortable: true },
-    { key: 'customerName',  label: 'Customer',   sortable: true },
-    { key: 'workSummary',   label: 'Works',      sortable: true, render: v => String(v) },
-    { key: 'finalBill',     label: 'Final Bill', render: v => formatCurrency(v as number) },
-    { key: 'commission',    label: 'Commission', render: v => formatCurrency(v as number) },
-    { key: 'ourNet',        label: 'Our Net',    render: v => formatCurrency(v as number) },
-    { key: 'paid',          label: 'Paid',       render: v => formatCurrency(v as number) },
-    { key: 'pending',       label: 'Pending',    sortable: true, render: v => formatCurrency(v as number) },
-    { key: 'paymentStatus', label: 'Status',     render: v => <StatusBadge status={v as string} /> },
-  ];
+  // columns defined inline in JSX
 
   // ─── Export ────────────────────────────────────────────────────────────────
 
@@ -609,266 +632,149 @@ ${summaryGridHtml}
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
+  const ChevL = () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+  const ChevR = () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+
   return (
-    <div className="customers-screen records-screen">
+    <div className="records-screen">
 
-      {/* ── Sticky Header ── */}
-      <div className="records-header">
-
-        {/* Row 1: Title + Actions */}
-        <div className="records-header-top">
-          <h2 className="screen-title">Job Records</h2>
-          <div className="records-header-actions">
-            {/* Export dropdown */}
-            <div className="records-export-wrap" ref={exportMenuRef}>
-              <button
-                type="button"
-                className="btn btn-secondary records-export-btn"
-                onClick={() => setShowExportMenu(v => !v)}
-              >
-                Export
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              {showExportMenu && (
-                <div className="records-export-menu">
-                  <button type="button" className="records-export-item" onClick={handleExportCsv}>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 5h6M4 7.5h6M4 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                    Export CSV
-                  </button>
-                  <button type="button" className="records-export-item" onClick={handleExportPdf}>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 4.5h3M4 7h6M4 9.5h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                    Export PDF
-                  </button>
-                  <button type="button" className="records-export-item" onClick={handleExportWhatsApp}>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 7c.5 2 4 2.5 4 .5 0-1-1-1.5-2-1.5s-2-.5-2-1.5c0-2 3.5-1.5 4 .5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                    Share WhatsApp
-                  </button>
-                  <div className="records-export-divider" />
-                  <button
-                    type="button"
-                    className="records-export-item records-export-item--muted"
-                    onClick={() => { setShowExportFields(v => !v); setShowExportMenu(false); }}
-                  >
-                    Configure Fields
-                  </button>
-                </div>
-              )}
-            </div>
-            <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>
-              + New JobCard
+      {/* ── Page header ── */}
+      <div className="records-pg-header">
+        <div>
+          <h1 className="records-pg-title">Records <span className="records-pg-title-ta tamil">பதிவுகள்</span></h1>
+          <p className="records-pg-desc">All job cards, filterable and exportable</p>
+        </div>
+        <div className="records-header-actions">
+          <div className="records-export-wrap" ref={exportMenuRef}>
+            <button type="button" className="btn btn-secondary records-export-btn" onClick={() => setShowExportMenu(v => !v)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
             </button>
-          </div>
-        </div>
-
-        {/* Row 2: Period Tabs */}
-        <div className="records-period-row">
-          <div className="records-period-tabs">
-            {PERIOD_TABS.map(({ mode, label }) => (
-              <button
-                key={mode}
-                type="button"
-                className={`records-period-tab ${periodMode === mode ? 'active' : ''}`}
-                onClick={() => handleSetPeriodMode(mode)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Row 3: Date context — day nav | range inputs | period subtitle */}
-        {periodMode === 'day' && (
-          <div className="records-day-nav">
-            <div className="records-day-nav-shell">
-              <button
-                type="button"
-                className="records-nav-btn"
-                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
-                aria-label="Previous day"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-
-              <input
-                id="records-date-input"
-                type="date"
-                className="records-date-input"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                max={today}
-                aria-label="Select date"
-              />
-
-              <button
-                type="button"
-                className="records-nav-btn"
-                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
-                disabled={selectedDate >= today}
-                aria-label="Next day"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-
-            {!isToday && (
-              <button type="button" className="records-today-btn" onClick={() => setSelectedDate(today)}>
-                Today
-              </button>
+            {showExportMenu && (
+              <div className="records-export-menu">
+                <button type="button" className="records-export-item" onClick={handleExportCsv}>Export CSV</button>
+                <button type="button" className="records-export-item" onClick={handleExportPdf}>Export PDF</button>
+                <button type="button" className="records-export-item" onClick={handleExportWhatsApp}>Share WhatsApp</button>
+                <div className="records-export-divider" />
+                <button type="button" className="records-export-item records-export-item--muted"
+                  onClick={() => { setShowExportFields(v => !v); setShowExportMenu(false); }}>
+                  Configure Fields
+                </button>
+              </div>
             )}
           </div>
-        )}
-
-        {periodMode === 'range' && (
-          <div className="records-range-inputs">
-            <div className="records-range-field">
-              <label className="records-range-label" htmlFor="rec-from">From</label>
-              <input
-                id="rec-from"
-                type="date"
-                className="records-range-date"
-                value={rangeFrom}
-                onChange={e => setRangeFrom(e.target.value)}
-                max={rangeTo || today}
-              />
-            </div>
-            <svg className="records-range-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <div className="records-range-field">
-              <label className="records-range-label" htmlFor="rec-to">To</label>
-              <input
-                id="rec-to"
-                type="date"
-                className="records-range-date"
-                value={rangeTo}
-                onChange={e => setRangeTo(e.target.value)}
-                min={rangeFrom}
-                max={today}
-              />
-            </div>
-          </div>
-        )}
-
-        {periodMode !== 'day' && periodMode !== 'range' && periodMode !== 'all' && (
-          <div className="records-day-nav">
-            <div className="records-day-nav-shell">
-              <button
-                type="button"
-                className="records-nav-btn"
-                onClick={() => setPeriodOffset(o => o - 1)}
-                aria-label="Previous period"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <span className="records-period-label">{periodSubtitle}</span>
-              <button
-                type="button"
-                className="records-nav-btn"
-                onClick={() => setPeriodOffset(o => o + 1)}
-                disabled={periodOffset >= 0}
-                aria-label="Next period"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-            {periodOffset < 0 && (
-              <button type="button" className="records-today-btn" onClick={() => setPeriodOffset(0)}>
-                Current
-              </button>
-            )}
-          </div>
-        )}
-
-        {periodMode === 'all' && (
-          <p className="records-period-subtitle">All records</p>
-        )}
+          <button type="button" className="btn btn-accent" onClick={() => navigate('/')}>
+            + New job card
+          </button>
+        </div>
       </div>
 
-      {/* ── Filter Bar ── */}
-      <div className="records-filter-bar">
-        <div className="records-filter-left">
+      {/* ── Unified toolbar ── */}
+      <div className="records-toolbar">
+        {/* Period tabs */}
+        <div className="records-period-tabs">
+          {PERIOD_TABS.map(({ mode, label }) => (
+            <button key={mode} type="button"
+              className={`records-period-tab${periodMode === mode ? ' active' : ''}`}
+              onClick={() => handleSetPeriodMode(mode)}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Day navigator (inline) */}
+        {periodMode === 'day' && (
+          <>
+            <div className="records-day-nav-shell">
+              <button type="button" className="records-nav-btn" onClick={() => setSelectedDate(shiftDate(selectedDate, -1))} aria-label="Previous day"><ChevL /></button>
+              <input id="records-date-input" type="date" className="records-date-input" value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)} max={today} aria-label="Select date" title="Select date" />
+              <button type="button" className="records-nav-btn" onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+                disabled={selectedDate >= today} aria-label="Next day"><ChevR /></button>
+            </div>
+            {!isToday && <button type="button" className="records-today-btn" onClick={() => setSelectedDate(today)}>Today</button>}
+          </>
+        )}
+
+        {/* Period navigator (inline) */}
+        {periodMode !== 'day' && periodMode !== 'range' && periodMode !== 'all' && (
+          <>
+            <div className="records-day-nav-shell">
+              <button type="button" className="records-nav-btn" onClick={() => setPeriodOffset(o => o - 1)} aria-label="Previous period"><ChevL /></button>
+              <span className="records-period-label">{periodSubtitle}</span>
+              <button type="button" className="records-nav-btn" onClick={() => setPeriodOffset(o => o + 1)}
+                disabled={periodOffset >= 0} aria-label="Next period"><ChevR /></button>
+            </div>
+            {periodOffset < 0 && <button type="button" className="records-today-btn" onClick={() => setPeriodOffset(0)}>Current</button>}
+          </>
+        )}
+
+        <div className="records-toolbar-sep" />
+
+        {/* Customer select */}
+        <div className="records-customer-select">
           <SearchableSelect<RecordCustomerOption>
             items={customerOptions}
             value={selectedCustomerOption}
-            onChange={item => {
-              setSelectedCustomerId(item.id === 0 ? null : item.id);
-              setRmpHandlerFilter(null);
-            }}
+            onChange={item => { setSelectedCustomerId(item.id === 0 ? null : item.id); setRmpHandlerFilter(null); }}
             getLabel={item => item.name}
             getKey={item => String(item.id)}
             getSearchText={item => `${item.name} ${item.shortCode || ''}`}
-            placeholder="All Clients"
+            placeholder="Search customer..."
           />
+        </div>
 
-          {isRmpSelected && (
-            <div className="records-payment-filter">
-              {(['all', 'Bhai', 'Raja'] as const).map(h => (
-                <button
-                  key={h}
-                  type="button"
-                  className={`records-pf-btn ${(h === 'all' ? rmpHandlerFilter === null : rmpHandlerFilter === h) ? 'active' : ''}`}
-                  onClick={() => setRmpHandlerFilter(h === 'all' ? null : h)}
-                >
-                  {h === 'all' ? 'All' : h}
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Payment filter */}
+        <div className="records-payment-filter">
+          {(['all', 'paid', 'unpaid'] as PaymentFilter[]).map(f => (
+            <button key={f} type="button"
+              className={`records-pf-btn${paymentFilter === f ? ' active' : ''}`}
+              onClick={() => setPaymentFilter(f)}>
+              {f === 'all' ? 'All' : f === 'paid' ? 'Paid' : 'Unpaid'}
+            </button>
+          ))}
+        </div>
 
+        {isRmpSelected && (
           <div className="records-payment-filter">
-            {(['all', 'paid', 'unpaid'] as PaymentFilter[]).map(f => (
-              <button
-                key={f}
-                type="button"
-                className={`records-pf-btn ${paymentFilter === f ? 'active' : ''}`}
-                onClick={() => setPaymentFilter(f)}
-              >
-                {f === 'all' ? 'All' : f === 'paid' ? 'Paid' : 'Unpaid'}
+            {(['all', 'Bhai', 'Raja'] as const).map(h => (
+              <button key={h} type="button"
+                className={`records-pf-btn${(h === 'all' ? rmpHandlerFilter === null : rmpHandlerFilter === h) ? ' active' : ''}`}
+                onClick={() => setRmpHandlerFilter(h === 'all' ? null : h)}>
+                {h === 'all' ? 'All' : h}
               </button>
             ))}
           </div>
+        )}
 
-        </div>
-
-        <div className="records-filter-right">
-          {rows.length > 0 && (
-            <span className="records-count">{rows.length} card{rows.length !== 1 ? 's' : ''}</span>
-          )}
+        {/* Right side: count + view toggle */}
+        <div className="records-toolbar-end">
+          {rows.length > 0 && <span className="records-count">{rows.length} card{rows.length !== 1 ? 's' : ''}</span>}
           <div className="records-view-toggle">
-            <button
-              type="button"
-              className={`records-view-btn ${viewMode === 'cards' ? 'active' : ''}`}
-              onClick={() => setViewMode('cards')}
-              title="Card view"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <rect x="0.5" y="0.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
-                <rect x="8"   y="0.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
-                <rect x="0.5" y="8"   width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
-                <rect x="8"   y="8"   width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
+            <button type="button" className={`records-view-btn${viewMode === 'cards' ? ' active' : ''}`}
+              onClick={() => setViewMode('cards')} title="Card view">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2"/>
+                <rect x="8" y="0.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2"/>
+                <rect x="0.5" y="8" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2"/>
+                <rect x="8" y="8" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2"/>
               </svg>
               Cards
             </button>
-            <button
-              type="button"
-              className={`records-view-btn ${viewMode === 'table' ? 'active' : ''}`}
-              onClick={() => setViewMode('table')}
-              title="Table view"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <rect x="0.5" y="0.5" width="13" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
-                <line x1="0.5" y1="4.5" x2="13.5" y2="4.5" stroke="currentColor" strokeWidth="1.25"/>
-                <line x1="0.5" y1="8.5" x2="13.5" y2="8.5" stroke="currentColor" strokeWidth="1.25"/>
+            <button type="button" className={`records-view-btn${viewMode === 'table' ? ' active' : ''}`}
+              onClick={() => setViewMode('table')} title="Table view">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="13" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                <line x1="0.5" y1="4.5" x2="13.5" y2="4.5" stroke="currentColor" strokeWidth="1.2"/>
+                <line x1="0.5" y1="8.5" x2="13.5" y2="8.5" stroke="currentColor" strokeWidth="1.2"/>
               </svg>
               Table
             </button>
@@ -876,78 +782,87 @@ ${summaryGridHtml}
         </div>
       </div>
 
-      {/* ── Summary Strip ── */}
+      {/* ── Range inputs (below toolbar, only for range mode) ── */}
+      {periodMode === 'range' && (
+        <div className="records-range-inputs">
+          <div className="records-range-field">
+            <label className="records-range-label" htmlFor="rec-from">From</label>
+            <input id="rec-from" type="date" className="records-range-date" value={rangeFrom}
+              onChange={e => setRangeFrom(e.target.value)} max={rangeTo || today} />
+          </div>
+          <svg className="records-range-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <div className="records-range-field">
+            <label className="records-range-label" htmlFor="rec-to">To</label>
+            <input id="rec-to" type="date" className="records-range-date" value={rangeTo}
+              onChange={e => setRangeTo(e.target.value)} min={rangeFrom} max={today} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Summary stats ── */}
       {rows.length > 0 && (
+        <>
         <div className="records-summary">
-          <div className="records-stat records-stat--blue">
-            <span className="records-stat-label">Job Cards</span>
+          <div className="records-stat">
+            <span className="records-stat-label">Cards</span>
             <span className="records-stat-value">{summary.totalCards}</span>
           </div>
-          <div
-            className={`records-stat records-stat--slate${summary.totalCommission > 0 ? ' records-stat--hoverable' : ''}`}
+          <div className={`records-stat${summary.totalCommission > 0 ? ' records-stat--hoverable' : ''}`}
             onMouseEnter={() => summary.totalCommission > 0 && setShowBillBreakdown(true)}
-            onMouseLeave={() => setShowBillBreakdown(false)}
-          >
-            <span className="records-stat-label">Final Bill</span>
+            onMouseLeave={() => setShowBillBreakdown(false)}>
+            <span className="records-stat-label">Total bill</span>
             <span className="records-stat-value">{formatCurrency(summary.totalBill)}</span>
             {summary.totalCommission > 0 && showBillBreakdown && (
               <div className="records-breakdown">
-                <div className="breakdown-header">Bill Breakdown</div>
+                <div className="breakdown-header">Bill breakdown</div>
                 <div className="breakdown-items">
-                  <div className="breakdown-item">
-                    <span className="breakdown-label">Net Income</span>
-                    <span className="breakdown-value">{formatCurrency(summary.totalNet)}</span>
-                  </div>
-                  <div className="breakdown-item">
-                    <span className="breakdown-label">Commission</span>
-                    <span className="breakdown-value">{formatCurrency(summary.totalCommission)}</span>
-                  </div>
+                  <div className="breakdown-item"><span className="breakdown-label">Net Income</span><span className="breakdown-value">{formatCurrency(summary.totalNet)}</span></div>
+                  <div className="breakdown-item"><span className="breakdown-label">Commission</span><span className="breakdown-value">{formatCurrency(summary.totalCommission)}</span></div>
                 </div>
               </div>
             )}
           </div>
-          <div className="records-stat records-stat--indigo">
-            <span className="records-stat-label">Net Income</span>
+          <div className="records-stat records-stat--green">
+            <span className="records-stat-label">Net income</span>
             <span className="records-stat-value">{formatCurrency(summary.totalNet)}</span>
           </div>
-          <div
-            className={`records-stat records-stat--green${hasReceivedBreakdown ? ' records-stat--hoverable' : ''}`}
+          <div className={`records-stat${hasReceivedBreakdown ? ' records-stat--hoverable' : ''}`}
             onMouseEnter={() => hasReceivedBreakdown && setShowReceivedBreakdown(true)}
-            onMouseLeave={() => setShowReceivedBreakdown(false)}
-          >
-            <span className="records-stat-label">Received</span>
+            onMouseLeave={() => setShowReceivedBreakdown(false)}>
+            <span className="records-stat-label">Paid</span>
             <span className="records-stat-value">{formatCurrency(summary.totalPaid)}</span>
             {hasReceivedBreakdown && showReceivedBreakdown && (
               <div className="records-breakdown">
-                <div className="breakdown-header">Payment Breakdown</div>
+                <div className="breakdown-header">Payment breakdown</div>
                 <div className="breakdown-items">
-                  {(receivedBreakdown.cash    || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Cash</span>   <span className="breakdown-value">₹{receivedBreakdown.cash!.toLocaleString('en-IN')}</span></div>}
-                  {(receivedBreakdown.upi     || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">UPI</span>    <span className="breakdown-value">₹{receivedBreakdown.upi!.toLocaleString('en-IN')}</span></div>}
-                  {(receivedBreakdown.bank    || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Bank</span>   <span className="breakdown-value">₹{receivedBreakdown.bank!.toLocaleString('en-IN')}</span></div>}
-                  {(receivedBreakdown.cheque  || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Cheque</span> <span className="breakdown-value">₹{receivedBreakdown.cheque!.toLocaleString('en-IN')}</span></div>}
+                  {(receivedBreakdown.cash   || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Cash</span>  <span className="breakdown-value">{formatCurrency(receivedBreakdown.cash!)}</span></div>}
+                  {(receivedBreakdown.upi    || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">UPI</span>   <span className="breakdown-value">{formatCurrency(receivedBreakdown.upi!)}</span></div>}
+                  {(receivedBreakdown.bank   || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Bank</span>  <span className="breakdown-value">{formatCurrency(receivedBreakdown.bank!)}</span></div>}
+                  {(receivedBreakdown.cheque || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Cheque</span><span className="breakdown-value">{formatCurrency(receivedBreakdown.cheque!)}</span></div>}
                 </div>
               </div>
             )}
           </div>
           <div className="records-stat records-stat--red">
-            <span className="records-stat-label">Outstanding</span>
+            <span className="records-stat-label">Pending</span>
             <span className="records-stat-value">{formatCurrency(summary.totalPending)}</span>
           </div>
-          {summary.workDays > 1 && (
-            <div className="records-stat records-stat--slate">
-              <span className="records-stat-label">Avg / Day</span>
-              <span className="records-stat-value">{formatCurrency(summary.avgPerDay)}</span>
-              <span className="records-stat-sub">{summary.workDays} days</span>
-            </div>
-          )}
         </div>
+        {summary.workDays > 1 && (
+          <p className="records-avg-caption">
+            Avg {formatCurrency(summary.avgPerDay)}/day · {summary.workDays} working days
+          </p>
+        )}
+        </>
       )}
 
       {/* ── Export field selector ── */}
       {showExportFields && (
         <div className="records-export-fields">
           <div className="records-export-fields-header">
-            <span>Select Export Fields</span>
+            <span>Configure export fields</span>
             <button type="button" className="btn-text" onClick={() => setShowExportFields(false)}>Done</button>
           </div>
           <div className="records-export-fields-section">
@@ -955,160 +870,185 @@ ${summaryGridHtml}
             <div className="records-export-fields-grid">
               {(Object.keys(exportFields) as (keyof ExportFields)[]).map(key => (
                 <label key={key} className="records-field-check">
-                  <input
-                    type="checkbox"
-                    checked={exportFields[key]}
-                    onChange={e => setExportFields(prev => ({ ...prev, [key]: e.target.checked }))}
-                  />
+                  <input type="checkbox" checked={exportFields[key]}
+                    onChange={e => setExportFields(prev => ({ ...prev, [key]: e.target.checked }))} />
                   {key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
                 </label>
               ))}
             </div>
           </div>
           <div className="records-export-fields-section">
-            <p className="records-export-fields-title">Summary Metrics (Export Header)</p>
+            <p className="records-export-fields-title">Summary Metrics</p>
             <div className="records-export-fields-grid">
-              <label className="records-field-check">
-                <input
-                  type="checkbox"
-                  checked={exportSummaryFields.totalCards}
-                  onChange={e =>
-                    setExportSummaryFields(prev => ({ ...prev, totalCards: e.target.checked }))
-                  }
-                />
-                Job Cards
-              </label>
-              <label className="records-field-check">
-                <input
-                  type="checkbox"
-                  checked={exportSummaryFields.totalBill}
-                  onChange={e =>
-                    setExportSummaryFields(prev => ({ ...prev, totalBill: e.target.checked }))
-                  }
-                />
-                Final Bill
-              </label>
-              <label className="records-field-check">
-                <input
-                  type="checkbox"
-                  checked={exportSummaryFields.totalNet}
-                  onChange={e =>
-                    setExportSummaryFields(prev => ({ ...prev, totalNet: e.target.checked }))
-                  }
-                />
-                Net Income
-              </label>
-              <label className="records-field-check">
-                <input
-                  type="checkbox"
-                  checked={exportSummaryFields.totalPaid}
-                  onChange={e =>
-                    setExportSummaryFields(prev => ({ ...prev, totalPaid: e.target.checked }))
-                  }
-                />
-                Received
-              </label>
-              <label className="records-field-check">
-                <input
-                  type="checkbox"
-                  checked={exportSummaryFields.totalPending}
-                  onChange={e =>
-                    setExportSummaryFields(prev => ({ ...prev, totalPending: e.target.checked }))
-                  }
-                />
-                Outstanding
-              </label>
+              {([
+                ['totalCards',   'Job Cards'],
+                ['totalBill',    'Final Bill'],
+                ['totalNet',     'Net Income'],
+                ['totalPaid',    'Received'],
+                ['totalPending', 'Outstanding'],
+              ] as [keyof ExportSummaryFields, string][]).map(([key, label]) => (
+                <label key={key} className="records-field-check">
+                  <input type="checkbox" checked={exportSummaryFields[key]}
+                    onChange={e => setExportSummaryFields(prev => ({ ...prev, [key]: e.target.checked }))} />
+                  {label}
+                </label>
+              ))}
             </div>
           </div>
         </div>
       )}
 
       {/* ── Content ── */}
-      <div className="screen-content">
-        {viewMode === 'cards' ? (
-          rows.length > 0 ? (
-            <div className="records-cards-grid">
-              {rows.map(row => (
-                <div
-                  key={row.id}
-                  className={`records-card ${getCardStatusClass(row.paymentStatus)}`}
-                  onClick={() => setSelectedCardKey(row.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(row.id); } }}
-                >
-                  <div className="records-card-header">
-                    <div className="records-card-title-group">
-                      <h3 className="records-card-title">{row.customerName}</h3>
-                      <div className="records-card-meta">
-                        <span className="records-card-id">{row.jobCardId}</span>
-                        <span className="records-card-dot" />
-                        <span className="records-card-date">{row.date}</span>
-                        <span className="records-card-dot" />
-                        <span className="records-card-lines">{row.lineCount} line{row.lineCount !== 1 ? 's' : ''}</span>
-                      </div>
-                    </div>
-                    <StatusBadge status={row.paymentStatus} />
-                  </div>
-
-                  {row.workSummary && (
-                    <div className="records-card-tags">
-                      {row.workSummary.split(', ').map(tag => (
-                        <span key={tag} className="records-card-tag">{tag}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="records-card-financials">
-                    <div className="records-card-fin">
-                      <span className="records-card-fin-label">Final Bill</span>
-                      <span className="records-card-fin-value">{formatCurrency(row.finalBill)}</span>
-                    </div>
-                    <div className="records-card-fin">
-                      <span className="records-card-fin-label">Our Net</span>
-                      <span className="records-card-fin-value records-card-fin-value--net">{formatCurrency(row.ourNet)}</span>
-                    </div>
-                    <div className="records-card-fin">
-                      <span className="records-card-fin-label">Paid</span>
-                      <span className="records-card-fin-value records-card-fin-value--paid">{formatCurrency(row.paid)}</span>
-                    </div>
-                    <div className="records-card-fin">
-                      <span className="records-card-fin-label">Pending</span>
-                      <span className="records-card-fin-value records-card-fin-value--pending">{formatCurrency(row.pending)}</span>
-                    </div>
+      {viewMode === 'cards' ? (
+        rows.length > 0 ? (
+          <div className="records-cards-grid">
+            {rows.map(row => (
+              <div key={row.id} className={`records-card ${getCardStatusClass(row.paymentStatus)}`}
+                onClick={() => setSelectedCardKey(row.id)} role="button" tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(row.id); } }}>
+                {/* ID row + badge */}
+                <div className="rc-top">
+                  <span className="rc-id">{row.jobCardId}</span>
+                  <StatusBadge status={row.paymentStatus} />
+                </div>
+                {/* Customer + meta */}
+                <div className="rc-body">
+                  <div className="rc-customer">{row.customerName}</div>
+                  <div className="rc-meta">
+                    {formatCardDate(row.date)}
+                    {row.workSummary && (() => {
+                      const wt = row.workSummary.split(', ').filter(Boolean);
+                      return <> · {wt.length > 1 ? `${wt[0]} +${wt.length - 1}` : wt[0]}</>;
+                    })()}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="records-empty">
-              <svg className="records-empty-icon" viewBox="0 0 48 48" fill="none">
-                <rect x="8" y="6" width="32" height="36" rx="4" stroke="currentColor" strokeWidth="2"/>
-                <line x1="15" y1="16" x2="33" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="15" y1="23" x2="33" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="15" y1="30" x2="24" y2="30" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              <p className="records-empty-title">No job cards found</p>
-              <p className="records-empty-sub">
-                {periodMode === 'day' ? 'No cards for this date.' : 'Nothing matches your filters.'} Try adjusting the period or filters.
-              </p>
-              <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>
-                + New JobCard
-              </button>
-            </div>
-          )
+                {/* Financial rows */}
+                <div className="rc-financials">
+                  <div className="rc-fin-row">
+                    <span className="rc-fin-label">Final bill</span>
+                    <span className="rc-fin-val">{formatCurrency(row.finalBill)}</span>
+                  </div>
+                  <div className="rc-fin-row">
+                    <span className="rc-fin-label">Paid</span>
+                    <span className="rc-fin-val rc-fin-paid">{formatCurrency(row.paid)}</span>
+                  </div>
+                  {row.pending > 0 && (
+                    <div className="rc-fin-row">
+                      <span className="rc-fin-label">Pending</span>
+                      <span className="rc-fin-val rc-fin-pending">{formatCurrency(row.pending)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
-          <DataTable<RecordRow>
-            columns={columns}
-            data={rows}
-            keyFn={item => item.id}
-            sortBy="date"
-            sortOrder="desc"
-            onRowClick={row => setSelectedCardKey(row.id)}
-            emptyMessage="No job cards found for the selected filters"
-          />
-        )}
-      </div>
+          <div className="records-empty">
+            <svg className="records-empty-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <rect x="8" y="6" width="32" height="36" rx="4" stroke="currentColor" strokeWidth="2"/>
+              <line x1="15" y1="16" x2="33" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="15" y1="23" x2="33" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="15" y1="30" x2="24" y2="30" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <p className="records-empty-title">No job cards found</p>
+            <p className="records-empty-sub">{periodMode === 'day' ? 'No cards for this date.' : 'Nothing matches your filters.'} Try adjusting the period or filters.</p>
+            <button type="button" className="btn btn-accent" onClick={() => navigate('/')}>+ New job card</button>
+          </div>
+        )
+      ) : (
+        <div className="records-table-wrap">
+          <table className="records-table">
+            <thead>
+              <tr>
+                <th>CARD</th>
+                <th>DATE</th>
+                <th
+                  className={`slw-sortable-th${tableSort?.key === 'customer' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('customer')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('customer'); } }}
+                >
+                  CUSTOMER {tableSortMark('customer')}
+                </th>
+                <th
+                  className={`slw-sortable-th${tableSort?.key === 'lines' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('lines')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('lines'); } }}
+                >
+                  LINES {tableSortMark('lines')}
+                </th>
+                <th
+                  className={`numeric slw-sortable-th${tableSort?.key === 'finalBill' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('finalBill')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('finalBill'); } }}
+                >
+                  FINAL BILL {tableSortMark('finalBill')}
+                </th>
+                <th className="numeric">COMMISSION</th>
+                <th className="numeric">PAID</th>
+                <th className="numeric">PENDING</th>
+                <th
+                  className={`slw-sortable-th${tableSort?.key === 'status' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('status')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('status'); } }}
+                >
+                  STATUS {tableSortMark('status')}
+                </th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedTableRows.length === 0 ? (
+                <tr className="rec-table-empty"><td colSpan={10}>No job cards found for the selected filters.</td></tr>
+              ) : sortedTableRows.map(row => {
+                const cust = getCustomer(groupedJobs.find(g => g.key === row.id)?.primary.customerId ?? 0);
+                const extra = row.lineCount - 1;
+                const firstWork = row.workSummary.split(', ')[0] || '';
+                const linesDesc = extra > 0 ? `${firstWork} +${extra}` : firstWork;
+                return (
+                  <tr key={row.id} className="rec-row" onClick={() => setSelectedCardKey(row.id)}
+                    tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(row.id); } }}>
+                    <td><span className="rec-card-id">{row.jobCardId}</span></td>
+                    <td><span className="rec-date-cell">{row.date}</span></td>
+                    <td>
+                      <div className="rec-cust-name">{row.customerName}</div>
+                      {cust?.shortCode && <div className="rec-cust-code">{cust.shortCode}</div>}
+                    </td>
+                    <td>
+                      <div className="rec-lines-count">{row.lineCount} {row.lineCount === 1 ? 'line' : 'lines'}</div>
+                      {linesDesc && <div className="rec-lines-desc">{linesDesc}</div>}
+                    </td>
+                    <td className="numeric">{formatCurrency(row.finalBill)}</td>
+                    <td className="numeric">{row.commission > 0 ? formatCurrency(row.commission) : <span className="rec-zero">—</span>}</td>
+                    <td className={`numeric ${row.paymentStatus === 'Paid' ? 'rec-paid' : row.paymentStatus === 'Partially Paid' ? 'rec-partial' : 'rec-zero'}`}>
+                      {formatCurrency(row.paid)}
+                    </td>
+                    <td className={`numeric ${row.pending > 0 ? 'rec-pending-val' : 'rec-zero'}`}>
+                      {row.pending > 0 ? formatCurrency(row.pending) : '—'}
+                    </td>
+                    <td><StatusBadge status={row.paymentStatus} /></td>
+                    <td>
+                      <div className="rec-row-actions">
+                        <button type="button" className="rec-act-btn"
+                          onClick={e => { e.stopPropagation(); setSelectedCardKey(row.id); }} title="View">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* ── Modals ── */}
       <JobCardDetailsModal

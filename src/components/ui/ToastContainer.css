@@ -1,7 +1,7 @@
 .toast-container {
   position: fixed;
-  right: 14px;
-  bottom: 14px;
+  right: 20px;
+  bottom: 20px;
   z-index: 1300;
   display: grid;
   gap: 8px;
@@ -14,9 +14,9 @@
 
 @media (max-width: 1024px) {
   .toast-container {
-    right: 10px;
-    left: 10px;
-    bottom: calc(var(--mobile-nav-height) + 16px);
+    right: 12px;
+    left: 12px;
+    bottom: calc(var(--mobile-nav-height) + 12px);
   }
 
   .toast-container .toast {

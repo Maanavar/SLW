@@ -14,38 +14,35 @@
 }
 
 .toggle-slider {
-  width: 42px;
-  height: 24px;
+  width: 30px;
+  height: 17px;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--border-strong);
+  background: var(--border-strong);
   position: relative;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .toggle-slider::after {
   content: '';
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
   border-radius: 999px;
   background: #fff;
-  top: 2px;
-  left: 2px;
+  top: 1px;
+  left: 1px;
   box-shadow: var(--shadow-sm);
   transition: transform var(--transition-fast);
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  border-color: rgba(11, 102, 228, 0.45);
-  background: var(--accent-soft);
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .toggle-switch input:checked + .toggle-slider::after {
-  transform: translateX(18px);
-  background: var(--accent-primary);
+  transform: translateX(13px);
 }
 
 .toggle-switch input:disabled + .toggle-slider {
@@ -62,6 +59,6 @@
 }
 
 .toggle-label {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
 }

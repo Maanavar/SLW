@@ -2,72 +2,70 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklab, var(--text) 16%, transparent);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow-lg);
   padding: 10px;
-  min-width: 300px;
+  min-width: 260px;
+}
+
+.toast-success,
+.toast-error,
+.toast-info {
+  border-left-width: 3px;
+  border-left-style: solid;
 }
 
 .toast-success {
-  border-left: 3px solid var(--accent-green);
+  border-left-color: var(--green);
 }
 
 .toast-error {
-  border-left: 3px solid var(--accent-red);
+  border-left-color: var(--red);
 }
 
 .toast-info {
-  border-left: 3px solid var(--accent-primary);
+  border-left-color: var(--accent);
 }
 
 .toast-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 10px;
   font-weight: 700;
-  color: var(--accent-primary);
-  background: var(--accent-soft);
+  color: inherit;
+  background: color-mix(in oklab, currentColor 18%, transparent);
   flex-shrink: 0;
-}
-
-.toast-success .toast-icon {
-  color: var(--accent-green);
-  background: rgba(31, 132, 90, 0.16);
-}
-
-.toast-error .toast-icon {
-  color: var(--accent-red);
-  background: rgba(201, 55, 44, 0.16);
 }
 
 .toast-content {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   flex: 1;
 }
 
 .toast-title {
-  font-size: var(--text-base);
+  font-size: 13px;
   font-weight: 600;
 }
 
 .toast-message {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: color-mix(in oklab, var(--bg) 84%, transparent);
 }
 
 .toast-close {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklab, var(--bg) 24%, transparent);
+  background: transparent;
+  color: inherit;
   cursor: pointer;
 }

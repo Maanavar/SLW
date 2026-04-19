@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
+import { Icon } from '@/components/ui/Icon';
 import './LoginScreen.css';
 
 export function LoginScreen() {
@@ -83,55 +84,81 @@ export function LoginScreen() {
 
   return (
     <main className="login-page">
-      <section className="login-card" aria-label="Login form">
-        <h1 className="login-title">Siva Lathe Works</h1>
-        <p className="login-subtitle">Sign in to continue</p>
+      <section className="login-left-panel">
+        <div className="login-left-top">
+          <div className="login-brand-mark">S</div>
+          <div>
+            <h1 className="login-brand-title">Siva Lathe Works</h1>
+            <p className="login-brand-sub tamil">சிவா லேத் வொர்க்ஸ்</p>
+          </div>
+        </div>
 
-        <form onSubmit={handleSubmit} className="login-form">
-          <label className="login-label" htmlFor="login-name">
-            Display Name
-          </label>
-          <input
-            id="login-name"
-            className="login-input"
-            type="text"
-            value={name}
-            maxLength={80}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="name"
-          />
+        <div className="login-hero">
+          <h2>Workshop operations, in one place.</h2>
+          <p>
+            Manage jobs, payments, commissions, expenses, and customer balances in one focused,
+            bilingual workspace.
+          </p>
+        </div>
 
-          <label className="login-label" htmlFor="login-password">
-            Password
-          </label>
-          <input
-            id="login-password"
-            className="login-input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
+        <p className="login-meta numeric">v1.0 � Apr 2026 � Works offline � INR ?</p>
+      </section>
 
-          {error ? (
-            <p className="login-error" role="alert">
-              {error}
-            </p>
-          ) : null}
+      <section className="login-right-panel" aria-label="Login form">
+        <div className="login-card">
+          <h2 className="login-title">Sign in</h2>
+          <p className="login-subtitle">Enter your credentials</p>
 
-          <button type="submit" className="btn btn-primary login-submit" disabled={submitting}>
-            {submitting ? 'Signing in...' : 'Sign In'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary login-offline"
-            onClick={handleContinueOffline}
-            disabled={submitting}
-          >
-            Continue Offline
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="login-form">
+            <label className="login-label" htmlFor="login-name">
+              Display name
+            </label>
+            <input
+              id="login-name"
+              className="login-input"
+              type="text"
+              value={name}
+              maxLength={80}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+            />
+
+            <label className="login-label" htmlFor="login-password">
+              Password
+            </label>
+            <input
+              id="login-password"
+              className="login-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+
+            {error ? (
+              <p className="login-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <button type="submit" className="btn btn-accent login-submit" disabled={submitting}>
+              {submitting ? 'Signing in...' : 'Sign in'}
+            </button>
+
+            <div className="login-divider">or</div>
+
+            <button
+              type="button"
+              className="btn btn-secondary login-offline"
+              onClick={handleContinueOffline}
+              disabled={submitting}
+            >
+              <Icon name="offline" width={14} height={14} />
+              Continue offline
+            </button>
+          </form>
+        </div>
       </section>
     </main>
   );

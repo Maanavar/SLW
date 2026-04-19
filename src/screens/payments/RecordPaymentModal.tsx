@@ -4,7 +4,7 @@ import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import { PaymentModeGroup } from '@/components/ui/PaymentModeGroup';
+import { PaymentModeGroup, type PaymentMode } from '@/components/ui/PaymentModeGroup';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { generateMeaningfulPaymentId } from '@/lib/paymentUtils';
 import {
@@ -15,22 +15,17 @@ import {
 } from '@/lib/dateUtils';
 import { calculateCustomerBalance, getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
 import type { Customer, Job, Payment } from '@/types';
+import './RecordPaymentModal.css';
 
-type PaymentMode = 'cash' | 'upi' | 'bank' | 'cheque';
 type PaymentScope = 'manual' | 'week' | 'month' | 'range';
 
 function getMonthRange(month: string, today: string): { from: string; to: string } {
   const [yearStr, monthStr] = month.split('-');
   const year = Number(yearStr);
   const mon = Number(monthStr);
-  const monthStart = `${yearStr}-${monthStr}-01`;
   const lastDay = new Date(year, mon, 0).getDate();
   const monthEnd = `${yearStr}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
-
-  return {
-    from: monthStart,
-    to: monthEnd > today ? today : monthEnd,
-  };
+  return { from: `${yearStr}-${monthStr}-01`, to: monthEnd > today ? today : monthEnd };
 }
 
 interface RecordPaymentModalProps {
@@ -49,7 +44,6 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [amount, setAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
-  const [useBreakdown, setUseBreakdown] = useState(false);
   const [breakdownCash, setBreakdownCash] = useState('');
   const [breakdownUPI, setBreakdownUPI] = useState('');
   const [breakdownBank, setBreakdownBank] = useState('');
@@ -63,48 +57,30 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
   const [rangeTo, setRangeTo] = useState(today);
   const [notes, setNotes] = useState('');
   const [isSettled, setIsSettled] = useState(false);
+  const useBreakdown = paymentMode === 'mixed';
 
   const customerBalance = useMemo(() => {
     if (!selectedCustomer) return { balance: 0 };
-    return {
-      balance: calculateCustomerBalance(jobs, payments, selectedCustomer.id),
-    };
+    return { balance: calculateCustomerBalance(jobs, payments, selectedCustomer.id) };
   }, [selectedCustomer, jobs, payments]);
 
   const scopeRange = useMemo(() => {
-    if (paymentScope === 'week') {
-      return { from: weekFrom, to: weekTo, label: `${weekFrom} to ${weekTo}` };
-    }
-    if (paymentScope === 'month') {
-      const { from, to } = getMonthRange(selectedMonth, today);
-      return { from, to, label: selectedMonth };
-    }
-    if (paymentScope === 'range') {
-      return { from: rangeFrom, to: rangeTo, label: `${rangeFrom} to ${rangeTo}` };
-    }
+    if (paymentScope === 'week')  return { from: weekFrom, to: weekTo };
+    if (paymentScope === 'month') return getMonthRange(selectedMonth, today);
+    if (paymentScope === 'range') return { from: rangeFrom, to: rangeTo };
     return null;
   }, [paymentScope, weekFrom, weekTo, selectedMonth, rangeFrom, rangeTo, today]);
 
-  const scopedJobs = useMemo(() => {
-    if (!selectedCustomer || !scopeRange) {
-      return [] as Job[];
-    }
-
-    return jobs.filter(
-      (job) =>
-        job.customerId === selectedCustomer.id &&
-        isDateInRange(job.date, scopeRange.from, scopeRange.to)
-    );
+  const scopedJobs = useMemo<Job[]>(() => {
+    if (!selectedCustomer || !scopeRange) return [];
+    return jobs.filter(j => j.customerId === selectedCustomer.id && isDateInRange(j.date, scopeRange.from, scopeRange.to));
   }, [selectedCustomer, jobs, scopeRange]);
 
-  const scopedPendingAmount = useMemo(() => {
-    return scopedJobs.reduce((sum, job) => {
-      const pending = getJobFinalBillValue(job) - getJobPaidAmount(job);
-      return sum + (pending > 0 ? pending : 0);
-    }, 0);
-  }, [scopedJobs]);
+  const scopedPendingAmount = useMemo(
+    () => scopedJobs.reduce((s, j) => s + Math.max(0, getJobFinalBillValue(j) - getJobPaidAmount(j)), 0),
+    [scopedJobs]
+  );
 
-  // Auto-fill settled amount
   useEffect(() => {
     if (isSettled && selectedCustomer) {
       setAmount(String(customerBalance.balance));
@@ -115,290 +91,180 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
   useEffect(() => {
     if (paymentScope !== 'manual') {
       const advance = selectedCustomer?.advanceBalance || 0;
-      const amountAfterAdvance = Math.max(0, scopedPendingAmount - advance);
-      setAmount(amountAfterAdvance > 0 ? String(amountAfterAdvance) : '');
+      const net = Math.max(0, scopedPendingAmount - advance);
+      setAmount(net > 0 ? String(net) : '');
     }
   }, [paymentScope, scopedPendingAmount, selectedCustomer?.advanceBalance]);
+
+  const resetForm = () => {
+    setSelectedCustomer(null);
+    setAmount('');
+    setPaymentMode('cash');
+    setBreakdownCash(''); setBreakdownUPI(''); setBreakdownBank(''); setBreakdownCheque('');
+    setPaymentDate(today);
+    setPaymentScope('manual');
+    setWeekFrom(getWeekStartDate(new Date()));
+    setWeekTo(today);
+    setSelectedMonth(currentMonth);
+    setRangeFrom(''); setRangeTo(today);
+    setNotes('');
+    setIsSettled(false);
+  };
+
+  const handleClose = () => { resetForm(); onClose(); };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!selectedCustomer) {
-      toast.error('Error', 'Please select a customer');
-      return;
-    }
+    if (!selectedCustomer) { toast.error('Error', 'Please select a customer'); return; }
 
     let totalAmount = 0;
-
     if (useBreakdown) {
-      const cash = parseFloat(breakdownCash) || 0;
-      const upi = parseFloat(breakdownUPI) || 0;
-      const bank = parseFloat(breakdownBank) || 0;
-      const cheque = parseFloat(breakdownCheque) || 0;
-
-      totalAmount = cash + upi + bank + cheque;
-
-      if (totalAmount <= 0) {
-        toast.error('Error', 'Please enter valid amounts for at least one payment mode');
-        return;
-      }
-
+      totalAmount = (parseFloat(breakdownCash) || 0) + (parseFloat(breakdownUPI) || 0) +
+                    (parseFloat(breakdownBank) || 0) + (parseFloat(breakdownCheque) || 0);
+      if (totalAmount <= 0) { toast.error('Error', 'Enter an amount for at least one mode'); return; }
     } else {
       totalAmount = parseFloat(amount) || 0;
-      if (totalAmount <= 0) {
-        toast.error('Error', 'Please enter a valid amount');
-        return;
-      }
+      if (totalAmount <= 0) { toast.error('Error', 'Enter a valid amount'); return; }
     }
 
-    if (paymentDate > today) {
-      toast.error('Error', 'Future payment date is not allowed');
-      return;
-    }
+    if (paymentDate > today) { toast.error('Error', 'Future payment date not allowed'); return; }
 
     if (paymentScope !== 'manual') {
-      if (!scopeRange?.from || !scopeRange?.to) {
-        toast.error('Error', 'Please select a valid date scope');
-        return;
-      }
-
-      if (scopeRange.from > scopeRange.to) {
-        toast.error('Error', 'Start date must be before end date');
-        return;
-      }
-
-      if (scopeRange.from > today || scopeRange.to > today) {
-        toast.error('Error', 'Future dates are not allowed');
-        return;
-      }
-
-      if (scopedJobs.length === 0) {
-        toast.error('Error', 'No jobs found in selected scope');
-        return;
-      }
-
-      if (totalAmount < scopedPendingAmount) {
-        toast.error('Error', 'Amount must cover full selected scope balance');
-        return;
-      }
+      if (!scopeRange?.from || !scopeRange?.to) { toast.error('Error', 'Select a valid date scope'); return; }
+      if (scopeRange.from > scopeRange.to)        { toast.error('Error', 'Start date must be before end date'); return; }
+      if (scopeRange.from > today || scopeRange.to > today) { toast.error('Error', 'Future dates not allowed'); return; }
+      if (scopedJobs.length === 0)                { toast.error('Error', 'No jobs found in selected scope'); return; }
+      if (totalAmount < scopedPendingAmount)       { toast.error('Error', 'Amount must cover full scope balance'); return; }
     }
 
     try {
-      const modeMap: Record<PaymentMode, 'Cash' | 'UPI' | 'Bank' | 'Cheque'> = {
-        cash: 'Cash',
-        upi: 'UPI',
-        bank: 'Bank',
-        cheque: 'Cheque',
+      const modeMap: Record<Exclude<PaymentMode, 'mixed'>, 'Cash' | 'UPI' | 'Bank' | 'Cheque'> = {
+        cash: 'Cash', upi: 'UPI', bank: 'Bank', cheque: 'Cheque',
       };
 
-      let breakdown;
-      let finalPaymentMode: 'Cash' | 'UPI' | 'Bank' | 'Cheque' | 'Mixed' = modeMap[paymentMode];
+      let finalMode: 'Cash' | 'UPI' | 'Bank' | 'Cheque' | 'Mixed' =
+        paymentMode === 'mixed' ? 'Mixed' : modeMap[paymentMode];
 
+      let breakdown: Record<string, number> | undefined;
       if (useBreakdown) {
-        const cash = parseFloat(breakdownCash) || 0;
-        const upi = parseFloat(breakdownUPI) || 0;
-        const bank = parseFloat(breakdownBank) || 0;
+        const cash   = parseFloat(breakdownCash) || 0;
+        const upi    = parseFloat(breakdownUPI) || 0;
+        const bank   = parseFloat(breakdownBank) || 0;
         const cheque = parseFloat(breakdownCheque) || 0;
-
         breakdown = {
-          ...(cash > 0 && { cash }),
-          ...(upi > 0 && { upi }),
-          ...(bank > 0 && { bank }),
+          ...(cash   > 0 && { cash }),
+          ...(upi    > 0 && { upi }),
+          ...(bank   > 0 && { bank }),
           ...(cheque > 0 && { cheque }),
         };
-
-        if (Object.keys(breakdown).length > 1) {
-          finalPaymentMode = 'Mixed';
-        } else if (cash > 0) {
-          finalPaymentMode = 'Cash';
-        } else if (upi > 0) {
-          finalPaymentMode = 'UPI';
-        } else if (bank > 0) {
-          finalPaymentMode = 'Bank';
-        } else if (cheque > 0) {
-          finalPaymentMode = 'Cheque';
+        if (Object.keys(breakdown).length === 1) {
+          if (cash)   finalMode = 'Cash';
+          else if (upi)    finalMode = 'UPI';
+          else if (bank)   finalMode = 'Bank';
+          else if (cheque) finalMode = 'Cheque';
+        } else {
+          finalMode = 'Mixed';
         }
       }
 
-      // Count payments on the same date for sequence
-      const paymentCount = payments.filter((p) => p.date === paymentDate && p.customerId === selectedCustomer.id).length;
+      const paymentCount = payments.filter(p => p.date === paymentDate && p.customerId === selectedCustomer.id).length;
 
       const newPayment: Omit<Payment, 'id' | 'createdAt'> = {
         customerId: selectedCustomer.id,
         amount: totalAmount,
-        paymentMode: finalPaymentMode,
+        paymentMode: finalMode,
         breakdown,
         date: paymentDate,
         referenceNumber: generateMeaningfulPaymentId(selectedCustomer, paymentDate, paymentCount + 1),
         paymentForMonth: paymentScope === 'month' ? selectedMonth : undefined,
-        paymentForFromDate:
-          paymentScope === 'week' || paymentScope === 'range'
-            ? scopeRange?.from
-            : undefined,
-        paymentForDate:
-          paymentScope === 'week' || paymentScope === 'range'
-            ? scopeRange?.to
-            : undefined,
+        paymentForFromDate: paymentScope === 'week' || paymentScope === 'range' ? scopeRange?.from : undefined,
+        paymentForDate:     paymentScope === 'week' || paymentScope === 'range' ? scopeRange?.to  : undefined,
         notes: notes || undefined,
       };
 
       await addPayment(newPayment);
 
-      // Handle settled or scope-based payments
       if (isSettled) {
-        // Mark all jobs of this customer as fully paid
         await Promise.all(
-          jobs
-            .filter((job) => job.customerId === selectedCustomer.id)
-            .map((job) => {
-              const net = getJobFinalBillValue(job);
-              return updateJob(job.id, {
-                paidAmount: net,
-                paymentStatus: 'Paid',
-                paymentMode: finalPaymentMode as any,
-              });
-            })
+          jobs.filter(j => j.customerId === selectedCustomer.id).map(j =>
+            updateJob(j.id, { paidAmount: getJobFinalBillValue(j), paymentStatus: 'Paid', paymentMode: finalMode as any })
+          )
         );
       } else if (paymentScope !== 'manual') {
-        // Mark scoped jobs as fully paid
         await Promise.all(
-          scopedJobs.map((job) => {
-            const currentPaid = getJobPaidAmount(job);
-            const net = getJobFinalBillValue(job);
-            const pending = Math.max(0, net - currentPaid);
-
-            return updateJob(job.id, {
-              paidAmount: currentPaid + pending,
-              paymentStatus: 'Paid',
-              paymentMode: finalPaymentMode as any,
-            });
+          scopedJobs.map(j => {
+            const pending = Math.max(0, getJobFinalBillValue(j) - getJobPaidAmount(j));
+            return updateJob(j.id, { paidAmount: getJobPaidAmount(j) + pending, paymentStatus: 'Paid', paymentMode: finalMode as any });
           })
         );
       } else {
-        // Manual scope - allocate to outstanding jobs
-        const customerOutstandingJobs = jobs.filter(
-          (job) =>
-            job.customerId === selectedCustomer.id &&
-            getJobFinalBillValue(job) - getJobPaidAmount(job) > 0
+        const outstanding = jobs.filter(j =>
+          j.customerId === selectedCustomer.id && getJobFinalBillValue(j) - getJobPaidAmount(j) > 0
         );
-
-        let remainingAmount = totalAmount;
-
-        for (const job of customerOutstandingJobs) {
-          if (remainingAmount <= 0) break;
-
-          const currentPaid = getJobPaidAmount(job);
-          const net = getJobFinalBillValue(job);
-          const pending = Math.max(0, net - currentPaid);
-
+        let remaining = totalAmount;
+        for (const job of outstanding) {
+          if (remaining <= 0) break;
+          const pending = Math.max(0, getJobFinalBillValue(job) - getJobPaidAmount(job));
           if (pending === 0) continue;
-
-          const paymentAllocation = Math.min(remainingAmount, pending);
-          const newPaidAmount = currentPaid + paymentAllocation;
-          const isFullyPaid = Math.abs(newPaidAmount - net) < 0.01;
-
+          const alloc = Math.min(remaining, pending);
+          const newPaid = getJobPaidAmount(job) + alloc;
           await updateJob(job.id, {
-            paidAmount: newPaidAmount,
-            paymentStatus: isFullyPaid ? 'Paid' : 'Partially Paid',
-            paymentMode: finalPaymentMode as any,
+            paidAmount: newPaid,
+            paymentStatus: Math.abs(newPaid - getJobFinalBillValue(job)) < 0.01 ? 'Paid' : 'Partially Paid',
+            paymentMode: finalMode as any,
           });
-
-          remainingAmount -= paymentAllocation;
+          remaining -= alloc;
         }
-
-        // If there's remaining amount after allocating to all outstanding jobs, save as advance
-        if (remainingAmount > 0) {
-          const currentAdvance = selectedCustomer.advanceBalance || 0;
+        if (remaining > 0) {
           await updateCustomer(selectedCustomer.id, {
-            advanceBalance: currentAdvance + remainingAmount,
+            advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
           });
         }
       }
 
-      toast.success(
-        'Success',
-        isSettled
-          ? `Customer ${selectedCustomer.name} marked as settled`
-          : `Payment of ${formatCurrency(parseFloat(amount))} recorded`
-      );
-
-      // Reset form
-      setAmount('');
-      setPaymentMode('cash');
-      setUseBreakdown(false);
-      setBreakdownCash('');
-      setBreakdownUPI('');
-      setBreakdownBank('');
-      setBreakdownCheque('');
-      setPaymentDate(today);
-      setPaymentScope('manual');
-      setWeekFrom(getWeekStartDate(new Date()));
-      setWeekTo(today);
-      setSelectedMonth(currentMonth);
-      setRangeFrom('');
-      setRangeTo(today);
-      setNotes('');
-      setIsSettled(false);
-      setSelectedCustomer(null);
+      toast.success('Payment recorded', `${formatCurrency(totalAmount)} for ${selectedCustomer.name}`);
+      resetForm();
       onClose();
     } catch {
       toast.error('Error', 'Failed to record payment');
     }
   };
 
-  const handleClose = () => {
-    setSelectedCustomer(null);
-    setAmount('');
-    setPaymentMode('cash');
-    setUseBreakdown(false);
-    setBreakdownCash('');
-    setBreakdownUPI('');
-    setBreakdownBank('');
-    setBreakdownCheque('');
-    setPaymentDate(today);
-    setPaymentScope('manual');
-    setNotes('');
-    setIsSettled(false);
-    onClose();
-  };
-
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Record Payment" size="md">
-      <form onSubmit={handleSubmit} className="payment-form">
-        <div className="form-group">
-          <label className="form-label" htmlFor="customer-select">
-            Customer
-          </label>
+      <form onSubmit={handleSubmit} className="rpm-form">
+
+        {/* Customer */}
+        <div className="rpm-field">
+          <label className="rpm-label">Customer</label>
           <SearchableSelect
             items={customers}
             value={selectedCustomer}
             onChange={setSelectedCustomer}
-            getLabel={(c) => (c.shortCode ? `${c.name} (${c.shortCode})` : c.name)}
-            getKey={(c) => String(c.id)}
+            getLabel={c => c.shortCode ? `${c.name} (${c.shortCode})` : c.name}
+            getKey={c => String(c.id)}
             placeholder="Select customer..."
           />
         </div>
 
+        {/* Balance info */}
         {selectedCustomer && customerBalance.balance > 0 && (
-          <div className="balance-info">
-            <div className="balance-item">
-              <span className="balance-label">Outstanding Balance (Backlog)</span>
-              <span className="balance-amount positive">
-                {formatCurrency(customerBalance.balance)}
-              </span>
+          <div className="rpm-balance">
+            <div className="rpm-balance-row">
+              <span className="rpm-balance-label">Outstanding</span>
+              <span className="rpm-balance-val rpm-balance-val--red">{formatCurrency(customerBalance.balance)}</span>
             </div>
             {(selectedCustomer.advanceBalance ?? 0) > 0 && (
               <>
-                <div className="balance-item">
-                  <span className="balance-label">Available Advance (Credit)</span>
-                  <span className="balance-amount balance-negative">
-                    {formatCurrency(selectedCustomer.advanceBalance)}
-                  </span>
+                <div className="rpm-balance-row">
+                  <span className="rpm-balance-label">Advance credit</span>
+                  <span className="rpm-balance-val rpm-balance-val--green">{formatCurrency(selectedCustomer.advanceBalance!)}</span>
                 </div>
-                <div className="balance-item">
-                  <span className="balance-label">Amount to Collect (After Advance)</span>
-                  <span className="balance-amount balance-positive">
-                    {formatCurrency(Math.max(0, customerBalance.balance - selectedCustomer.advanceBalance))}
+                <div className="rpm-balance-row rpm-balance-row--divider">
+                  <span className="rpm-balance-label">To collect</span>
+                  <span className="rpm-balance-val rpm-balance-val--red">
+                    {formatCurrency(Math.max(0, customerBalance.balance - (selectedCustomer.advanceBalance || 0)))}
                   </span>
                 </div>
               </>
@@ -406,314 +272,160 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           </div>
         )}
 
-        <div className="form-group checkbox-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={isSettled}
-              onChange={(e) => setIsSettled(e.target.checked)}
-              disabled={!selectedCustomer}
-            />
-            Mark as Settled (Pay entire balance)
-          </label>
-        </div>
+        {/* Settle toggle */}
+        <label className="rpm-check-label">
+          <input
+            type="checkbox"
+            className="rpm-check"
+            checked={isSettled}
+            onChange={e => setIsSettled(e.target.checked)}
+            disabled={!selectedCustomer}
+          />
+          Mark as fully settled
+        </label>
 
+        {/* Payment scope (only when not settled) */}
         {!isSettled && (
-          <>
-            <div className="form-group">
-              <label className="form-label">Payment Scope</label>
-              <div className="scope-buttons">
+          <div className="rpm-field">
+            <label className="rpm-label">Scope</label>
+            <div className="rpm-scope-tabs">
+              {(['manual', 'week', 'month', 'range'] as PaymentScope[]).map(s => (
                 <button
+                  key={s}
                   type="button"
-                  className={`scope-btn ${paymentScope === 'manual' ? 'active' : ''}`}
-                  onClick={() => setPaymentScope('manual')}
+                  className={`rpm-scope-btn${paymentScope === s ? ' active' : ''}`}
+                  onClick={() => setPaymentScope(s)}
                 >
-                  Manual
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
-                <button
-                  type="button"
-                  className={`scope-btn ${paymentScope === 'week' ? 'active' : ''}`}
-                  onClick={() => setPaymentScope('week')}
-                >
-                  Week
-                </button>
-                <button
-                  type="button"
-                  className={`scope-btn ${paymentScope === 'month' ? 'active' : ''}`}
-                  onClick={() => setPaymentScope('month')}
-                >
-                  Month
-                </button>
-                <button
-                  type="button"
-                  className={`scope-btn ${paymentScope === 'range' ? 'active' : ''}`}
-                  onClick={() => setPaymentScope('range')}
-                >
-                  Range
-                </button>
-              </div>
-            </div>
-
-            {paymentScope !== 'manual' && scopedPendingAmount > 0 && (
-              <div className="quick-fill-info">
-                <span className="quick-fill-label">Pending: {formatCurrency(scopedPendingAmount)}</span>
-                <button
-                  type="button"
-                  className="quick-fill-btn"
-                  onClick={() => setAmount(String(scopedPendingAmount))}
-                >
-                  Use Amount
-                </button>
-              </div>
-            )}
-          </>
-        )}
-
-        {paymentScope === 'week' && !isSettled && (
-          <div className="scope-grid">
-            <div className="form-group">
-              <label className="form-label" htmlFor="week-from">
-                From
-              </label>
-              <input
-                id="week-from"
-                type="date"
-                className="form-input"
-                value={weekFrom}
-                onChange={(e) => setWeekFrom(e.target.value)}
-                max={today}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="week-to">
-                To
-              </label>
-              <input
-                id="week-to"
-                type="date"
-                className="form-input"
-                value={weekTo}
-                onChange={(e) => setWeekTo(e.target.value)}
-                max={today}
-              />
+              ))}
             </div>
           </div>
         )}
 
-        {paymentScope === 'month' && !isSettled && (
-          <div className="form-group">
-            <label className="form-label">Month</label>
-            <div className="month-selects">
-              <select
-                className="form-input"
+        {/* Scope date pickers */}
+        {!isSettled && paymentScope === 'week' && (
+          <div className="rpm-grid-2">
+            <div className="rpm-field">
+              <label className="rpm-label" htmlFor="rpm-week-from">From</label>
+              <input id="rpm-week-from" type="date" className="rpm-input" value={weekFrom} onChange={e => setWeekFrom(e.target.value)} max={today} />
+            </div>
+            <div className="rpm-field">
+              <label className="rpm-label" htmlFor="rpm-week-to">To</label>
+              <input id="rpm-week-to" type="date" className="rpm-input" value={weekTo} onChange={e => setWeekTo(e.target.value)} max={today} />
+            </div>
+          </div>
+        )}
+
+        {!isSettled && paymentScope === 'month' && (
+          <div className="rpm-field">
+            <label className="rpm-label">Month</label>
+            <div className="rpm-grid-2">
+              <select className="rpm-input"
                 value={selectedMonth.split('-')[0]}
-                onChange={(e) => setSelectedMonth(`${e.target.value}-${selectedMonth.split('-')[1]}`)}
+                onChange={e => setSelectedMonth(`${e.target.value}-${selectedMonth.split('-')[1]}`)}
                 aria-label="Year"
               >
                 {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
-              <select
-                className="form-input"
+              <select className="rpm-input"
                 value={selectedMonth.split('-')[1]}
-                onChange={(e) => setSelectedMonth(`${selectedMonth.split('-')[0]}-${e.target.value}`)}
+                onChange={e => setSelectedMonth(`${selectedMonth.split('-')[0]}-${e.target.value}`)}
                 aria-label="Month"
               >
                 {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
-                  <option key={m} value={m}>{new Date(2000, Number(m)-1).toLocaleString('en-IN', { month: 'long' })}</option>
+                  <option key={m} value={m}>{new Date(2000, Number(m) - 1).toLocaleString('en-IN', { month: 'long' })}</option>
                 ))}
               </select>
             </div>
           </div>
         )}
 
-        {paymentScope === 'range' && !isSettled && (
-          <div className="scope-grid">
-            <div className="form-group">
-              <label className="form-label" htmlFor="range-from">
-                From
-              </label>
-              <input
-                id="range-from"
-                type="date"
-                className="form-input"
-                value={rangeFrom}
-                onChange={(e) => setRangeFrom(e.target.value)}
-                max={today}
-              />
+        {!isSettled && paymentScope === 'range' && (
+          <div className="rpm-grid-2">
+            <div className="rpm-field">
+              <label className="rpm-label" htmlFor="rpm-range-from">From</label>
+              <input id="rpm-range-from" type="date" className="rpm-input" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} max={today} />
             </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="range-to">
-                To
-              </label>
-              <input
-                id="range-to"
-                type="date"
-                className="form-input"
-                value={rangeTo}
-                onChange={(e) => setRangeTo(e.target.value)}
-                max={today}
-              />
+            <div className="rpm-field">
+              <label className="rpm-label" htmlFor="rpm-range-to">To</label>
+              <input id="rpm-range-to" type="date" className="rpm-input" value={rangeTo} onChange={e => setRangeTo(e.target.value)} max={today} />
             </div>
           </div>
         )}
 
-        <div className="form-group checkbox-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={useBreakdown}
-              onChange={(e) => setUseBreakdown(e.target.checked)}
-            />
-            Split Payment by Mode
-          </label>
-        </div>
-
-        {useBreakdown ? (
-          <>
-            <div className="form-group">
-              <label className="form-label" htmlFor="breakdown-cash">
-                Cash (INR)
-              </label>
-              <input
-                id="breakdown-cash"
-                type="number"
-                className="form-input"
-                placeholder="0.00"
-                value={breakdownCash}
-                onChange={(e) => setBreakdownCash(e.target.value)}
-                step="0.01"
-                min="0"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="breakdown-upi">
-                UPI (INR)
-              </label>
-              <input
-                id="breakdown-upi"
-                type="number"
-                className="form-input"
-                placeholder="0.00"
-                value={breakdownUPI}
-                onChange={(e) => setBreakdownUPI(e.target.value)}
-                step="0.01"
-                min="0"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="breakdown-bank">
-                Bank (INR)
-              </label>
-              <input
-                id="breakdown-bank"
-                type="number"
-                className="form-input"
-                placeholder="0.00"
-                value={breakdownBank}
-                onChange={(e) => setBreakdownBank(e.target.value)}
-                step="0.01"
-                min="0"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="breakdown-cheque">
-                Cheque (INR)
-              </label>
-              <input
-                id="breakdown-cheque"
-                type="number"
-                className="form-input"
-                placeholder="0.00"
-                value={breakdownCheque}
-                onChange={(e) => setBreakdownCheque(e.target.value)}
-                step="0.01"
-                min="0"
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="form-group">
-              <label className="form-label" htmlFor="amount">
-                Amount (INR)
-              </label>
-              <input
-                id="amount"
-                type="number"
-                className="form-input"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                step="0.01"
-                min="0"
-                required
-              />
-              {selectedCustomer && customerBalance.balance > 0 && (
-                <div className="quick-fill-buttons">
-                  <button
-                    type="button"
-                    className="quick-fill-small-btn"
-                    onClick={() => setAmount(String(customerBalance.balance))}
-                    title={`Fill with outstanding balance: ${formatCurrency(customerBalance.balance)}`}
-                  >
-                    Balance: {formatCurrency(customerBalance.balance)}
-                  </button>
-                  {(selectedCustomer.advanceBalance ?? 0) > 0 && (
-                    <button
-                      type="button"
-                      className="quick-fill-small-btn"
-                      onClick={() => setAmount(String(Math.max(0, customerBalance.balance - selectedCustomer.advanceBalance)))}
-                      title="Fill with amount after deducting advance"
-                    >
-                      After Advance: {formatCurrency(Math.max(0, customerBalance.balance - selectedCustomer.advanceBalance))}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Payment Mode</label>
-              <PaymentModeGroup value={paymentMode} onChange={setPaymentMode} />
-            </div>
-          </>
+        {/* Pending quick-fill */}
+        {!isSettled && paymentScope !== 'manual' && scopedPendingAmount > 0 && (
+          <div className="rpm-quick-fill">
+            <span className="rpm-quick-fill-label">Pending: {formatCurrency(scopedPendingAmount)}</span>
+            <button type="button" className="rpm-quick-fill-btn" onClick={() => setAmount(String(scopedPendingAmount))}>
+              Use amount
+            </button>
+          </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label" htmlFor="payment-date">
-            Payment Date
-          </label>
-          <input
-            id="payment-date"
-            type="date"
-            className="form-input"
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            max={today}
-            required
-          />
+        {/* Payment mode */}
+        <div className="rpm-field">
+          <label className="rpm-label">Payment mode</label>
+          <PaymentModeGroup value={paymentMode} onChange={setPaymentMode} />
         </div>
 
-        <div className="form-group">
-          <label className="form-label" htmlFor="notes">
-            Notes
-          </label>
-          <textarea
-            id="notes"
-            className="form-textarea"
-            placeholder="Add any notes about this payment..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-          />
+        {/* Amount fields */}
+        {useBreakdown ? (
+          <div className="rpm-grid-2">
+            {[
+              { id: 'rpm-cash',   label: 'Cash',   val: breakdownCash,   set: setBreakdownCash },
+              { id: 'rpm-upi',    label: 'UPI',    val: breakdownUPI,    set: setBreakdownUPI },
+              { id: 'rpm-bank',   label: 'Bank',   val: breakdownBank,   set: setBreakdownBank },
+              { id: 'rpm-cheque', label: 'Cheque', val: breakdownCheque, set: setBreakdownCheque },
+            ].map(({ id, label, val, set }) => (
+              <div key={id} className="rpm-field">
+                <label className="rpm-label" htmlFor={id}>{label}</label>
+                <input id={id} type="number" className="rpm-input" placeholder="0.00"
+                  value={val} onChange={e => set(e.target.value)} step="0.01" min="0" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rpm-field">
+            <label className="rpm-label" htmlFor="rpm-amount">Amount (INR)</label>
+            <input id="rpm-amount" type="number" className="rpm-input rpm-input--lg"
+              placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)}
+              step="0.01" min="0" required />
+            {selectedCustomer && customerBalance.balance > 0 && (
+              <div className="rpm-fill-chips">
+                <button type="button" className="rpm-fill-chip"
+                  onClick={() => setAmount(String(customerBalance.balance))}>
+                  Balance: {formatCurrency(customerBalance.balance)}
+                </button>
+                {(selectedCustomer.advanceBalance ?? 0) > 0 && (
+                  <button type="button" className="rpm-fill-chip"
+                    onClick={() => setAmount(String(Math.max(0, customerBalance.balance - (selectedCustomer.advanceBalance || 0))))}>
+                    After advance: {formatCurrency(Math.max(0, customerBalance.balance - (selectedCustomer.advanceBalance || 0)))}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Date */}
+        <div className="rpm-field">
+          <label className="rpm-label" htmlFor="rpm-date">Payment date</label>
+          <input id="rpm-date" type="date" className="rpm-input" value={paymentDate}
+            onChange={e => setPaymentDate(e.target.value)} max={today} required />
         </div>
 
-        <button type="submit" className="btn btn-primary btn-submit" disabled={!selectedCustomer}>
+        {/* Notes */}
+        <div className="rpm-field">
+          <label className="rpm-label" htmlFor="rpm-notes">Notes</label>
+          <textarea id="rpm-notes" className="rpm-input rpm-textarea" rows={2}
+            placeholder="Optional notes..." value={notes} onChange={e => setNotes(e.target.value)} />
+        </div>
+
+        <button type="submit" className="btn btn-accent rpm-submit" disabled={!selectedCustomer}>
           Record Payment
         </button>
       </form>

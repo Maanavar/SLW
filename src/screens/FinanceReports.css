@@ -1,527 +1,398 @@
-.finance-reports {
-  padding: var(--space-lg);
-  max-width: 1400px;
-  margin: 0 auto;
+/* ===== FINANCE REPORTS SCREEN ===== */
+
+.fin-screen {
+  display: grid;
+  gap: 0;
 }
 
-.section-subheading {
-  margin-top: 2rem;
+/* ── Page header ─────────────────────────────────────────────── */
+.fin-pg-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-.finance-header {
-  margin-bottom: var(--space-xl);
+.fin-pg-title {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text);
 }
 
-.finance-header h1 {
-  font-size: clamp(24px, 5vw, 32px);
-  margin: 0 0 8px 0;
-  color: var(--text-primary);
+.fin-pg-desc {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
-.finance-subtitle {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
+/* ── Period tabs ─────────────────────────────────────────────── */
+.fin-period-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  flex-shrink: 0;
 }
 
-/* ============================================================================
-   PERIOD FILTER
-   ============================================================================ */
+.fin-period-tab {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.5;
+}
 
-.period-filter {
+.fin-period-tab.active {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.fin-period-tab:not(.active):hover { color: var(--text); }
+
+/* ── Range row ───────────────────────────────────────────────── */
+.fin-range-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.fin-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fin-range-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.fin-range-input {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+}
+
+.fin-range-input:focus { outline: none; border-color: var(--accent); }
+
+.fin-range-arrow {
+  color: var(--text-faint);
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Nav tabs ────────────────────────────────────────────────── */
+.fin-nav-tabs {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-lg);
-  padding: var(--space-md);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
+  gap: 0;
+  margin-bottom: 20px;
 }
 
-.period-range-inputs {
-  display: inline-flex;
+.fin-nav-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.fin-nav-tab:hover { color: var(--text); }
+
+.fin-nav-tab.active {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Tab content ─────────────────────────────────────────────── */
+.fin-tab-content {
+  display: grid;
+  gap: 16px;
+}
+
+/* ── Stat tiles ──────────────────────────────────────────────── */
+.fin-stats {
+  display: grid;
+  gap: 10px;
+}
+
+.fin-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fin-stats-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.fin-stat {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  display: grid;
+  gap: 3px;
+  align-content: start;
+}
+
+.fin-stat-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.fin-stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-stat-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+
+.fin-stat--green .fin-stat-value { color: var(--green); }
+.fin-stat--red   .fin-stat-value { color: var(--red); }
+
+/* ── Chart row ───────────────────────────────────────────────── */
+.fin-chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.fin-chart-tile,
+.fin-table-tile,
+.fin-method-tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fin-chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Bar chart ───────────────────────────────────────────────── */
+.fin-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.fin-bar-item {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
   align-items: center;
   gap: 8px;
 }
 
-.period-range-sep {
+.fin-bar-label {
+  font-size: 12px;
   color: var(--text-muted);
-  font-weight: 600;
-}
-
-.period-range-date {
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.period-range-date:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(11, 102, 228, 0.1);
-}
-
-.period-filter label {
-  font-weight: 600;
-  color: var(--text-primary);
   white-space: nowrap;
-}
-
-.period-buttons {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
-
-.period-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.period-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-primary);
-}
-
-.period-btn.active {
-  background: var(--accent-primary);
-  color: white;
-  border-color: var(--accent-primary);
-}
-
-/* ============================================================================
-   REPORT TABS
-   ============================================================================ */
-
-.report-tabs {
-  display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-lg);
-  border-bottom: 2px solid var(--border-color);
-  overflow-x: auto;
-  padding-bottom: 0;
-}
-
-.tab-btn {
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: var(--text-sm);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.tab-btn:hover {
-  color: var(--text-primary);
-}
-
-.tab-btn.active {
-  color: var(--accent-primary);
-  border-bottom-color: var(--accent-primary);
-}
-
-/* ============================================================================
-   REPORT CONTENT
-   ============================================================================ */
-
-.report-content {
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.report-section {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg);
-  margin-bottom: var(--space-lg);
-}
-
-.report-section h2 {
-  font-size: 20px;
-  margin: 0 0 var(--space-lg) 0;
-  color: var(--text-primary);
-}
-
-/* ============================================================================
-   METRICS GRID
-   ============================================================================ */
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-}
-
-.metric-card {
-  padding: var(--space-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: all 0.2s ease;
-}
-
-.metric-card:hover {
-  border-color: var(--accent-primary);
-  background: var(--bg-hover);
-}
-
-.metric-card.highlight {
-  border-color: var(--accent-primary);
-  background: rgba(11, 102, 228, 0.04);
-}
-
-.metric-label {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-}
-
-.metric-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  line-height: 1.2;
-}
-
-.metric-value.negative {
-  color: #ef4444;
-}
-
-.metric-value.warning {
-  color: #f59e0b;
-}
-
-.metric-subtitle {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-/* ============================================================================
-   DETAILS TABLE
-   ============================================================================ */
-
-.details-table {
-  margin-top: var(--space-lg);
-}
-
-.details-table table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.details-table td {
-  padding: 12px;
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-secondary);
-}
-
-.details-table td.value {
-  text-align: right;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.details-table tr:last-child td {
-  border-bottom: none;
-}
-
-/* ============================================================================
-   DATA TABLES
-   ============================================================================ */
-
-.table-wrapper {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-.data-table thead {
-  background: var(--bg-secondary);
-  border-bottom: 2px solid var(--border-color);
-}
-
-.data-table th {
-  padding: 12px;
-  text-align: left;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  font-size: var(--text-xs);
-  letter-spacing: 0.3px;
-}
-
-.data-table th.text-right {
-  text-align: right;
-}
-
-.data-table th.text-center {
-  text-align: center;
-}
-
-.data-table td {
-  padding: 12px;
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-secondary);
-}
-
-.data-table tbody tr:hover {
-  background: var(--bg-hover);
-}
-
-.data-table td.text-right {
-  text-align: right;
-}
-
-.data-table td.text-center {
-  text-align: center;
-}
-
-.data-table td.negative {
-  color: #ef4444;
-}
-
-.data-table td.warning {
-  color: #f59e0b;
-}
-
-.data-table tr:last-child td {
-  border-bottom: none;
-}
-
-/* ============================================================================
-   METHOD CARDS
-   ============================================================================ */
-
-.method-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-md);
-}
-
-.method-card {
-  padding: var(--space-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-.method-name {
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.method-amount {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  margin-bottom: 12px;
-}
-
-.method-bar {
-  height: 8px;
-  background: var(--border-color);
-  border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 8px;
+  text-overflow: ellipsis;
 }
 
-.method-fill {
-  height: 100%;
-  width: var(--bar-width, 0%);
-  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
-  border-radius: 4px;
-}
-
-.method-details {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-/* ============================================================================
-   AGEING CARDS
-   ============================================================================ */
-
-.ageing-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-}
-
-.ageing-card {
-  padding: var(--space-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-.ageing-range {
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  font-size: var(--text-sm);
-}
-
-.ageing-amount {
-  font-size: 20px;
-  font-weight: 700;
-  color: #f59e0b;
-  margin-bottom: 8px;
-}
-
-.ageing-bar {
+.fin-bar-track {
   height: 6px;
-  background: var(--border-color);
-  border-radius: 3px;
+  background: var(--bg-sunk);
+  border-radius: 999px;
   overflow: hidden;
-  margin-bottom: 8px;
+  border: 1px solid var(--border);
 }
 
-.ageing-fill {
+.fin-bar-fill {
   height: 100%;
   width: var(--bar-width, 0%);
-  background: linear-gradient(90deg, #f59e0b, #ef4444);
-  border-radius: 3px;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
 }
 
-.ageing-details {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-/* ============================================================================
-   TOTAL BOX
-   ============================================================================ */
-
-.total-box {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-md);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-primary);
-  border-radius: var(--radius-md);
+.fin-bar-value {
+  font-size: 12px;
   font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
 }
 
-.total-box span:first-child {
-  color: var(--text-primary);
+/* ── Payment method breakdown ────────────────────────────────── */
+.fin-method-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.total-box span:last-child {
-  font-size: 20px;
-  color: var(--accent-primary);
+.fin-method-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 100px 50px 60px;
+  align-items: center;
+  gap: 10px;
 }
 
-/* ============================================================================
-   EMPTY STATE
-   ============================================================================ */
+.fin-method-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
 
-.empty-state {
-  padding: var(--space-lg);
+.fin-method-amount {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+
+.fin-method-pct {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.fin-method-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: right;
+}
+
+/* ── Table tile ──────────────────────────────────────────────── */
+.fin-table-wrap {
+  overflow-x: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.fin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.fin-table thead tr {
+  background: var(--bg-sunk);
+}
+
+.fin-table th {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.fin-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.fin-table tbody tr:last-child td { border-bottom: none; }
+
+.fin-table tbody tr:hover { background: var(--bg-hover); }
+
+/* Table utility classes */
+.text-right { text-align: right; }
+.fw-600 { font-weight: 600; }
+.color-green { color: var(--green); }
+.color-red { color: var(--red); }
+.color-amber { color: var(--amber); }
+.color-muted { color: var(--text-muted); }
+
+/* ── Ageing band badge ───────────────────────────────────────── */
+.fin-band {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.fin-band.color-green { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+.fin-band.color-amber { background: color-mix(in srgb, var(--amber) 12%, transparent); border-color: var(--amber); color: var(--amber); }
+.fin-band.color-red   { background: var(--red-soft);   border-color: var(--red);   color: var(--red); }
+
+/* ── Empty state ─────────────────────────────────────────────── */
+.fin-empty {
+  font-size: 13px;
+  color: var(--text-faint);
   text-align: center;
-  color: var(--text-secondary);
-  border: 2px dashed var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  padding: 24px 0;
+  margin: 0;
 }
 
-/* ============================================================================
-   RESPONSIVE
-   ============================================================================ */
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .fin-stats-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fin-chart-row { grid-template-columns: 1fr; }
+  .fin-bar-item { grid-template-columns: 110px 1fr 80px; }
+}
 
-@media (max-width: 768px) {
-  .finance-reports {
-    padding: var(--space-md);
-  }
+@media (max-width: 600px) {
+  .fin-stats-4,
+  .fin-stats-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-stat-value { font-size: 17px; }
+  .fin-pg-header { flex-direction: column; align-items: flex-start; }
+  .fin-bar-item { grid-template-columns: 90px 1fr 70px; }
+  .fin-method-row { grid-template-columns: 70px 1fr 90px 40px 50px; }
+}
 
-  .period-filter {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .period-buttons {
-    width: 100%;
-  }
-
-  .period-btn {
-    flex: 1;
-    min-width: 80px;
-  }
-
-  .report-tabs {
-    gap: 0;
-    border-bottom: 2px solid var(--border-color);
-  }
-
-  .tab-btn {
-    padding: 10px 12px;
-    font-size: var(--text-xs);
-  }
-
-  .metrics-grid {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-sm);
-  }
-
-  .metric-value {
-    font-size: 20px;
-  }
-
-  .method-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .ageing-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .data-table {
-    font-size: var(--text-xs);
-  }
-
-  .data-table th,
-  .data-table td {
-    padding: 8px;
-  }
+@media (max-width: 420px) {
+  .fin-stats-4,
+  .fin-stats-3 { grid-template-columns: 1fr; }
 }

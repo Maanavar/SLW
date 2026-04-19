@@ -3,18 +3,18 @@ import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { DataTable } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getPaymentDisplayId, formatPaymentBreakdown } from '@/lib/paymentUtils';
 import { getReportRange, getPaymentsInRange, getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
 import { getJobPaidAmount } from '@/lib/jobUtils';
-import { getLocalDateString } from '@/lib/dateUtils';
+
 import type { Payment } from '@/types';
 import { RecordPaymentModal } from './RecordPaymentModal';
 import { PaymentEditModal } from './PaymentEditModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import './PaymentForm.css';
 
-type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'halfyear' | 'year' | 'range' | 'all';
+type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'halfyear' | 'all';
 
 interface PaymentDisplay extends Payment {
   customerName: string;
@@ -23,97 +23,165 @@ interface PaymentDisplay extends Payment {
   jobCardKey?: string;
 }
 
-function shiftDate(value: string, days: number): string {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return getLocalDateString(new Date());
-  }
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  if (Number.isNaN(date.getTime())) {
-    return getLocalDateString(new Date());
-  }
-  date.setDate(date.getDate() + days);
-  return getLocalDateString(date);
+type CustomerOption = { id: number; name: string };
+
+const PERIOD_TABS: { mode: PeriodType; label: string }[] = [
+  { mode: 'today',     label: 'Today' },
+  { mode: 'week',      label: 'Week' },
+  { mode: 'month',     label: 'Month' },
+  { mode: 'quarter',   label: 'Quarter' },
+  { mode: 'halfyear',  label: 'Half' },
+  { mode: 'all',       label: 'All' },
+];
+
+function getPaymentDisplayId(row: PaymentDisplay): string {
+  if (typeof row.id === 'string') return row.id;
+  if (typeof row.id === 'number') return row.id < 0 ? '(auto)' : String(row.id);
+  return String(row.id ?? '');
 }
 
-function formatDayLabel(dateStr: string): string {
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return '';
-  }
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  return date.toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+function formatPaymentBreakdown(row: PaymentDisplay): string {
+  if (row.paymentMode !== 'Mixed') return row.paymentMode;
+  const parts = [];
+  if ((row as any).cashAmount)   parts.push(`Cash: ₹${(row as any).cashAmount}`);
+  if ((row as any).upiAmount)    parts.push(`UPI: ₹${(row as any).upiAmount}`);
+  if ((row as any).bankAmount)   parts.push(`Bank: ₹${(row as any).bankAmount}`);
+  if ((row as any).chequeAmount) parts.push(`Cheque: ₹${(row as any).chequeAmount}`);
+  return parts.join(', ');
 }
 
 export function PaymentForm() {
-  const { payments, jobs, getCustomer, deletePayment, updateJob } = useDataStore();
+  const { payments, jobs, customers, getCustomer, deletePayment, updateJob } = useDataStore();
   const toast = useToast();
-  const today = getLocalDateString(new Date());
 
-  // Payment Report state
   const [reportPeriod, setReportPeriod] = useState<PeriodType>('today');
-  const [selectedDay, setSelectedDay] = useState(today);
-  const [reportRangeFrom, setReportRangeFrom] = useState('');
-  const [reportRangeTo, setReportRangeTo] = useState(today);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [editingCardKey, setEditingCardKey] = useState<string | null>(null);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PaymentDisplay | null>(null);
-  const [filterCustomer, setFilterCustomer] = useState('');
 
-  // Payment Report calculations
+  // ── Period range ──────────────────────────────────────────────────────────
+
   const reportRange = useMemo(() => {
-    if (reportPeriod === 'all') {
-      return { from: undefined, to: undefined, label: 'All Time' };
-    }
-    if (reportPeriod === 'range') {
-      return { from: reportRangeFrom || undefined, to: reportRangeTo || undefined, label: 'Custom Range' };
-    }
-    if (reportPeriod === 'today') {
-      return { from: selectedDay, to: selectedDay, label: formatDayLabel(selectedDay) };
-    }
-    const mapped = getReportRange(reportPeriod);
-    return { from: mapped.from, to: mapped.to, label: reportPeriod };
-  }, [reportPeriod, reportRangeFrom, reportRangeTo, selectedDay]);
+    if (reportPeriod === 'all') return { from: undefined, to: undefined };
+    return getReportRange(reportPeriod);
+  }, [reportPeriod]);
 
-  const jobsInReportRange = useMemo(() => getJobsInRange(jobs, reportRange.from, reportRange.to), [jobs, reportRange.from, reportRange.to]);
+  // ── Customer options ──────────────────────────────────────────────────────
 
-  const groupedJobCards = useMemo(() => {
-    const groups = groupJobsByCard(jobsInReportRange);
-    return groups.sort((a, b) => {
-      const aTime = new Date(a.primary.createdAt || a.primary.date).getTime();
-      const bTime = new Date(b.primary.createdAt || b.primary.date).getTime();
-      return bTime - aTime;
-    });
-  }, [jobsInReportRange]);
+  const customerOptions = useMemo<CustomerOption[]>(() => {
+    const usageMap = new Map<number, number>();
+    jobs.forEach(j => usageMap.set(j.customerId, (usageMap.get(j.customerId) || 0) + 1));
+    const sorted = customers
+      .filter(c => c.isActive !== false)
+      .map(c => ({ id: c.id, name: c.name }))
+      .sort((a, b) => (usageMap.get(b.id) || 0) - (usageMap.get(a.id) || 0) || a.name.localeCompare(b.name));
+    return [{ id: 0, name: 'All Customers' }, ...sorted];
+  }, [customers, jobs]);
+
+  const selectedCustomerOption = useMemo<CustomerOption>(
+    () => customerOptions.find(c => c.id === (selectedCustomerId ?? 0)) || { id: 0, name: 'All Customers' },
+    [customerOptions, selectedCustomerId]
+  );
+
+  // ── Job cards in range ────────────────────────────────────────────────────
+
+  const jobsInRange = useMemo(
+    () => getJobsInRange(jobs, reportRange.from, reportRange.to),
+    [jobs, reportRange.from, reportRange.to]
+  );
+
+  const groupedJobCards = useMemo(() =>
+    groupJobsByCard(jobsInRange).sort((a, b) => {
+      const at = new Date(a.primary.createdAt || a.primary.date).getTime();
+      const bt = new Date(b.primary.createdAt || b.primary.date).getTime();
+      return bt - at;
+    }),
+    [jobsInRange]
+  );
 
   const cardKeyById = useMemo(
-    () =>
-      new Map(
-        groupedJobCards.map((group) => [
-          group.primary.jobCardId || `LEGACY-${group.primary.id}`,
-          group.key,
-        ])
-      ),
+    () => new Map(groupedJobCards.map(g => [g.primary.jobCardId || `LEGACY-${g.primary.id}`, g.key])),
     [groupedJobCards]
   );
 
+  // ── Payments in range ─────────────────────────────────────────────────────
+
+  const filteredReportPayments = useMemo(
+    () => getPaymentsInRange(payments, reportRange.from, reportRange.to),
+    [payments, reportRange.from, reportRange.to]
+  );
+
+  const getCardIdFromNotes = (notes?: string) => notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
+
+  const fallbackJobPayments = useMemo(() => {
+    const groups = groupJobsByCard(jobsInRange.filter(j => getJobPaidAmount(j) > 0));
+    return groups.map<PaymentDisplay>(group => {
+      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+      return {
+        id: -Math.abs(group.primary.id),
+        customerId: group.primary.customerId,
+        amount: group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0),
+        date: group.primary.date,
+        paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
+        notes: `From JobCard ${cardId}`,
+        customerName: getCustomer(group.primary.customerId)?.name || 'Unknown',
+        source: 'Job Paid Entry',
+        jobCardId: cardId,
+        jobCardKey: cardKeyById.get(cardId),
+      };
+    });
+  }, [jobsInRange, getCustomer, cardKeyById]);
+
+  const reportPayments: PaymentDisplay[] = useMemo(() => {
+    const customersWithVouchers = new Set(filteredReportPayments.map(p => p.customerId));
+    const vouchers = filteredReportPayments.map(p => {
+      const linkedCardId = getCardIdFromNotes(p.notes);
+      return {
+        ...p,
+        customerName: getCustomer(p.customerId)?.name || 'Unknown',
+        source: 'Payment Voucher' as const,
+        jobCardId: linkedCardId || '-',
+        jobCardKey: linkedCardId ? cardKeyById.get(linkedCardId) : undefined,
+      };
+    });
+    const fallbacks = fallbackJobPayments.filter(p => !customersWithVouchers.has(p.customerId));
+    return [...vouchers, ...fallbacks];
+  }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
+
+  const filteredPayments = useMemo(() =>
+    selectedCustomerId
+      ? reportPayments.filter(p => p.customerId === selectedCustomerId)
+      : reportPayments,
+    [reportPayments, selectedCustomerId]
+  );
+
+  // ── Summary stats ─────────────────────────────────────────────────────────
+
+  const summary = useMemo(() => {
+    const total     = reportPayments.reduce((s, p) => s + (p.amount || 0), 0);
+    const count     = reportPayments.length;
+    const avg       = count > 0 ? total / count : 0;
+    const byCash    = reportPayments.filter(p => p.paymentMode === 'Cash').reduce((s, p) => s + p.amount, 0);
+    const byUPI     = reportPayments.filter(p => p.paymentMode === 'UPI').reduce((s, p) => s + p.amount, 0);
+    const byBank    = reportPayments.filter(p => p.paymentMode === 'Bank').reduce((s, p) => s + p.amount, 0);
+    const byCheque  = reportPayments.filter(p => p.paymentMode === 'Cheque').reduce((s, p) => s + p.amount, 0);
+    return { total, count, avg, byCash, byUPI, byBank, byCheque };
+  }, [reportPayments]);
+
+  // ── Modal state helpers ───────────────────────────────────────────────────
+
   const selectedGroup = useMemo(
-    () => groupedJobCards.find((group) => group.key === selectedCardKey) || null,
+    () => groupedJobCards.find(g => g.key === selectedCardKey) || null,
     [groupedJobCards, selectedCardKey]
   );
   const editingGroup = useMemo(
-    () => groupedJobCards.find((group) => group.key === editingCardKey) || null,
+    () => groupedJobCards.find(g => g.key === editingCardKey) || null,
     [groupedJobCards, editingCardKey]
   );
+
+  // ── Delete ────────────────────────────────────────────────────────────────
 
   const handleDeletePayment = async (payment: PaymentDisplay) => {
     if (payment.source === 'Job Paid Entry') {
@@ -123,7 +191,9 @@ export function PaymentForm() {
       if (!confirmed) return;
       try {
         const group = groupedJobCards.find(g => g.key === payment.jobCardKey);
-        const jobsToReset = group ? group.jobs : jobs.filter(j => (j.jobCardId || `LEGACY-${j.id}`) === payment.jobCardId);
+        const jobsToReset = group
+          ? group.jobs
+          : jobs.filter(j => (j.jobCardId || `LEGACY-${j.id}`) === payment.jobCardId);
         await Promise.all(jobsToReset.map(j => updateJob(j.id, { paidAmount: 0, paymentStatus: 'Pending', paymentMode: undefined })));
         toast.success('Success', 'Job card payment cleared');
       } catch {
@@ -131,388 +201,172 @@ export function PaymentForm() {
       }
       return;
     }
-
-    const confirmed = window.confirm(
-      `Delete payment of ${formatCurrency(payment.amount)}?\n\nThis action cannot be undone.`
-    );
-    if (!confirmed) return;
+    if (!window.confirm(`Delete payment of ${formatCurrency(payment.amount)}?\n\nThis cannot be undone.`)) return;
     try {
       await deletePayment(payment.id);
-      toast.success('Success', 'Payment deleted successfully');
-    } catch (error) {
-      console.error('Delete error:', error);
+      toast.success('Success', 'Payment deleted');
+    } catch {
       toast.error('Error', 'Failed to delete payment');
     }
   };
 
-  const filteredReportPayments = useMemo(() => {
-    const inRange = getPaymentsInRange(payments, reportRange.from, reportRange.to);
-    return inRange;
-  }, [payments, reportRange.from, reportRange.to]);
-
-  const getCardIdFromNotes = (notes?: string): string | undefined => {
-    if (!notes) {
-      return undefined;
-    }
-    const match = notes.match(/From JobCard\s+([A-Za-z0-9-]+)/i);
-    return match?.[1];
-  };
-
-  // One fallback entry per card (not per job line), for customers with no Payment Voucher.
-  const fallbackJobPayments = useMemo(() => {
-    const groups = groupJobsByCard(jobsInReportRange.filter(j => getJobPaidAmount(j) > 0));
-    return groups.map<PaymentDisplay>((group) => {
-      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-      const totalPaid = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
-      const mode = (group.primary.paymentMode as Payment['paymentMode']) || 'Cash';
-      return {
-        id: -Math.abs(group.primary.id),
-        customerId: group.primary.customerId,
-        amount: totalPaid,
-        date: group.primary.date,
-        paymentMode: mode,
-        notes: `From JobCard ${cardId}`,
-        customerName: getCustomer(group.primary.customerId)?.name || 'Unknown',
-        source: 'Job Paid Entry',
-        jobCardId: cardId,
-        jobCardKey: cardKeyById.get(cardId),
-      };
-    });
-  }, [jobsInReportRange, getCustomer, cardKeyById]);
-
-  const reportPaymentsWithNames: PaymentDisplay[] = useMemo(() => {
-    // Customers who already have Payment Voucher records — use those, skip fallback for them.
-    const customersWithVouchers = new Set(filteredReportPayments.map(p => p.customerId));
-
-    const vouchers = filteredReportPayments.map((payment) => {
-      const linkedCardId = getCardIdFromNotes(payment.notes);
-      return {
-        ...payment,
-        customerName: getCustomer(payment.customerId)?.name || 'Unknown',
-        source: 'Payment Voucher' as const,
-        jobCardId: linkedCardId || '-',
-        jobCardKey: linkedCardId ? cardKeyById.get(linkedCardId) : undefined,
-      };
-    });
-
-    // Only include fallback entries for customers who have NO vouchers in this period.
-    const fallbacks = fallbackJobPayments.filter(p => !customersWithVouchers.has(p.customerId));
-
-    return [...vouchers, ...fallbacks];
-  }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
-
-  const paymentCustomerOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const opts: { name: string }[] = [];
-    reportPaymentsWithNames.forEach((p) => {
-      if (!seen.has(p.customerName)) {
-        seen.add(p.customerName);
-        opts.push({ name: p.customerName });
-      }
-    });
-    return opts.sort((a, b) => a.name.localeCompare(b.name));
-  }, [reportPaymentsWithNames]);
-
-  const filteredPayments = useMemo(
-    () =>
-      filterCustomer
-        ? reportPaymentsWithNames.filter((p) => p.customerName === filterCustomer)
-        : reportPaymentsWithNames,
-    [reportPaymentsWithNames, filterCustomer]
-  );
-
-  const reportSummary = useMemo(() => {
-    const totalReceived = reportPaymentsWithNames.reduce((sum, p) => sum + (p.amount || 0), 0);
-    const byCash = reportPaymentsWithNames
-      .filter((p) => p.paymentMode === 'Cash')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const byBank = reportPaymentsWithNames
-      .filter((p) => p.paymentMode === 'Bank')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const byUPI = reportPaymentsWithNames
-      .filter((p) => p.paymentMode === 'UPI')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const byCheque = reportPaymentsWithNames
-      .filter((p) => p.paymentMode === 'Cheque')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-    // Calculate total work amount from jobs in range
-    const totalWorkAmount = groupedJobCards.reduce((sum, group) => {
-      return sum + group.jobs.reduce((jobSum, job) => jobSum + (job.amount || 0), 0);
-    }, 0);
-
-    const balanceToReceive = totalWorkAmount - totalReceived;
-
-    return { totalReceived, byCash, byBank, byUPI, byCheque, totalWorkAmount, balanceToReceive };
-  }, [reportPaymentsWithNames, groupedJobCards]);
-  const selectedDayLabel = formatDayLabel(selectedDay);
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="payment-form-container">
-      <div className="payment-report-container">
-        <div className="payment-report-header">
-          <h2 className="form-title">Payments</h2>
-          <button
-            type="button"
-            className="btn btn-primary btn-record-payment"
-            onClick={() => setIsRecordPaymentOpen(true)}
-          >
-            Record Payment
-          </button>
+    <div className="pay-screen">
+
+      {/* Row 1 – Page header */}
+      <div className="pay-pg-header">
+        <div>
+          <h1 className="records-pg-title">Payments <span className="records-pg-title-ta tamil">வரவுகள்</span></h1>
+          <p className="pay-pg-desc">Collection history and payment tracking</p>
+        </div>
+        <button type="button" className="btn btn-accent" onClick={() => setIsRecordPaymentOpen(true)}>
+          + Record Payment
+        </button>
+      </div>
+
+      {/* Row 2 – Toolbar: period tabs + customer search */}
+      <div className="pay-toolbar">
+        <div className="pay-period-tabs">
+          {PERIOD_TABS.map(({ mode, label }) => (
+            <button
+              key={mode}
+              type="button"
+              className={`pay-period-tab${reportPeriod === mode ? ' active' : ''}`}
+              onClick={() => setReportPeriod(mode)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <div className="report-controls">
-          <div>
-            <label className="form-label" htmlFor="report-period">Period</label>
-            <select
-              id="report-period"
-              className="form-input"
-              value={reportPeriod}
-              onChange={(e) => setReportPeriod(e.target.value as PeriodType)}
-            >
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-              <option value="halfyear">This Half-Year</option>
-              <option value="year">This Year</option>
-              <option value="range">Custom Date Range</option>
-              <option value="all">All Time</option>
-            </select>
-          </div>
+        <div className="pay-toolbar-sep" />
 
-          {reportPeriod === 'today' ? (
-            <div className="payment-day-selector">
-              <label className="form-label" htmlFor="payment-day-input">Date</label>
-              <div className="payment-day-nav">
-                <div className="payment-day-nav-shell">
+        <div className="pay-customer-select">
+          <SearchableSelect<CustomerOption>
+            items={customerOptions}
+            value={selectedCustomerOption}
+            onChange={item => setSelectedCustomerId(item.id === 0 ? null : item.id)}
+            getLabel={item => item.name}
+            getKey={item => String(item.id)}
+            getSearchText={item => item.name}
+            placeholder="Search customer..."
+          />
+        </div>
+
+        {filteredPayments.length > 0 && (
+          <span className="pay-count">{filteredPayments.length} txn{filteredPayments.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {/* Row 3 – Stat tiles */}
+      <div className="pay-stats">
+        <div className="pay-stat">
+          <span className="pay-stat-label">Transactions</span>
+          <span className="pay-stat-value">{summary.count}</span>
+        </div>
+
+        <div className="pay-stat pay-stat--green">
+          <span className="pay-stat-label">Total Received</span>
+          <span className="pay-stat-value">{formatCurrency(summary.total)}</span>
+        </div>
+
+        <div className="pay-stat">
+          <span className="pay-stat-label">Avg / Payment</span>
+          <span className="pay-stat-value">{formatCurrency(summary.avg)}</span>
+        </div>
+
+        <div className="pay-stat pay-stat--mode">
+          <span className="pay-stat-label">By Mode</span>
+          <div className="pay-mode-grid">
+            <span className="pay-mode-name">Cash</span>
+            <span className="pay-mode-name">UPI</span>
+            <span className="pay-mode-name">Bank</span>
+            <span className="pay-mode-name">Cheque</span>
+            <span className="pay-mode-val">{formatCurrency(summary.byCash)}</span>
+            <span className="pay-mode-val">{formatCurrency(summary.byUPI)}</span>
+            <span className="pay-mode-val">{formatCurrency(summary.byBank)}</span>
+            <span className="pay-mode-val">{formatCurrency(summary.byCheque)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 4 – Table */}
+      <DataTable<PaymentDisplay>
+        columns={[
+          { key: 'date', label: 'Date', sortable: true },
+          { key: 'id', label: 'Payment ID', render: (_, row) => getPaymentDisplayId(row) },
+          {
+            key: 'jobCardId',
+            label: 'Job Card',
+            render: (value, row) =>
+              row.jobCardKey ? (
+                <button
+                  type="button"
+                  className="pay-card-link"
+                  onClick={e => { e.stopPropagation(); setSelectedCardKey(row.jobCardKey || null); }}
+                >
+                  {String(value)}
+                </button>
+              ) : String(value),
+          },
+          { key: 'customerName', label: 'Customer', sortable: true },
+          { key: 'amount', label: 'Amount', render: value => formatCurrency(value as number) },
+          { key: 'paymentMode', label: 'Mode', render: (_, row) => formatPaymentBreakdown(row), sortable: true },
+          { key: 'source', label: 'Source', sortable: true },
+          { key: 'notes', label: 'Notes' },
+          {
+            key: 'id',
+            label: 'Actions',
+            render: (_, row) => {
+              const isJobPayment = row.source !== 'Payment Voucher';
+              return (
+                <div className="pay-actions">
                   <button
                     type="button"
-                    className="payment-day-nav-btn"
-                    onClick={() => setSelectedDay(shiftDate(selectedDay, -1))}
-                    aria-label="Previous day"
+                    className="icon-btn icon-edit"
+                    title={isJobPayment ? 'Edit via job card' : 'Edit payment'}
+                    aria-label="Edit"
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (isJobPayment) { if (row.jobCardKey) setSelectedCardKey(row.jobCardKey); }
+                      else setSelectedPayment(row);
+                    }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M8.75 3L4.75 7L8.75 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
                   </button>
-                  <input
-                    id="payment-day-input"
-                    type="date"
-                    className="form-input payment-day-input"
-                    value={selectedDay}
-                    onChange={(e) => setSelectedDay(e.target.value)}
-                    max={today}
-                    aria-label={selectedDayLabel || 'Selected date'}
-                  />
                   <button
                     type="button"
-                    className="payment-day-nav-btn"
-                    onClick={() => setSelectedDay(shiftDate(selectedDay, 1))}
-                    disabled={selectedDay >= today}
-                    aria-label="Next day"
+                    className="icon-btn icon-delete"
+                    title={isJobPayment ? 'Clear job payment' : 'Delete payment'}
+                    aria-label="Delete"
+                    onClick={e => { e.stopPropagation(); handleDeletePayment(row); }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M5.25 3L9.25 7L5.25 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                     </svg>
                   </button>
                 </div>
-                <button
-                  type="button"
-                  className="payment-day-today-btn"
-                  onClick={() => setSelectedDay(today)}
-                  disabled={selectedDay === today}
-                >
-                  Today
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {reportPeriod === 'range' ? (
-            <>
-              <div>
-                <label className="form-label" htmlFor="report-from">From</label>
-                <input
-                  id="report-from"
-                  type="date"
-                  className="form-input"
-                  value={reportRangeFrom}
-                  onChange={(e) => setReportRangeFrom(e.target.value)}
-                  max={today}
-                />
-              </div>
-              <div>
-                <label className="form-label" htmlFor="report-to">To</label>
-                <input
-                  id="report-to"
-                  type="date"
-                  className="form-input"
-                  value={reportRangeTo}
-                  onChange={(e) => setReportRangeTo(e.target.value)}
-                  max={today}
-                />
-              </div>
-            </>
-          ) : null}
-        </div>
-
-        <div className="payment-summary">
-          <div className="payment-summary-item">
-            <h3>Total Work</h3>
-            <p>{formatCurrency(reportSummary.totalWorkAmount)}</p>
-          </div>
-          <div className="payment-summary-item">
-            <h3>Total Received</h3>
-            <p>{formatCurrency(reportSummary.totalReceived)}</p>
-          </div>
-          <div className="payment-summary-item highlight">
-            <h3>Balance to Receive</h3>
-            <p>{formatCurrency(reportSummary.balanceToReceive)}</p>
-          </div>
-          <div className="payment-summary-item">
-            <h3>Cash</h3>
-            <p>{formatCurrency(reportSummary.byCash)}</p>
-          </div>
-          <div className="payment-summary-item">
-            <h3>Bank</h3>
-            <p>{formatCurrency(reportSummary.byBank)}</p>
-          </div>
-          <div className="payment-summary-item">
-            <h3>UPI</h3>
-            <p>{formatCurrency(reportSummary.byUPI)}</p>
-          </div>
-          <div className="payment-summary-item">
-            <h3>Cheque</h3>
-            <p>{formatCurrency(reportSummary.byCheque)}</p>
-          </div>
-        </div>
-
-        <div className="payment-filters">
-          <select
-            className="form-input payment-filter-select"
-            value={filterCustomer}
-            onChange={(e) => setFilterCustomer(e.target.value)}
-            title="Filter by customer"
-          >
-            <option value="">All Customers</option>
-            {paymentCustomerOptions.map((c) => (
-              <option key={c.name} value={c.name}>{c.name}</option>
-            ))}
-          </select>
-          {filterCustomer && (
-            <button
-              type="button"
-              className="payment-filter-clear"
-              onClick={() => setFilterCustomer('')}
-              title="Clear filter"
-            >
-              ✕ Clear
-            </button>
-          )}
-        </div>
-
-        <DataTable<PaymentDisplay>
-          columns={[
-            { key: 'date', label: 'Date', sortable: true },
-            {
-              key: 'id',
-              label: 'Payment ID',
-              render: (_, row) => getPaymentDisplayId(row),
+              );
             },
-            {
-              key: 'jobCardId',
-              label: 'JobCard',
-              render: (value, row) =>
-                row.jobCardKey ? (
-                  <button
-                    type="button"
-                    className="jobcard-link-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedCardKey(row.jobCardKey || null);
-                    }}
-                  >
-                    {String(value)}
-                  </button>
-                ) : (
-                  String(value)
-                ),
-            },
-            { key: 'customerName', label: 'Customer', sortable: true },
-            {
-              key: 'amount',
-              label: 'Amount',
-              render: (value) => formatCurrency(value as number),
-            },
-            {
-              key: 'paymentMode',
-              label: 'Mode / Breakdown',
-              render: (_, row) => formatPaymentBreakdown(row),
-              sortable: true,
-            },
-            { key: 'source', label: 'Source', sortable: true },
-            { key: 'notes', label: 'Notes' },
-            {
-              key: 'id',
-              label: 'Actions',
-              render: (_, row) => {
-                const isJobPayment = row.source !== 'Payment Voucher';
-                return (
-                  <div className="payment-table-actions">
-                    <button
-                      type="button"
-                      className="icon-btn icon-edit"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isJobPayment) {
-                          if (row.jobCardKey) setSelectedCardKey(row.jobCardKey);
-                        } else {
-                          setSelectedPayment(row);
-                        }
-                      }}
-                      title={isJobPayment ? 'Edit via job card' : 'Edit payment'}
-                      aria-label="Edit"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeletePayment(row);
-                      }}
-                      title={isJobPayment ? 'Delete auto-recorded job payment' : 'Delete payment'}
-                      aria-label="Delete"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M10 11v6M14 11v6" />
-                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                      </svg>
-                    </button>
-                  </div>
-                );
-              },
-            },
-          ]}
-          data={filteredPayments}
-          keyFn={(item) => item.id}
-          sortBy="date"
-          sortOrder="desc"
-          emptyMessage="No payment data found in this period"
-        />
-      </div>
-
-      <RecordPaymentModal
-        isOpen={isRecordPaymentOpen}
-        onClose={() => setIsRecordPaymentOpen(false)}
+          },
+        ]}
+        data={filteredPayments}
+        keyFn={item => item.id}
+        sortBy="date"
+        sortOrder="desc"
+        emptyMessage="No payments found for this period"
       />
+
+      {/* Modals */}
+      <RecordPaymentModal isOpen={isRecordPaymentOpen} onClose={() => setIsRecordPaymentOpen(false)} />
 
       <PaymentEditModal
         isOpen={selectedPayment !== null}
@@ -529,6 +383,7 @@ export function PaymentForm() {
         onEdit={() => { if (selectedGroup) { setEditingCardKey(selectedGroup.key); setSelectedCardKey(null); } }}
         onDelete={undefined}
       />
+
       <JobCardEditOverlay
         isOpen={Boolean(editingGroup)}
         jobs={editingGroup?.jobs || null}

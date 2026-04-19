@@ -18,7 +18,6 @@ interface JobLineProps {
   line: JobLineState;
   onChange: (line: JobLineState) => void;
   onRemove: () => void;
-  lineNumber: number;
   showCommission?: boolean;
   showInlineWorker?: boolean;
   showInlineCommission?: boolean;
@@ -29,7 +28,6 @@ export function JobLine({
   line,
   onChange,
   onRemove,
-  lineNumber,
   showCommission = true,
   showInlineWorker = true,
   showInlineCommission = true,
@@ -78,102 +76,82 @@ export function JobLine({
 
   const showWorkerField = showCommission && showInlineWorker && commissionWorkers.length > 0;
   const showCommissionField = showCommission && showInlineCommission;
-  const lineContainerClassName = [
-    'job-line-container',
-    showWorkerField ? '' : 'no-worker',
-    showCommissionField ? '' : 'no-commission',
-  ]
-    .filter(Boolean)
-    .join(' ');
 
   return (
-    <div className={lineContainerClassName}>
-      <div className="line-number">{lineNumber}</div>
-
-      <div className="line-field work-type-field">
-        <label className="field-label">Work Type</label>
+    <div className={`wl-row${showWorkerField || showCommissionField ? ' wl-row--comm' : ''}`}>
+      <div className="wl-cell wl-cell--type">
         <SearchableSelect
           items={sortedWorkTypes}
           value={line.workType}
           onChange={handleWorkTypeChange}
           getLabel={(wt) => wt.name}
-          getSearchText={(wt) =>
-            `${wt.name} ${wt.shortCode || ''} ${wt.category || ''}`
-          }
+          getSearchText={(wt) => `${wt.name} ${wt.shortCode || ''} ${wt.category || ''}`}
           getKey={(wt) => String(wt.id)}
           groupBy={(wt) => wt.category}
           placeholder="Select work type..."
         />
+        {suggestedAmount !== '0' && (
+          <button type="button" className="wl-suggest" onClick={handleApplySuggestedAmount}>
+            ₹{suggestedAmount}
+          </button>
+        )}
       </div>
 
+      <div className="wl-cell wl-cell--qty">
+        <QuantityStepper value={line.quantity} onChange={handleQuantityChange} min={1} max={9999} step={1} />
+      </div>
+
+      <div className="wl-cell wl-cell--amt">
+        <input
+          type="number"
+          className="line-input"
+          value={line.amount}
+          onChange={handleAmountChange}
+          placeholder="0"
+          step="0.01"
+          min="0"
+          required
+        />
+      </div>
+
+      {showCommissionField && (
+        <div className="wl-cell wl-cell--comm">
+          <input
+            type="number"
+            className="line-input"
+            value={line.commission}
+            onChange={handleCommissionChange}
+            placeholder="0"
+            step="0.01"
+            min="0"
+          />
+        </div>
+      )}
+
       {showWorkerField && (
-        <div className="line-field job-line-worker-field">
-          <label className="field-label">Worker</label>
+        <div className="wl-cell wl-cell--worker">
           <SearchableSelect
             items={sortedWorkers}
             value={line.commissionWorker}
             onChange={handleWorkerChange}
             getLabel={(w) => w.name}
             getKey={(w) => String(w.id)}
-            placeholder="Select worker..."
+            placeholder="Worker..."
           />
         </div>
       )}
 
-      <div className="line-field job-line-quantity-field">
-        <label className="field-label">Quantity</label>
-        <QuantityStepper value={line.quantity} onChange={handleQuantityChange} min={1} max={9999} step={1} />
+      <div className="wl-cell wl-cell--remove">
+        <button
+          className="wl-remove-btn"
+          onClick={onRemove}
+          type="button"
+          title="Remove line"
+          aria-label="Remove job line"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
-
-      <div className="line-field job-line-amount-field">
-        <label className="field-label">Amount (INR)</label>
-        <input
-          type="number"
-          className="line-input"
-          value={line.amount}
-          onChange={handleAmountChange}
-          placeholder="0.00"
-          step="0.01"
-          min="0"
-          required
-        />
-        {suggestedAmount !== '0' ? (
-          <button
-            type="button"
-            className="suggestion-chip suggestion-chip-action"
-            onClick={handleApplySuggestedAmount}
-            title="Click to use suggested amount"
-          >
-            Suggested: INR {suggestedAmount}
-          </button>
-        ) : null}
-      </div>
-
-      {showCommissionField && (
-        <div className="line-field job-line-commission-field">
-          <label className="field-label">Commission (INR)</label>
-          <input
-            type="number"
-            className="line-input"
-            value={line.commission}
-            onChange={handleCommissionChange}
-            placeholder="0.00"
-            step="0.01"
-            min="0"
-            required
-          />
-        </div>
-      )}
-
-      <button
-        className="btn-remove"
-        onClick={onRemove}
-        type="button"
-        title="Remove job line"
-        aria-label="Remove job line"
-      >
-        x
-      </button>
     </div>
   );
 }

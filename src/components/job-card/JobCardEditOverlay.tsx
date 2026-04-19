@@ -347,13 +347,12 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
               + Add Line
             </button>
           </div>
-          {jobLines.map((line, index) => (
+          {jobLines.map((line) => (
             <JobLine
               key={line.id}
               line={line}
               onChange={handleLineChange}
               onRemove={() => handleRemoveLine(line.id)}
-              lineNumber={index + 1}
               showCommission={showCommissionFields}
               showInlineWorker={false}
               showInlineCommission={false}

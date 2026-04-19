@@ -122,7 +122,7 @@ export const useUIStore = create<UIStore>()(
       },
     }),
     {
-      name: 'siva_ui',
+      name: 'slw_ui_v1',
       partialize: (state) => ({
         theme: state.theme,
       }),
@@ -142,6 +142,7 @@ function applyThemeToDOM(theme: 'light' | 'dark') {
 // Subscribe to theme changes and sync to localStorage
 useUIStore.subscribe((state) => {
   try {
+    localStorage.setItem('slw_ui_v1.theme', state.theme);
     localStorage.setItem('siva_theme', state.theme);
     applyThemeToDOM(state.theme);
   } catch (error) {
@@ -152,7 +153,8 @@ useUIStore.subscribe((state) => {
 // Initialize theme from localStorage on mount (HTML script handles initial DOM setup)
 if (typeof document !== 'undefined') {
   try {
-    const savedTheme = localStorage.getItem('siva_theme');
+    const savedTheme =
+      localStorage.getItem('slw_ui_v1.theme') || localStorage.getItem('siva_theme');
     if (savedTheme === 'light' || savedTheme === 'dark') {
       useUIStore.setState({ theme: savedTheme });
     }

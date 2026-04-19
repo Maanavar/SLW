@@ -26,6 +26,21 @@
 
 .table-header.sortable {
   cursor: pointer;
+  user-select: none;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.table-header.sortable:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.table-header.sortable:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
 }
 
 .table-header.sorted {
@@ -40,6 +55,7 @@
 
 .sort-icon::before {
   font-size: 10px;
+  opacity: 0.95;
 }
 
 .sort-icon.asc::before {

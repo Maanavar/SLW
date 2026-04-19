@@ -160,9 +160,12 @@ export function calculateCustomerBalance(
 
   const totalDue = customerJobs.reduce((sum, j) => sum + getJobFinalBillValue(j), 0);
   const totalPaidFromJobs = customerJobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
-  const totalPaid = customerPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaidFromPayments = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  return totalDue - totalPaidFromJobs - totalPaid;
+  // Payments are usually reflected in both `payments` and `job.paidAmount`.
+  // Using the larger source prevents double-counting while staying backward-compatible with legacy rows.
+  const totalPaid = Math.max(totalPaidFromJobs, totalPaidFromPayments);
+  return Math.max(0, totalDue - totalPaid);
 }
 
 /**

@@ -5,17 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Siva Lathe Works</title>
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#0071e3" />
+    <meta name="theme-color" content="#4a4fcb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SLW" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Tamil:wght@400;500;600&display=swap"
+    />
     <script>
       (function () {
         try {
-          const saved = localStorage.getItem('siva_theme');
+          const modernKey = 'slw_ui_v1.theme';
+          const legacyKey = 'siva_theme';
+          const saved = localStorage.getItem(modernKey) || localStorage.getItem(legacyKey);
           const system =
             window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
               ? 'dark'

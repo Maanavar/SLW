@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createHashRouter } from 'react-router-dom';
 import App from './App';
+import { AppErrorBoundary } from './components/ui/AppErrorBoundary';
 import { RequireAuth } from './components/auth/RequireAuth';
 import { DashboardScreen } from './screens/dashboard/DashboardScreen';
 import { CustomersScreen } from './screens/customers/CustomersScreen';
@@ -87,6 +88,8 @@ if ('serviceWorker' in navigator) {
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <AppErrorBoundary>
+      <RouterProvider router={router} />
+    </AppErrorBoundary>
   </React.StrictMode>
 );

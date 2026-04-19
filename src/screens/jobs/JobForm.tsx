@@ -43,7 +43,7 @@ function isWagenAutosCustomer(customer?: Customer | null) {
   if (!customer) return false;
   const name = normalizeCustomerValue(customer.name);
   const shortCode = normalizeCustomerValue(customer.shortCode);
-  return shortCode === 'wp' || name === 'wagen autos';
+  return shortCode === 'wgn' || name === 'wagen autos';
 }
 
 function isRmpCustomer(customer?: Customer | null) {
@@ -53,20 +53,9 @@ function isRmpCustomer(customer?: Customer | null) {
   return shortCode === 'rmp' || name.includes('ramani motors');
 }
 
-function isMahalingamCustomer(customer?: Customer | null) {
-  if (!customer) return false;
-  const name = normalizeCustomerValue(customer.name).replace(/[^a-z]/g, '');
-  const shortCode = normalizeCustomerValue(customer.shortCode);
-  return (
-    shortCode === 'nm' ||
-    name.includes('mahaling') ||
-    name.includes('mahalinham')
-  );
-}
-
 function shouldShowDcFields(customer?: Customer | null) {
   if (!customer) return false;
-  return isDcApplicableCustomer(customer) || isMahalingamCustomer(customer);
+  return isDcApplicableCustomer(customer);
 }
 
 function formatCustomerLabel(customer: Customer) {
@@ -74,6 +63,14 @@ function formatCustomerLabel(customer: Customer) {
   const safeCode = code !== '0' ? code : '';
   return safeCode ? `${customer.name} (${safeCode})` : customer.name;
 }
+
+type SubmittedSortKey = 'customer' | 'lines' | 'finalBill' | 'status';
+
+const paymentStatusOrder: Record<'Paid' | 'Pending' | 'Partially Paid', number> = {
+  Pending: 0,
+  'Partially Paid': 1,
+  Paid: 2,
+};
 
 export function JobForm() {
   const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer } = useDataStore();
@@ -104,7 +101,7 @@ export function JobForm() {
     },
   ]);
   const [workMode, setWorkMode] = useState<'Workshop' | 'Spot'>('Workshop');
-  const [paymentMode, setPaymentMode] = useState('');
+  const [paymentMode, setPaymentMode] = useState('Cash');
   const [dcNo, setDcNo] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [dcDate, setDcDate] = useState('');
@@ -122,6 +119,9 @@ export function JobForm() {
   const [editingJobIds, setEditingJobIds] = useState<number[]>([]);
   const [cardCommissionWorker, setCardCommissionWorker] = useState<CommissionWorker | null>(null);
   const [cardTotalCommission, setCardTotalCommission] = useState('');
+  const [submittedSort, setSubmittedSort] = useState<{ key: SubmittedSortKey; order: 'asc' | 'desc' }>(
+    { key: 'finalBill', order: 'desc' }
+  );
 
   const showDcFields = shouldShowDcFields(selectedCustomer);
   const showVehicleNoField = showDcFields && !isWagenAutosCustomer(selectedCustomer);
@@ -176,6 +176,7 @@ export function JobForm() {
     netValue: totalAmount,
     finalValue: totalAmount + totalCommission,
   };
+  const nextCardId = useMemo(() => generateJobCardId(jobDate, jobs), [jobDate, jobs]);
 
   useEffect(() => {
     if (!showCommissionFields) {
@@ -203,6 +204,15 @@ export function JobForm() {
     }
   }, [showVehicleNoField, vehicleNo]);
 
+  useEffect(() => {
+    const val = parseFloat(paidAmount);
+    if (!isNaN(val) && val > 0) {
+      setPaymentStatus('Paid');
+    } else {
+      setPaymentStatus('Pending');
+    }
+  }, [paidAmount]);
+
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
 
@@ -229,8 +239,42 @@ export function JobForm() {
     () => todayJobCards.find((group) => group.key === selectedCardKey) || null,
     [todayJobCards, selectedCardKey]
   );
-  const [showReceivedBreakdown, setShowReceivedBreakdown] = useState(false);
+  const sortedTodayJobCards = useMemo(() => {
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
+    const direction = submittedSort.order === 'asc' ? 1 : -1;
+    return [...todayJobCards].sort((a, b) => {
+      if (submittedSort.key === 'customer') {
+        const aName = getCustomer(a.primary.customerId)?.name || 'Unknown';
+        const bName = getCustomer(b.primary.customerId)?.name || 'Unknown';
+        return collator.compare(aName, bName) * direction;
+      }
 
+      if (submittedSort.key === 'lines') {
+        return (a.jobs.length - b.jobs.length) * direction;
+      }
+
+      if (submittedSort.key === 'finalBill') {
+        const aBill = getJobCardPaymentSummary(a.jobs).finalBill;
+        const bBill = getJobCardPaymentSummary(b.jobs).finalBill;
+        return (aBill - bBill) * direction;
+      }
+
+      const aStatus = getJobCardPaymentSummary(a.jobs).status;
+      const bStatus = getJobCardPaymentSummary(b.jobs).status;
+      return (paymentStatusOrder[aStatus] - paymentStatusOrder[bStatus]) * direction;
+    });
+  }, [todayJobCards, submittedSort, getCustomer]);
+  const toggleSubmittedSort = (key: SubmittedSortKey) => {
+    setSubmittedSort((prev) =>
+      prev.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'finalBill' ? 'desc' : 'asc' }
+    );
+  };
+  const submittedSortMark = (key: SubmittedSortKey) => {
+    if (submittedSort.key !== key) return '↕';
+    return submittedSort.order === 'asc' ? '↑' : '↓';
+  };
   const jobCardsMetrics = useMemo(() => {
     let totalFinal = 0;
     let totalPaid = 0;
@@ -302,16 +346,6 @@ export function JobForm() {
     setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
   };
 
-  const handleCommissionWorkerChange = (lineId: string, worker: CommissionWorker | null) => {
-    setJobLines((prev) =>
-      prev.map((line) => (line.id === lineId ? { ...line, commissionWorker: worker } : line))
-    );
-  };
-
-  const handleCommissionValueChange = (lineId: string, value: string) => {
-    setJobLines((prev) => prev.map((line) => (line.id === lineId ? { ...line, commission: value } : line)));
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -371,7 +405,7 @@ export function JobForm() {
     }
 
     if (showDcFields && !dcNo.trim() && !dcApproval) {
-      toast.error('Error', 'For DC customers, enter DC Number or mark Approved');
+      toast.error('Error', 'For DC customers, enter DC Number or mark DC waived');
       return;
     }
 
@@ -404,7 +438,7 @@ export function JobForm() {
               paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
               workMode,
               isSpotWork: workMode === 'Spot',
-              notes: notes.trim() ? notes.trim() : null,
+              notes: notes.trim() || undefined,
               ...(showDcFields && {
                 dcNo: dcNo || undefined,
                 vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
@@ -469,7 +503,7 @@ export function JobForm() {
           isSpotWork: workMode === 'Spot',
           jobCardId,
           jobCardLine: index + 1,
-          notes: notes.trim() ? notes.trim() : null,
+          notes: notes.trim() || undefined,
           ...(showDcFields && {
             dcNo: dcNo || undefined,
             vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
@@ -508,8 +542,7 @@ export function JobForm() {
         }
       }
 
-      // Reset form
-      setJobDate(getLocalDateString(new Date()));
+      // Reset form (keep current date per design spec)
       setSelectedCustomer(null);
       setJobLines([
         {
@@ -522,7 +555,7 @@ export function JobForm() {
         },
       ]);
       setWorkMode('Workshop');
-      setPaymentMode('');
+      setPaymentMode('Cash');
       setPaidAmount('');
       setPaymentStatus('Pending');
       setDcNo('');
@@ -614,7 +647,7 @@ export function JobForm() {
     setEditingJobIds(cardToEdit.jobs.map((j) => j.id));
     setIsEditMode(true);
     setSelectedCardKey(null);
-    toast.success('Info', 'Edit mode activated. Modify and click "Update Job" to save changes.');
+    toast.success('Info', 'Edit mode activated. Modify and click "Update job card" to save changes.');
   };
 
   const handleDeleteCard = async (card?: typeof selectedTodayCard) => {
@@ -640,672 +673,567 @@ export function JobForm() {
     }
   };
 
+  const handleReset = () => {
+    setSelectedCustomer(null);
+    setJobLines([{ id: Date.now().toString(), workType: null, quantity: 1, amount: '', commission: '', commissionWorker: null }]);
+    setWorkMode('Workshop');
+    setPaymentMode('Cash');
+    setPaidAmount('');
+    setPaymentStatus('Pending');
+    setDcNo('');
+    setVehicleNo('');
+    setDcDate('');
+    setDcApproval(false);
+    setRmpHandler(null);
+    setNotes('');
+    setCardCommissionWorker(null);
+    setCardTotalCommission('');
+    if (isEditMode) {
+      setIsEditMode(false);
+      setEditingJobIds([]);
+    }
+    setSelectedCardKey(null);
+  };
+
+  const typeVariant: Record<string, string> = {
+    Monthly: 'flag-monthly',
+    Invoice: 'flag-invoice',
+    'Party-Credit': 'flag-party-credit',
+    Cash: 'flag-cash',
+  };
+
+  const todayLabel = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+
   return (
-    <div className="job-form-container">
-      <div className="jobs-page-header">
-        <div className="jobs-title-block">
-          <h2 className="form-title">{isEditMode ? 'Update JobCard' : 'Create Job'}</h2>
-          <p className="jobs-subtitle">
-            Capture job details quickly and track recent cards in one place.
-          </p>
+    <div className="jobs-screen">
+
+      {/* Page header */}
+      <div className="jobs-pg-header">
+        <div>
+          <h1 className="jobs-pg-title">Jobs <span className="jobs-pg-title-ta tamil">வேலைகள்</span></h1>
+          <p className="jobs-pg-desc">Create daily job cards and review today's work</p>
         </div>
-        <span className="jobs-header-pill">{jobCardsMetrics.count} cards in view</span>
+        <span className="jobs-cardid-badge">
+          Card ID <strong className="mono">{nextCardId}</strong>
+        </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="job-form">
-        <div className="form-section">
-          <h3 className="section-title job-info-title">Job Information</h3>
+      {/* 2-column top grid */}
+      <div className="jobs-top-grid">
 
-          <div className="header-fields">
-            <div className="form-group">
-              <label className="form-label">Customer</label>
-              <SearchableSelect
-                items={customers}
-                value={selectedCustomer}
-                onChange={setSelectedCustomer}
-                getLabel={formatCustomerLabel}
-                getKey={(c) => String(c.id)}
-                placeholder="Select customer..."
-                disabled={isEditMode}
-              />
-              {isEditMode && (
-                <p className="form-hint-text">Customer cannot be changed when editing a job card.</p>
-              )}
-              {selectedCustomer && (
-                <>
-                  {(selectedCustomer.advanceBalance || 0) > 0 && (
-                    <div className="customer-info-banner advance">
-                      ✓ {selectedCustomer.name} has {formatCurrency(selectedCustomer.advanceBalance)} advance. Apply it in the Payment section below.
-                    </div>
-                  )}
-                  {(() => {
-                    const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer.id);
-                    const outstanding = customerJobs.reduce((sum, job) => {
-                      const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                      const jobPaid = job.paidAmount || 0;
-                      return sum + Math.max(0, jobDue - jobPaid);
-                    }, 0);
-
-                    if (outstanding > 0) {
-                      return (
-                        <div className="customer-info-banner backlog">
-                          ⚠️ {selectedCustomer.name} has {formatCurrency(outstanding)} backlog (unpaid previous jobs).
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                </>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="job-date">
-                Date
-              </label>
-              <input
-                id="job-date"
-                type="date"
-                className="form-input"
-                value={jobDate}
-                onChange={(e) => setJobDate(e.target.value)}
-                max={today}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Work Mode</label>
-              <div className="mode-buttons">
-                <button
-                  type="button"
-                  className={`mode-btn ${workMode === 'Workshop' ? 'active' : ''}`}
-                  onClick={() => setWorkMode('Workshop')}
-                >
-                  Workshop
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${workMode === 'Spot' ? 'active' : ''}`}
-                  onClick={() => setWorkMode('Spot')}
-                >
-                  Spot
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="form-section">
-          <div className="section-header">
-            <h3 className="section-title">Job Details</h3>
-            <button type="button" className="btn btn-secondary btn-add-line" onClick={handleAddLine}>
-              Add Line
-            </button>
+        {/* Left: New job card */}
+        <div className="njc-panel">
+          <div className="njc-head">
+            <span className="njc-heading">{isEditMode ? 'Update job card' : 'New job card'}</span>
+            <span className="njc-auto-id">Auto ID · <strong className="mono">{nextCardId}</strong></span>
           </div>
 
-          <div className="job-lines">
-            {jobLines.map((line, index) => (
-              <JobLine
-                key={line.id}
-                line={line}
-                onChange={handleLineChange}
-                onRemove={() => handleRemoveLine(line.id)}
-                lineNumber={index + 1}
-                showCommission={showCommissionFields}
-                showInlineWorker={false}
-                showInlineCommission={false}
-              />
-            ))}
-          </div>
+          <form onSubmit={handleSubmit} className="njc-body">
 
-          <div className="job-summary">
-            <div className="summary-item">
-              <span className="summary-label">Total Amount</span>
-              <span className="summary-value">{formatCurrency(summary.totalAmount)}</span>
-            </div>
-            {showCommissionFields && (
-              <>
-                <div className="summary-item">
-                  <span className="summary-label">Commission (Extra)</span>
-                  <span className="summary-value">{formatCurrency(summary.totalCommission)}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Final Bill (Amt + Comm)</span>
-                  <span className="summary-value">{formatCurrency(summary.finalValue)}</span>
-                </div>
-              </>
-            )}
-            <div className="summary-item">
-              <span className="summary-label">{showCommissionFields ? 'Our Net Income' : 'Total Value'}</span>
-              <span className="summary-value highlight">{formatCurrency(summary.netValue)}</span>
-            </div>
-          </div>
-        </div>
-
-        {showRmpHandlerField && (
-          <div className="form-section">
-            <h3 className="section-title">RMP Handler</h3>
-            <div className="rmp-handler-buttons">
-              {(['Bhai', 'Raja'] as const).map((handler) => (
-                <button
-                  key={handler}
-                  type="button"
-                  className={`status-btn${rmpHandler === handler ? ' active' : ''}`}
-                  onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
-                >
-                  {handler}
-                </button>
-              ))}
-            </div>
-            <p className="dc-validation-note">
-              Bhai handles people vehicles · Raja handles commercial vehicles. Commission is auto-assigned.
-            </p>
-          </div>
-        )}
-
-        {showCommissionFields && (
-          <div className="form-section commission-assignment-section">
-            <div className="section-header">
-              <h3 className="section-title">Commission Assignment</h3>
-              <span className="commission-assignment-note">
-                One job card can be tagged to only one commission worker.
-              </span>
-            </div>
-
-            {sortedCommissionWorkers.length === 0 ? (
-              <p className="dc-validation-note">
-                No commission workers found for this customer. Add workers in Customer settings.
-              </p>
-            ) : (
-              <div className="commission-assignment-simple">
-                <div className="form-group">
-                  <label className="form-label">Commission Worker</label>
-                  <SearchableSelect
-                    items={sortedCommissionWorkers}
-                    value={cardCommissionWorker}
-                    onChange={setCardCommissionWorker}
-                    getLabel={(w) => w.name}
-                    getKey={(w) => String(w.id)}
-                    placeholder="Select worker..."
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Total Commission (INR)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={cardTotalCommission}
-                    onChange={(e) => setCardTotalCommission(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {showDcFields ? (
-          <div className="form-section dc-section">
-            <h3 className="section-title">Delivery Challan</h3>
-
-            <div className="dc-fields">
+            {/* Customer + Date */}
+            <div className="njc-row-2">
               <div className="form-group">
-                <label className="form-label" htmlFor="dc-no">
-                  DC Number
+                <label className="form-label">
+                  Customer <span className="req-star">*</span> <span className="label-ta tamil">வாடிக்கையாளர்</span>
                 </label>
-                <input
-                  id="dc-no"
-                  type="text"
-                  className="form-input"
-                  value={dcNo}
-                  onChange={(e) => setDcNo(e.target.value)}
-                  placeholder="DC number..."
+                <SearchableSelect
+                  items={customers}
+                  value={selectedCustomer}
+                  onChange={setSelectedCustomer}
+                  getLabel={formatCustomerLabel}
+                  getKey={(c) => String(c.id)}
+                  placeholder="Search customer..."
+                  disabled={isEditMode}
                 />
+                {isEditMode && <p className="form-hint">Customer cannot be changed when editing.</p>}
               </div>
-
-              {showVehicleNoField ? (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="vehicle-no">
-                    Vehicle Number
-                  </label>
-                  <input
-                    id="vehicle-no"
-                    type="text"
-                    className="form-input"
-                    value={vehicleNo}
-                    onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-                    placeholder="Vehicle registration..."
-                  />
-                </div>
-              ) : null}
-
               <div className="form-group">
-                <label className="form-label" htmlFor="dc-date">
-                  DC Date
+                <label className="form-label" htmlFor="job-date">
+                  Job date <span className="label-ta tamil">தேதி</span>
                 </label>
                 <input
-                  id="dc-date"
+                  id="job-date"
                   type="date"
                   className="form-input"
-                  value={dcDate}
-                  onChange={(e) => setDcDate(e.target.value)}
+                  value={jobDate}
+                  onChange={(e) => setJobDate(e.target.value)}
                   max={today}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Mark as DC-Exempt</label>
-                <ToggleSwitch
-                  checked={dcApproval}
-                  onChange={setDcApproval}
-                  id="dc-approval"
-                  disabled={!!(dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate)}
+                  required
                 />
               </div>
             </div>
-            <p className="dc-validation-note">
-              Enter a DC Number, or toggle Mark as DC-Exempt if approved without one.
-            </p>
-          </div>
-        ) : null}
 
-        <div className="form-section">
-          <h3 className="section-title">Notes</h3>
+            {/* Customer flags */}
+            {selectedCustomer && (
+              <div className="customer-flags-row">
+                <span className={`cust-flag ${typeVariant[selectedCustomer.type] || 'flag-invoice'}`}>
+                  {selectedCustomer.type}
+                </span>
+                {showCommissionFields && <span className="cust-flag flag-commission">Commission</span>}
+                {showDcFields && <span className="cust-flag flag-dc">DC required</span>}
+                {showRmpHandlerField && <span className="cust-flag flag-rmp">RMP</span>}
+                {(selectedCustomer.advanceBalance || 0) > 0 && (
+                  <span className="cust-flag flag-advance">
+                    Advance {formatCurrency(selectedCustomer.advanceBalance || 0)}
+                  </span>
+                )}
+                {(() => {
+                  const outstanding = jobs
+                    .filter((j) => j.customerId === selectedCustomer.id)
+                    .reduce((sum, job) => {
+                      const due = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                      return sum + Math.max(0, due - (job.paidAmount || 0));
+                    }, 0);
+                  return outstanding > 0 ? (
+                    <span className="cust-flag flag-backlog">⚠ Backlog {formatCurrency(outstanding)}</span>
+                  ) : null;
+                })()}
+              </div>
+            )}
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="notes">
-              Notes
-            </label>
-            <textarea
-              id="notes"
-              className="form-textarea"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special instructions or remarks about this job card..."
-              rows={3}
-            />
-          </div>
-        </div>
-
-        <div className="form-section">
-          <h3 className="section-title">Payment</h3>
-
-          <div className="payment-fields">
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <div className="status-buttons">
-                <button
-                  type="button"
-                  className={`status-btn ${paymentStatus === 'Pending' ? 'active' : ''}`}
-                  onClick={() => {
-                    setPaymentStatus('Pending');
-                    setPaymentMode('');
-                    setPaidAmount('');
-                  }}
-                >
-                  Pending
-                </button>
-                <button
-                  type="button"
-                  className={`status-btn ${paymentStatus === 'Paid' ? 'active' : ''}`}
-                  onClick={() => setPaymentStatus('Paid')}
-                >
-                  Paid
+            {/* Work lines */}
+            <div className="work-lines-section">
+              <div className="work-lines-head">
+                <span className="work-lines-title">
+                  Work lines <span className="tamil work-lines-ta">வேலை வரிகள்</span>
+                </span>
+                <button type="button" className="btn-add-line" onClick={handleAddLine}>
+                  + Add line
                 </button>
               </div>
-            </div>
 
-            {paymentStatus === 'Paid' ? (
-              <div className="form-group">
-                <label className="form-label" htmlFor="paid-amount">
-                  Paid Amount (INR)
-                </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <input
-                    id="paid-amount"
-                    type="number"
-                    className="form-input"
-                    value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    required={paymentStatus === 'Paid'}
-                    style={{ flex: 1 }}
+              <div className="work-lines-table">
+                <div className="wl-col-header">
+                  <span>WORK TYPE</span>
+                  <span>QTY</span>
+                  <span>AMOUNT ₹</span>
+                  <span />
+                </div>
+                {jobLines.map((line) => (
+                  <JobLine
+                    key={line.id}
+                    line={line}
+                    onChange={handleLineChange}
+                    onRemove={() => handleRemoveLine(line.id)}
+                    showCommission={false}
+                    showInlineWorker={false}
+                    showInlineCommission={false}
                   />
-                  {summary.finalValue > 0 && (
-                    <button
-                      type="button"
-                      className="suggestion-chip suggestion-chip-action"
-                      onClick={() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          const jobPaid = job.paidAmount || 0;
-                          return sum + Math.max(0, jobDue - jobPaid);
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        const totalNeeded = backlog + summary.finalValue - advance;
-                        setPaidAmount(String(Math.max(0, totalNeeded)));
-                      }}
-                      title={(() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          const jobPaid = job.paidAmount || 0;
-                          return sum + Math.max(0, jobDue - jobPaid);
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        if (backlog > 0 && advance > 0) {
-                          return `Backlog (${formatCurrency(backlog)}) + Current (${formatCurrency(summary.finalValue)}) - Advance (${formatCurrency(advance)})`;
-                        } else if (backlog > 0) {
-                          return `Backlog (${formatCurrency(backlog)}) + Current (${formatCurrency(summary.finalValue)})`;
-                        } else if (advance > 0) {
-                          return `Current (${formatCurrency(summary.finalValue)}) - Advance (${formatCurrency(advance)})`;
-                        }
-                        return "Fill with total amount due";
-                      })()}
-                    >
-                      Fill: {(() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          const jobPaid = job.paidAmount || 0;
-                          return sum + Math.max(0, jobDue - jobPaid);
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        return formatCurrency(Math.max(0, backlog + summary.finalValue - advance));
-                      })()}
-                    </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Commission assignment */}
+            {showCommissionFields && (
+              <div className="commission-section">
+                {sortedCommissionWorkers.length === 0 ? (
+                  <p className="note-text">No commission workers for this customer. Add in Customer settings.</p>
+                ) : (
+                  <div className="njc-row-2">
+                    <div className="form-group">
+                      <label className="form-label">Commission Worker</label>
+                      <SearchableSelect
+                        items={sortedCommissionWorkers}
+                        value={cardCommissionWorker}
+                        onChange={setCardCommissionWorker}
+                        getLabel={(w) => w.name}
+                        getKey={(w) => String(w.id)}
+                        placeholder="Select worker..."
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Total Commission (INR)</label>
+                      <input
+                        type="number"
+                        className="form-input mono"
+                        value={cardTotalCommission}
+                        onChange={(e) => setCardTotalCommission(e.target.value)}
+                        placeholder="0"
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DC Panel */}
+            {showDcFields && (
+              <div className="dc-panel">
+                <div className="dc-panel-head">
+                  <span className="dc-panel-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                    Delivery Challan
+                  </span>
+                  <label className="dc-waived-toggle-label">
+                    <ToggleSwitch
+                      checked={dcApproval}
+                      onChange={setDcApproval}
+                      id="dc-approval"
+                      disabled={!!(dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate)}
+                    />
+                    <span>DC waived</span>
+                  </label>
+                </div>
+                <div className={`dc-fields-row${showVehicleNoField ? ' dc-fields-3' : ' dc-fields-2'}`}>
+                  <div className="form-group">
+                    <label className="form-label">DC No.</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      value={dcNo}
+                      onChange={(e) => setDcNo(e.target.value)}
+                      placeholder="DC1234"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="dc-date">DC Date</label>
+                    <input
+                      id="dc-date"
+                      type="date"
+                      className="form-input"
+                      value={dcDate}
+                      onChange={(e) => setDcDate(e.target.value)}
+                      max={today}
+                      title="DC Date"
+                    />
+                  </div>
+                  {showVehicleNoField && (
+                    <div className="form-group">
+                      <label className="form-label">Vehicle No.</label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        value={vehicleNo}
+                        onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
+                        placeholder="TN22AB1234"
+                      />
+                    </div>
                   )}
                 </div>
               </div>
-            ) : null}
+            )}
 
-            {paymentStatus === 'Paid' ? (
+            {/* RMP Handler */}
+            {showRmpHandlerField && (
               <div className="form-group">
-                <label className="form-label" htmlFor="payment-mode">
-                  Mode
-                </label>
+                <label className="form-label">RMP Handler</label>
+                <div className="seg-control rmp-seg">
+                  {(['Bhai', 'Raja'] as const).map((handler) => (
+                    <button
+                      key={handler}
+                      type="button"
+                      className={`seg-btn${rmpHandler === handler ? ' active' : ''}`}
+                      onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
+                    >
+                      {handler}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Work mode + Payment mode + Paid amount */}
+            <div className="njc-row-3">
+              <div className="form-group">
+                <label className="form-label">Work mode</label>
+                <div className="seg-control">
+                  <button type="button" className={`seg-btn${workMode === 'Workshop' ? ' active' : ''}`} onClick={() => setWorkMode('Workshop')}>Workshop</button>
+                  <button type="button" className={`seg-btn${workMode === 'Spot' ? ' active' : ''}`} onClick={() => setWorkMode('Spot')}>Spot</button>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="payment-mode">Payment mode</label>
                 <select
                   id="payment-mode"
                   className="form-input"
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value)}
-                  required={paymentStatus === 'Paid'}
                 >
-                  <option value="">Select mode...</option>
                   <option value="Cash">Cash</option>
                   <option value="UPI">UPI</option>
                   <option value="Bank">Bank</option>
                   <option value="Cheque">Cheque</option>
                 </select>
               </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="form-actions">
-          <button
-            type="submit"
-            className="btn btn-primary btn-submit"
-            disabled={
-              !selectedCustomer ||
-              isSubmitting ||
-              (showCommissionFields && sortedCommissionWorkers.length === 0)
-            }
-          >
-            {isSubmitting ? (
-              <>
-                <span className="loading-spinner-inline" aria-hidden="true">⏳</span>
-                {isEditMode ? 'Updating...' : 'Creating...'}
-              </>
-            ) : (
-              isEditMode ? 'Update Job' : 'Create Job'
-            )}
-          </button>
-          {isEditMode && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-submit"
-              onClick={() => {
-                setIsEditMode(false);
-                setEditingJobIds([]);
-                setJobDate(getLocalDateString(new Date()));
-                setSelectedCustomer(null);
-                setJobLines([
-                  {
-                    id: Date.now().toString(),
-                    workType: null,
-                    quantity: 1,
-                    amount: '',
-                    commission: '',
-                    commissionWorker: null,
-                  },
-                ]);
-                setWorkMode('Workshop');
-                setPaymentMode('');
-                setPaidAmount('');
-                setPaymentStatus('Pending');
-                setDcNo('');
-                setVehicleNo('');
-                setDcDate('');
-                setDcApproval(false);
-                setRmpHandler(null);
-                setNotes('');
-                setCardCommissionWorker(null);
-                setCardTotalCommission('');
-                setSelectedCardKey(null);
-                toast.info('Info', 'Edit cancelled');
-              }}
-              disabled={isSubmitting}
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-      </form>
-
-      <div className="form-section today-cards-section">
-        <div className="jobs-cards-header">
-          <div className="jobs-cards-title-wrap">
-            <h3 className="section-title">JobCards</h3>
-            <p className="jobs-cards-subtitle">Click any card to view, edit, or delete.</p>
-          </div>
-          <div className="jobs-cards-toolbar">
-            <div className="jobs-cards-control-group">
-              <span className="jobs-control-label">Scope</span>
-              <div className="view-mode-buttons">
-                <button
-                  type="button"
-                  className={`mode-btn ${cardViewMode === 'today' ? 'active' : ''}`}
-                  onClick={() => {
-                    setCardViewMode('today');
-                    setSelectedCardKey(null);
-                  }}
-                  title="Show today's job cards only"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${cardViewMode === 'range' ? 'active' : ''}`}
-                  onClick={() => {
-                    setCardViewMode('range');
-                    setFilterStartDate(today);
-                    setFilterEndDate(today);
-                    setSelectedCardKey(null);
-                  }}
-                  title="Show job cards from a date range"
-                >
-                  Range
-                </button>
+              <div className="form-group">
+                <label className="form-label" htmlFor="paid-amount">
+                  Paid amount ₹
+                  {summary.finalValue > 0 && (
+                    <button
+                      type="button"
+                      className="fill-chip"
+                      onClick={() => {
+                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
+                        const backlog = customerJobs.reduce((sum, job) => {
+                          const due = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                          return sum + Math.max(0, due - (job.paidAmount || 0));
+                        }, 0);
+                        const advance = selectedCustomer?.advanceBalance || 0;
+                        setPaidAmount(String(Math.max(0, backlog + summary.finalValue - advance)));
+                      }}
+                    >
+                      Fill
+                    </button>
+                  )}
+                </label>
+                <input
+                  id="paid-amount"
+                  type="number"
+                  className="form-input mono"
+                  value={paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                />
               </div>
             </div>
 
-            {cardViewMode === 'range' && (
-              <div className="jobs-cards-control-group">
-                <span className="jobs-control-label">Range</span>
-                <div className="date-range-wrapper">
-                  <input
-                    type="date"
-                    className="filter-date-input"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    max={today}
-                    title="Start date"
-                    aria-label="From date"
-                  />
-                  <span className="date-range-separator">to</span>
-                  <input
-                    type="date"
-                    className="filter-date-input"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    max={today}
-                    title="End date"
-                    aria-label="To date"
-                  />
+            {/* Notes */}
+            <textarea
+              className="form-input form-textarea"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes..."
+              rows={3}
+            />
+
+            {/* Footer */}
+            <div className="njc-footer">
+              <button type="button" className="btn btn-secondary" onClick={handleReset} disabled={isSubmitting}>
+                Reset
+              </button>
+              <button
+                type="submit"
+                className="btn btn-accent"
+                disabled={!selectedCustomer || isSubmitting || (showCommissionFields && sortedCommissionWorkers.length === 0)}
+              >
+                {isSubmitting ? (isEditMode ? 'Updating...' : 'Saving...') : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    {isEditMode ? 'Update job card' : 'Save job card'}
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Right: Card summary + Today's metrics */}
+        <div className="jobs-right-col">
+
+          {/* Card summary */}
+          <div className="njc-summary-card">
+            <div className="njc-summary-head">Card summary</div>
+            <div className="njc-summary-body">
+              <div className="summary-row">
+                <span className="summary-row-label">Total amount</span>
+                <span className="summary-row-val mono">{formatCurrency(summary.totalAmount)}</span>
+              </div>
+              <div className="summary-row">
+                <span className="summary-row-label">Commission</span>
+                <span className="summary-row-val mono is-amber">{formatCurrency(summary.totalCommission)}</span>
+              </div>
+              <div className="summary-sep" />
+              <div className="summary-row summary-row--final">
+                <span className="summary-row-label">Final bill</span>
+                <span className="summary-row-val mono summary-final-val">{formatCurrency(summary.finalValue)}</span>
+              </div>
+              <div className="summary-row">
+                <span className="summary-row-label">Net income</span>
+                <span className="summary-row-val mono is-green">{formatCurrency(summary.netValue)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Today's metrics */}
+          <div className="njc-metrics-card">
+            <div className="njc-metrics-head">
+              <span>Today's metrics</span>
+              <span className="metrics-date mono">{todayLabel}</span>
+            </div>
+            <div className="njc-metrics-body">
+              <div className="metrics-grid">
+                <div className="metrics-cell">
+                  <span className="metrics-label">Cards</span>
+                  <span className="metrics-val">{jobCardsMetrics.count}</span>
+                </div>
+                <div className="metrics-cell">
+                  <span className="metrics-label">Total bill</span>
+                  <span className="metrics-val mono">{formatCurrency(jobCardsMetrics.totalFinal)}</span>
+                </div>
+                <div className="metrics-cell">
+                  <span className="metrics-label">Paid</span>
+                  <span className="metrics-val mono is-green">{formatCurrency(jobCardsMetrics.totalPaid)}</span>
+                </div>
+                <div className="metrics-cell">
+                  <span className="metrics-label">Pending</span>
+                  <span className="metrics-val mono is-red">{formatCurrency(jobCardsMetrics.totalPending)}</span>
                 </div>
               </div>
-            )}
-
-            <span className="jobs-results-pill">{jobCardsMetrics.count} cards</span>
-          </div>
-        </div>
-
-        <div className="jobs-cards-summary">
-          <div className="jobs-card-stat">
-            <span className="jobs-card-stat-label">Final Bill</span>
-            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalFinal)}</span>
-          </div>
-          <div
-            className={`jobs-card-stat jobs-card-stat--positive${jobCardsMetrics.totalPaid > 0 ? ' jobs-card-stat--hoverable' : ''}`}
-            onMouseEnter={() => jobCardsMetrics.totalPaid > 0 && setShowReceivedBreakdown(true)}
-            onMouseLeave={() => setShowReceivedBreakdown(false)}
-          >
-            <span className="jobs-card-stat-label">Received</span>
-            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPaid)}</span>
-            {showReceivedBreakdown && (
-              <div className="jobs-stat-breakdown">
-                {jobCardsMetrics.byCash > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>Cash</span><span>{formatCurrency(jobCardsMetrics.byCash)}</span></div>
-                )}
-                {jobCardsMetrics.byBank > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>Bank</span><span>{formatCurrency(jobCardsMetrics.byBank)}</span></div>
-                )}
-                {jobCardsMetrics.byUPI > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>UPI</span><span>{formatCurrency(jobCardsMetrics.byUPI)}</span></div>
-                )}
-                {jobCardsMetrics.byCheque > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>Cheque</span><span>{formatCurrency(jobCardsMetrics.byCheque)}</span></div>
-                )}
+              <div className="metrics-sep" />
+              <div className="metrics-modes">
+                <span className="metrics-modes-title">Payment modes</span>
+                {[
+                  { label: 'Cash', value: jobCardsMetrics.byCash },
+                  { label: 'UPI', value: jobCardsMetrics.byUPI },
+                  { label: 'Bank', value: jobCardsMetrics.byBank },
+                  { label: 'Cheque', value: jobCardsMetrics.byCheque },
+                ].map(({ label, value }) => (
+                  <div key={label} className="metrics-mode-row">
+                    <span className="metrics-mode-label">{label}</span>
+                    <span className="metrics-mode-val mono">{formatCurrency(value)}</span>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
-          <div className="jobs-card-stat jobs-card-stat--warning">
-            <span className="jobs-card-stat-label">Pending</span>
-            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPending)}</span>
+        </div>
+      </div>
+
+      {/* Submitted today */}
+      <div className="submitted-section">
+        <div className="submitted-head">
+          <div className="submitted-head-left">
+            <span className="submitted-title">Submitted today</span>
+            <span className="submitted-count">{todayJobCards.length} cards</span>
+          </div>
+          <div className="seg-control">
+            <button type="button" className={`seg-btn${cardViewMode === 'today' ? ' active' : ''}`}
+              onClick={() => { setCardViewMode('today'); setSelectedCardKey(null); }}>Today</button>
+            <button type="button" className={`seg-btn${cardViewMode === 'range' ? ' active' : ''}`}
+              onClick={() => { setCardViewMode('range'); setFilterStartDate(today); setFilterEndDate(today); setSelectedCardKey(null); }}>Date Range</button>
           </div>
         </div>
 
-        {todayJobCards.length === 0 ? (
-          <p className="empty-today-cards">{emptyCardsMessage}</p>
-        ) : (
-          <div className="today-cards-list">
-            {todayJobCards.map((group) => {
-              const cardNo = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-              const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
-              const payment = getJobCardPaymentSummary(group.jobs);
+        {cardViewMode === 'range' && (
+          <div className="date-range-row">
+            <input type="date" className="form-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} max={today} title="Start date" aria-label="Start date" />
+            <span className="date-range-sep">to</span>
+            <input type="date" className="form-input" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} max={today} title="End date" aria-label="End date" />
+          </div>
+        )}
 
-              return (
-                <div
-                  key={group.key}
-                  className="today-card-item today-card-item-clickable"
-                  onClick={() => setSelectedCardKey(group.key)}
+        <div className="submitted-table-wrap">
+          <table className="submitted-table">
+            <thead>
+              <tr>
+                <th>CARD</th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'customer' ? ' is-active' : ''}`}
                   role="button"
                   tabIndex={0}
+                  onClick={() => toggleSubmittedSort('customer')}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedCardKey(group.key);
+                      toggleSubmittedSort('customer');
                     }
                   }}
                 >
-                  <div className="today-card-main">
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
-                      <span className="today-card-id">{cardNo}</span>
-                      <span className="today-card-customer">{customerName}</span>
-                      <StatusBadge status={payment.status} />
-                    </div>
-                    <div className="today-card-actions">
-                      <button
-                        type="button"
-                        className="icon-btn icon-edit"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditCard(group);
-                        }}
-                        title="Edit this job card"
-                        aria-label="Edit"
-                      >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCard(group);
-                        }}
-                        title="Delete this job card"
-                        aria-label="Delete"
-                      >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                          <path d="M10 11v6M14 11v6" />
-                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="today-card-stats">
-                    <span>Final: {formatCurrency(payment.finalBill)}</span>
-                    <span>Paid: {formatCurrency(payment.paid)}</span>
-                    <span>Pending: {formatCurrency(payment.pending)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  CUSTOMER {submittedSortMark('customer')}
+                </th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'lines' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('lines')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('lines');
+                    }
+                  }}
+                >
+                  LINES {submittedSortMark('lines')}
+                </th>
+                <th
+                  className={`numeric slw-sortable-th${submittedSort.key === 'finalBill' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('finalBill')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('finalBill');
+                    }
+                  }}
+                >
+                  FINAL BILL {submittedSortMark('finalBill')}
+                </th>
+                <th className="numeric">COMMISSION</th>
+                <th className="numeric">PAID</th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'status' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('status')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('status');
+                    }
+                  }}
+                >
+                  STATUS {submittedSortMark('status')}
+                </th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {todayJobCards.length === 0 ? (
+                <tr><td colSpan={8} className="table-empty-cell">{emptyCardsMessage}</td></tr>
+              ) : (
+                sortedTodayJobCards.map((group) => {
+                  const cardNo = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+                  const customer = getCustomer(group.primary.customerId);
+                  const customerName = customer?.name || 'Unknown';
+                  const customerCode = customer?.shortCode || '';
+                  const payment = getJobCardPaymentSummary(group.jobs);
+                  const firstLine = group.jobs[0];
+                  const extra = group.jobs.length - 1;
+                  const linesDesc = extra > 0 ? `${firstLine.workTypeName} +${extra}` : firstLine.workTypeName;
+                  const totalComm = group.jobs.reduce((s, j) => s + (j.commissionAmount || 0), 0);
+
+                  return (
+                    <tr
+                      key={group.key}
+                      className="submitted-row"
+                      onClick={() => setSelectedCardKey(group.key)}
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(group.key); } }}
+                    >
+                      <td className="mono card-no-cell">{cardNo}</td>
+                      <td>
+                        <div className="cust-cell-name">{customerName}</div>
+                        {customerCode && <div className="cust-cell-code">{customerCode}</div>}
+                      </td>
+                      <td>
+                        <div className="lines-cell-count">{group.jobs.length} {group.jobs.length === 1 ? 'line' : 'lines'}</div>
+                        <div className="lines-cell-desc">{linesDesc}</div>
+                      </td>
+                      <td className="numeric">{formatCurrency(payment.finalBill)}</td>
+                      <td className="numeric">{formatCurrency(totalComm)}</td>
+                      <td className={`numeric ${payment.status === 'Paid' ? 'cell-val-green' : payment.status === 'Partially Paid' ? 'cell-val-amber' : 'cell-val-muted'}`}>{formatCurrency(payment.paid)}</td>
+                      <td><StatusBadge status={payment.status} /></td>
+                      <td>
+                        <div className="row-actions">
+                          <button type="button" className="row-act-btn" onClick={(e) => { e.stopPropagation(); handleEditCard(group); }} title="Edit">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                          <button type="button" className="row-act-btn row-act-btn--del" onClick={(e) => { e.stopPropagation(); handleDeleteCard(group); }} title="Delete">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <JobCardDetailsModal
@@ -1319,4 +1247,3 @@ export function JobForm() {
     </div>
   );
 }
-
