@@ -2,6 +2,11 @@
   box-sizing: border-box;
 }
 
+/* Prevent grid/flex children from blowing out their track width on mobile */
+img, video, svg, canvas, iframe {
+  max-width: 100%;
+}
+
 html,
 body,
 #root {
@@ -64,6 +69,21 @@ p {
 }
 
 ::selection {
-  background: var(--accent-soft);
-  color: var(--text);
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+::-moz-selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+html[data-theme='dark'] ::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+html[data-theme='dark'] ::-moz-selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }

@@ -113,6 +113,40 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
 
   const handleClose = () => { resetForm(); onClose(); };
 
+  const getOutstandingForJob = (job: Job) =>
+    Math.max(0, getJobFinalBillValue(job) - getJobPaidAmount(job));
+
+  const applyPaymentAcrossJobs = async (
+    targetJobs: Job[],
+    amountToAllocate: number,
+    mode: Payment['paymentMode']
+  ) => {
+    let remaining = amountToAllocate;
+    const orderedJobs = [...targetJobs].sort(
+      (a, b) => a.date.localeCompare(b.date) || a.id - b.id
+    );
+
+    for (const job of orderedJobs) {
+      if (remaining <= 0) break;
+      const pending = getOutstandingForJob(job);
+      if (pending <= 0) continue;
+
+      const allocated = Math.min(remaining, pending);
+      const newPaid = getJobPaidAmount(job) + allocated;
+      await updateJob(job.id, {
+        paidAmount: newPaid,
+        paymentStatus:
+          Math.abs(newPaid - getJobFinalBillValue(job)) < 0.01
+            ? 'Paid'
+            : 'Partially Paid',
+        paymentMode: mode,
+      });
+      remaining -= allocated;
+    }
+
+    return remaining;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -131,11 +165,13 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
     if (paymentDate > today) { toast.error('Error', 'Future payment date not allowed'); return; }
 
     if (paymentScope !== 'manual') {
+      const advanceAvailable = selectedCustomer?.advanceBalance || 0;
+      const requiredScopedAmount = Math.max(0, scopedPendingAmount - advanceAvailable);
       if (!scopeRange?.from || !scopeRange?.to) { toast.error('Error', 'Select a valid date scope'); return; }
       if (scopeRange.from > scopeRange.to)        { toast.error('Error', 'Start date must be before end date'); return; }
       if (scopeRange.from > today || scopeRange.to > today) { toast.error('Error', 'Future dates not allowed'); return; }
       if (scopedJobs.length === 0)                { toast.error('Error', 'No jobs found in selected scope'); return; }
-      if (totalAmount < scopedPendingAmount)       { toast.error('Error', 'Amount must cover full scope balance'); return; }
+      if (totalAmount < requiredScopedAmount)      { toast.error('Error', 'Amount must cover full scope balance'); return; }
     }
 
     try {
@@ -169,6 +205,19 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
       }
 
       const paymentCount = payments.filter(p => p.date === paymentDate && p.customerId === selectedCustomer.id).length;
+      const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer.id);
+      const customerOutstandingTotal = customerJobs.reduce(
+        (sum, job) => sum + getOutstandingForJob(job),
+        0
+      );
+
+      if (isSettled && totalAmount < customerOutstandingTotal) {
+        toast.error(
+          'Error',
+          `Amount must be at least ${formatCurrency(customerOutstandingTotal)} to settle all dues`
+        );
+        return;
+      }
 
       const newPayment: Omit<Payment, 'id' | 'createdAt'> = {
         customerId: selectedCustomer.id,
@@ -186,36 +235,32 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
       await addPayment(newPayment);
 
       if (isSettled) {
-        await Promise.all(
-          jobs.filter(j => j.customerId === selectedCustomer.id).map(j =>
-            updateJob(j.id, { paidAmount: getJobFinalBillValue(j), paymentStatus: 'Paid', paymentMode: finalMode as any })
-          )
+        const remaining = await applyPaymentAcrossJobs(
+          customerJobs,
+          totalAmount,
+          finalMode
         );
+        if (remaining > 0) {
+          await updateCustomer(selectedCustomer.id, {
+            advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
+          });
+        }
       } else if (paymentScope !== 'manual') {
-        await Promise.all(
-          scopedJobs.map(j => {
-            const pending = Math.max(0, getJobFinalBillValue(j) - getJobPaidAmount(j));
-            return updateJob(j.id, { paidAmount: getJobPaidAmount(j) + pending, paymentStatus: 'Paid', paymentMode: finalMode as any });
-          })
-        );
+        const remaining = await applyPaymentAcrossJobs(scopedJobs, totalAmount, finalMode);
+        if (remaining > 0) {
+          await updateCustomer(selectedCustomer.id, {
+            advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
+          });
+        }
       } else {
         const outstanding = jobs.filter(j =>
           j.customerId === selectedCustomer.id && getJobFinalBillValue(j) - getJobPaidAmount(j) > 0
         );
-        let remaining = totalAmount;
-        for (const job of outstanding) {
-          if (remaining <= 0) break;
-          const pending = Math.max(0, getJobFinalBillValue(job) - getJobPaidAmount(job));
-          if (pending === 0) continue;
-          const alloc = Math.min(remaining, pending);
-          const newPaid = getJobPaidAmount(job) + alloc;
-          await updateJob(job.id, {
-            paidAmount: newPaid,
-            paymentStatus: Math.abs(newPaid - getJobFinalBillValue(job)) < 0.01 ? 'Paid' : 'Partially Paid',
-            paymentMode: finalMode as any,
-          });
-          remaining -= alloc;
-        }
+        const remaining = await applyPaymentAcrossJobs(
+          outstanding,
+          totalAmount,
+          finalMode
+        );
         if (remaining > 0) {
           await updateCustomer(selectedCustomer.id, {
             advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,

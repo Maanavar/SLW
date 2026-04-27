@@ -40,7 +40,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   flex-shrink: 0;
+}
+
+.records-header-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* ── Unified toolbar ─────────────────────────────────────────── */
@@ -226,6 +235,55 @@
   flex-shrink: 0;
 }
 
+.records-dc-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text-faint);
+  transition: border-color var(--transition-fast);
+  cursor: text;
+  flex-shrink: 0;
+}
+
+.records-dc-search:focus-within {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.records-dc-input {
+  width: 96px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  padding: 0;
+}
+
+.records-dc-input::placeholder {
+  color: var(--text-faint);
+  font-family: inherit;
+}
+
+.records-dc-input:focus { outline: none; }
+
+.records-dc-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 1px;
+}
+
+.records-dc-clear:hover { color: var(--text); }
+
 .records-payment-filter {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -324,6 +382,33 @@
   align-content: start;
 }
 
+.records-stat-row {
+  display: grid;
+  gap: 2px;
+}
+
+.records-stat-row--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.records-stat-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.records-stat-cell + .records-stat-cell {
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}
+
+.records-stat-row + .records-stat-row {
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
 .records-stat-label {
   font-size: 11.5px;
   color: var(--text-muted);
@@ -343,6 +428,32 @@
 
 .records-stat--green .records-stat-value  { color: var(--green); }
 .records-stat--red   .records-stat-value  { color: var(--red); }
+.records-stat--amber .records-stat-value  { color: var(--amber); }
+
+.records-stat--mode {
+  padding: 12px 16px;
+}
+
+.records-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  row-gap: 4px;
+  margin-top: 4px;
+}
+
+.records-mode-name {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.records-mode-val {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
 
 .records-stat-sub {
   font-size: 11px;
@@ -779,14 +890,80 @@
   .records-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+@media (max-width: 1024px) {
+  /* Reduce table min-width so tablets don't scroll horizontally */
+  .records-table {
+    min-width: 560px;
+  }
+
+  .records-table thead th,
+  .records-table tbody td {
+    padding: 9px 10px;
+    font-size: 12.5px;
+  }
+}
+
 @media (max-width: 900px) {
+  .records-pg-header { align-items: flex-start; }
+  .records-header-actions { justify-content: flex-start; }
   .records-toolbar { flex-wrap: wrap; }
   .records-toolbar-end { margin-left: 0; width: 100%; justify-content: flex-end; }
   .records-customer-select { width: 160px; }
+  .records-dc-input { width: 90px; }
+  .records-pg-title { font-size: 19px; }
 }
 
 @media (max-width: 760px) {
   .records-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .records-toolbar { gap: 4px; }
   .records-customer-select { width: 140px; }
+  .records-dc-input { width: 82px; }
+}
+
+@media (max-width: 480px) {
+  .records-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .records-table {
+    min-width: 440px;
+  }
+  .records-table thead th,
+  .records-table tbody td {
+    padding: 8px 8px;
+    font-size: 12px;
+  }
+  .records-pg-title { font-size: 17px; }
+}
+
+/* ── Trend badges ─────────────────────────────────────────── */
+.records-stat-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.rec-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 4px;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.rec-trend.rec-trend-pos {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.rec-trend.rec-trend-neg {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.rec-trend.rec-trend-neu {
+  color: var(--text-faint);
+  background: var(--bg-input);
 }

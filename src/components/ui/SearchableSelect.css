@@ -208,3 +208,30 @@
   stroke-width: 2.5;
   fill: none;
 }
+
+/* ── Add new footer ──────────────────────── */
+.ss-add-footer {
+  padding: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.ss-add-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  padding: 7px 8px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background var(--transition-fast);
+}
+
+.ss-add-btn:hover {
+  background: var(--accent-soft);
+}

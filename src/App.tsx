@@ -12,7 +12,7 @@ import { CategoryModal } from '@/components/modals/CategoryModal';
 import './App.css';
 
 export default function App() {
-  const { sidebarCollapsed } = useUIStore();
+  const { sidebarCollapsed, mobileDrawerOpen, closeMobileDrawer } = useUIStore();
   const initializeData = useDataStore((state) => state.initializeData);
   const location = useLocation();
   const navigate = useNavigate();
@@ -49,10 +49,19 @@ export default function App() {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <Sidebar />
 
-      <div className={`app-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      {/* Backdrop — dims content when mobile drawer is open, tap to close */}
+      {mobileDrawerOpen && (
+        <div
+          className="mobile-drawer-backdrop"
+          onClick={closeMobileDrawer}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="app-main">
         <TopHeader />
 
         <main className="app-content">
@@ -61,6 +70,7 @@ export default function App() {
       </div>
 
       <MobileNav />
+
       <ToastContainer />
 
       <CustomerModal />

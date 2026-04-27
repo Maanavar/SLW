@@ -2,11 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobsInRange, getPaymentsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
-import { getLocalDateString, getWeekStartDate } from '@/lib/dateUtils';
+import { getJobsInRange, getPaymentEventsInRange, groupJobsByCard } from '@/lib/reportUtils';
+import { getJobFinalBillValue, getJobCardPaymentSummary, getJobNetValue, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
+import { getLocalDateString, getTenDayRange, getWeekStartDate } from '@/lib/dateUtils';
 
-type ActivePeriod = 'today' | 'week' | 'month' | 'quarter' | 'year';
+type ActivePeriod = 'today' | 'week' | 'tenday' | 'month' | 'quarter' | 'year';
 
 interface DateRange {
   from: string;
@@ -28,7 +28,7 @@ interface PeriodStats {
   grossProfit: number;
   received: number;
   outstanding: number;
-  paymentCount: number;
+  paidCards: number;
   receivedBreakdown: PaymentBreakdown;
 }
 
@@ -81,21 +81,49 @@ function formatRangeLabel(range: DateRange): string {
   return `${fromLabel} - ${toLabel}`;
 }
 
+function getTrend(
+  current: number,
+  prev: number,
+  higherIsBetter: boolean
+): { arrow: string; pct: string; cls: string } | null {
+  if (prev === 0 && current === 0) return null;
+  if (prev === 0) return { arrow: '↑', pct: 'new', cls: higherIsBetter ? 'trend-pos' : 'trend-neg' };
+  const pct = ((current - prev) / prev) * 100;
+  if (Math.abs(pct) < 3) return { arrow: '→', pct: `${Math.abs(pct).toFixed(0)}%`, cls: 'trend-neu' };
+  const isUp = pct > 0;
+  return {
+    arrow: isUp ? '↑' : '↓',
+    pct: `${Math.abs(pct).toFixed(0)}%`,
+    cls: isUp === higherIsBetter ? 'trend-pos' : 'trend-neg',
+  };
+}
+
+function TrendBadge({ current, prev, higher }: { current: number; prev: number; higher: boolean }) {
+  const t = getTrend(current, prev, higher);
+  if (!t) return null;
+  return <span className={`period-trend ${t.cls}`}>{t.arrow} {t.pct}</span>;
+}
+
 function getPeriodStats(
   jobsInPeriod: ReturnType<typeof getJobsInRange>,
-  paymentsInPeriod: ReturnType<typeof getPaymentsInRange>
+  paymentEventsInPeriod: ReturnType<typeof getPaymentEventsInRange>
 ): PeriodStats {
   const jobCards = groupJobsByCard(jobsInPeriod).length;
   const lineItems = jobsInPeriod.length;
 
   const totalRevenue = jobsInPeriod.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
-  const commissionExpense = jobsInPeriod.reduce((sum, job) => sum + (Number(job.commissionAmount) || 0), 0);
-  const grossProfit = totalRevenue - commissionExpense;
+  const commissionExpense = jobsInPeriod.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
+  const grossProfit = jobsInPeriod.reduce((sum, job) => sum + getJobNetValue(job), 0);
 
-  const receivedFromPayments = paymentsInPeriod.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-  const receivedFromJobs = jobsInPeriod.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-  const received = receivedFromPayments > 0 ? receivedFromPayments : receivedFromJobs;
-  const outstanding = totalRevenue - received;
+  const received = paymentEventsInPeriod.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const outstanding = Math.max(0, totalRevenue - received);
+
+  // Count paid job cards (cards with at least partial payment)
+  const grouped = groupJobsByCard(jobsInPeriod);
+  const paidCards = grouped.filter(group => {
+    const payment = getJobCardPaymentSummary(group.jobs);
+    return payment.status === 'Paid' || payment.status === 'Partially Paid';
+  }).length;
 
   const receivedBreakdown: PaymentBreakdown = {
     cash: 0,
@@ -104,39 +132,25 @@ function getPeriodStats(
     cheque: 0,
   };
 
-  if (receivedFromPayments > 0) {
-    paymentsInPeriod.forEach((payment) => {
-      const amount = payment.amount || 0;
-      if (payment.paymentMode === 'Cash') {
-        receivedBreakdown.cash += amount;
-      } else if (payment.paymentMode === 'UPI') {
-        receivedBreakdown.upi += amount;
-      } else if (payment.paymentMode === 'Bank') {
-        receivedBreakdown.bank += amount;
-      } else if (payment.paymentMode === 'Cheque') {
-        receivedBreakdown.cheque += amount;
-      } else if (payment.paymentMode === 'Mixed' && payment.breakdown) {
-        receivedBreakdown.cash += payment.breakdown.cash || 0;
-        receivedBreakdown.upi += payment.breakdown.upi || 0;
-        receivedBreakdown.bank += payment.breakdown.bank || 0;
-        receivedBreakdown.cheque += payment.breakdown.cheque || 0;
-      }
-    });
-  } else if (receivedFromJobs > 0) {
-    jobsInPeriod.forEach((job) => {
-      const paidAmount = getJobPaidAmount(job);
-      if (paidAmount <= 0 || !job.paymentMode) return;
-      if (job.paymentMode === 'Cash') {
-        receivedBreakdown.cash += paidAmount;
-      } else if (job.paymentMode === 'UPI') {
-        receivedBreakdown.upi += paidAmount;
-      } else if (job.paymentMode === 'Bank') {
-        receivedBreakdown.bank += paidAmount;
-      } else if (job.paymentMode === 'Cheque') {
-        receivedBreakdown.cheque += paidAmount;
-      }
-    });
-  }
+  paymentEventsInPeriod.forEach((entry) => {
+    const amount = entry.amount || 0;
+    if (amount <= 0) return;
+
+    if (entry.paymentMode === 'Cash') {
+      receivedBreakdown.cash += amount;
+    } else if (entry.paymentMode === 'UPI') {
+      receivedBreakdown.upi += amount;
+    } else if (entry.paymentMode === 'Bank') {
+      receivedBreakdown.bank += amount;
+    } else if (entry.paymentMode === 'Cheque') {
+      receivedBreakdown.cheque += amount;
+    } else if (entry.paymentMode === 'Mixed' && entry.breakdown) {
+      receivedBreakdown.cash += entry.breakdown.cash || 0;
+      receivedBreakdown.upi += entry.breakdown.upi || 0;
+      receivedBreakdown.bank += entry.breakdown.bank || 0;
+      receivedBreakdown.cheque += entry.breakdown.cheque || 0;
+    }
+  });
 
   return {
     jobCards,
@@ -146,7 +160,7 @@ function getPeriodStats(
     grossProfit,
     received,
     outstanding,
-    paymentCount: paymentsInPeriod.length,
+    paidCards,
     receivedBreakdown,
   };
 }
@@ -155,6 +169,7 @@ export function PeriodSummaryRow() {
   const { jobs, payments } = useDataStore();
   const [activePeriod, setActivePeriod] = useState<ActivePeriod>('today');
   const [dayOffset, setDayOffset] = useState(0);
+  const [tenDayOffset, setTenDayOffset] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
   const [quarterOffset, setQuarterOffset] = useState(0);
@@ -175,6 +190,11 @@ export function PeriodSummaryRow() {
     const to = weekOffset === 0 ? toDateString(baseToday) : toDateString(weekEnd);
     return { from, to };
   }, [weekOffset, baseToday]);
+
+  const tenDayRange: DateRange = useMemo(() => {
+    const range = getTenDayRange(baseToday, -tenDayOffset, true);
+    return { from: range.from, to: range.to };
+  }, [tenDayOffset, baseToday]);
 
   const monthRange: DateRange = useMemo(() => {
     const monthBase = shiftMonths(baseToday, -monthOffset);
@@ -212,37 +232,84 @@ export function PeriodSummaryRow() {
 
   const todayStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, dayRange.from, dayRange.to);
-    const filteredPayments = getPaymentsInRange(payments, dayRange.from, dayRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, dayRange.from, dayRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, dayRange]);
 
   const weekStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, weekRange.from, weekRange.to);
-    const filteredPayments = getPaymentsInRange(payments, weekRange.from, weekRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, weekRange.from, weekRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, weekRange]);
+
+  const tenDayStats = useMemo(() => {
+    const filteredJobs = getJobsInRange(jobs, tenDayRange.from, tenDayRange.to);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, tenDayRange.from, tenDayRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
+  }, [jobs, payments, tenDayRange]);
 
   const monthStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, monthRange.from, monthRange.to);
-    const filteredPayments = getPaymentsInRange(payments, monthRange.from, monthRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, monthRange.from, monthRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, monthRange]);
 
   const quarterStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, quarterRange.from, quarterRange.to);
-    const filteredPayments = getPaymentsInRange(payments, quarterRange.from, quarterRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, quarterRange.from, quarterRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, quarterRange]);
 
   const yearStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, yearRange.from, yearRange.to);
-    const filteredPayments = getPaymentsInRange(payments, yearRange.from, yearRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, yearRange.from, yearRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, yearRange]);
+
+  const prevStats = useMemo(() => {
+    let prevRange: DateRange;
+    if (activePeriod === 'today') {
+      const d = shiftDays(baseToday, -(dayOffset + 1));
+      const val = toDateString(d);
+      prevRange = { from: val, to: val };
+    } else if (activePeriod === 'tenday') {
+      const previousSet = getTenDayRange(baseToday, -(tenDayOffset + 1), false);
+      prevRange = { from: previousSet.from, to: previousSet.to };
+    } else if (activePeriod === 'week') {
+      const base = shiftDays(baseToday, -(weekOffset + 1) * 7);
+      const from = getWeekStartDate(base);
+      const fromDate = new Date(`${from}T00:00:00`);
+      prevRange = { from, to: toDateString(shiftDays(fromDate, 6)) };
+    } else if (activePeriod === 'month') {
+      const monthBase = shiftMonths(baseToday, -(monthOffset + 1));
+      prevRange = {
+        from: toDateString(new Date(monthBase.getFullYear(), monthBase.getMonth(), 1)),
+        to: toDateString(getLastDayOfMonth(monthBase)),
+      };
+    } else if (activePeriod === 'quarter') {
+      const qBase = shiftMonths(baseToday, -((quarterOffset + 1) * 3));
+      const qStart = Math.floor(qBase.getMonth() / 3) * 3;
+      prevRange = {
+        from: toDateString(new Date(qBase.getFullYear(), qStart, 1)),
+        to: toDateString(new Date(qBase.getFullYear(), qStart + 3, 0)),
+      };
+    } else {
+      const yBase = new Date(baseToday.getFullYear() - (yearOffset + 1), 0, 1);
+      prevRange = {
+        from: toDateString(yBase),
+        to: toDateString(new Date(yBase.getFullYear(), 11, 31)),
+      };
+    }
+    const filteredJobs = getJobsInRange(jobs, prevRange.from, prevRange.to);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, prevRange.from, prevRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
+  }, [activePeriod, dayOffset, tenDayOffset, weekOffset, monthOffset, quarterOffset, yearOffset, jobs, payments, baseToday]);
 
   const currentRange =
     activePeriod === 'today'
       ? dayRange
+      : activePeriod === 'tenday'
+        ? tenDayRange
       : activePeriod === 'week'
         ? weekRange
         : activePeriod === 'month'
@@ -254,6 +321,8 @@ export function PeriodSummaryRow() {
   const currentStats =
     activePeriod === 'today'
       ? todayStats
+      : activePeriod === 'tenday'
+        ? tenDayStats
       : activePeriod === 'week'
         ? weekStats
         : activePeriod === 'month'
@@ -265,6 +334,8 @@ export function PeriodSummaryRow() {
   const currentOffset =
     activePeriod === 'today'
       ? dayOffset
+      : activePeriod === 'tenday'
+        ? tenDayOffset
       : activePeriod === 'week'
         ? weekOffset
         : activePeriod === 'month'
@@ -291,6 +362,7 @@ export function PeriodSummaryRow() {
 
   const handlePrev = () => {
     if (activePeriod === 'today') setDayOffset((value) => value + 1);
+    else if (activePeriod === 'tenday') setTenDayOffset((value) => value + 1);
     else if (activePeriod === 'week') setWeekOffset((value) => value + 1);
     else if (activePeriod === 'month') setMonthOffset((value) => value + 1);
     else if (activePeriod === 'quarter') setQuarterOffset((value) => value + 1);
@@ -300,6 +372,7 @@ export function PeriodSummaryRow() {
   const handleNext = () => {
     if (!canGoNext) return;
     if (activePeriod === 'today') setDayOffset((value) => value - 1);
+    else if (activePeriod === 'tenday') setTenDayOffset((value) => value - 1);
     else if (activePeriod === 'week') setWeekOffset((value) => value - 1);
     else if (activePeriod === 'month') setMonthOffset((value) => value - 1);
     else if (activePeriod === 'quarter') setQuarterOffset((value) => value - 1);
@@ -313,7 +386,7 @@ export function PeriodSummaryRow() {
 
         <div className="period-controls">
           <div className="period-toggle">
-            {(['today', 'week', 'month', 'quarter', 'year'] as const).map((p) => (
+            {(['today', 'week', 'tenday', 'month', 'quarter', 'year'] as const).map((p) => (
               <button
                 key={p}
                 type="button"
@@ -321,7 +394,7 @@ export function PeriodSummaryRow() {
                 onClick={() => setActivePeriod(p)}
                 aria-current={activePeriod === p ? 'true' : undefined}
               >
-                {p.charAt(0).toUpperCase() + p.slice(1)}
+                {p === 'tenday' ? '10-Day' : p.charAt(0).toUpperCase() + p.slice(1)}
               </button>
             ))}
           </div>
@@ -348,32 +421,45 @@ export function PeriodSummaryRow() {
         <article className="period-card">
           <p className="period-card-label">Job cards</p>
           <p className="period-card-value">{currentStats.jobCards}</p>
-          <p className="period-card-meta">{currentStats.lineItems} line items</p>
+          <p className="period-card-meta">
+            {currentStats.lineItems} line items
+            <TrendBadge current={currentStats.jobCards} prev={prevStats.jobCards} higher />
+          </p>
         </article>
 
         <article className="period-card">
           <p className="period-card-label">Revenue</p>
           <p className="period-card-value">{formatCurrency(currentStats.totalRevenue)}</p>
-          <p className="period-card-meta is-green">Net income</p>
+          <p className="period-card-meta is-green">
+            Net income
+            <TrendBadge current={currentStats.totalRevenue} prev={prevStats.totalRevenue} higher />
+          </p>
         </article>
 
         <article className="period-card">
           <p className="period-card-label">Commission</p>
           <p className="period-card-value is-amber">{formatCurrency(currentStats.commissionExpense)}</p>
-          <p className="period-card-meta">Payable to workers</p>
+          <p className="period-card-meta">
+            Payable to workers
+            <TrendBadge current={currentStats.commissionExpense} prev={prevStats.commissionExpense} higher={false} />
+          </p>
         </article>
 
         <article className="period-card">
           <p className="period-card-label">Gross profit</p>
           <p className="period-card-value">{formatCurrency(currentStats.grossProfit)}</p>
-          <p className="period-card-meta">Revenue - commission</p>
+          <p className="period-card-meta">
+            Net income after flow adjustments
+            <TrendBadge current={currentStats.grossProfit} prev={prevStats.grossProfit} higher />
+          </p>
         </article>
 
         <article className="period-card">
           <p className="period-card-label">Received</p>
           <p className="period-card-value is-green">{formatCurrency(currentStats.received)}</p>
           <p className="period-card-meta">
-            {currentStats.paymentCount} payment{currentStats.paymentCount === 1 ? '' : 's'}
+            {currentStats.paidCards}/{currentStats.jobCards} payments
+            <TrendBadge current={currentStats.received} prev={prevStats.received} higher />
           </p>
         </article>
 
@@ -382,7 +468,10 @@ export function PeriodSummaryRow() {
           <p className={`period-card-value ${currentStats.outstanding > 0 ? 'is-red' : ''}`}>
             {formatCurrency(currentStats.outstanding)}
           </p>
-          <p className="period-card-meta">Final bill - received</p>
+          <p className="period-card-meta">
+            Final bill - received
+            <TrendBadge current={currentStats.outstanding} prev={prevStats.outstanding} higher={false} />
+          </p>
         </article>
       </div>
 
@@ -396,21 +485,15 @@ export function PeriodSummaryRow() {
           {paymentModes.map((mode) => (
             <div className="pb-row" key={mode.key}>
               <span className={`pb-dot ${mode.className}`} />
-              <div className="pb-row-info">
-                <div className="pb-row-top">
-                  <span className="pb-row-label">{mode.label}</span>
-                  <div className="pb-row-right">
-                    <span className="pb-row-pct">{mode.share > 0 ? `${mode.share.toFixed(0)}%` : '—'}</span>
-                    <span className="pb-row-val">{formatCurrency(mode.value)}</span>
-                  </div>
-                </div>
-                <div className="pb-track">
-                  <div
-                    className={`pb-fill ${mode.className}`}
-                    style={{ '--pb-w': `${mode.share.toFixed(2)}%` } as React.CSSProperties}
-                  />
-                </div>
+              <span className="pb-row-label">{mode.label}</span>
+              <div className="pb-track">
+                <div
+                  className={`pb-fill ${mode.className}`}
+                  style={{ '--pb-w': `${mode.share.toFixed(2)}%` } as React.CSSProperties}
+                />
               </div>
+              <span className="pb-row-pct">{mode.share > 0 ? `${mode.share.toFixed(0)}%` : '—'}</span>
+              <span className="pb-row-val">{formatCurrency(mode.value)}</span>
             </div>
           ))}
         </div>

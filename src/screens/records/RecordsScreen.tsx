@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobCardPaymentSummary, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobsInRange, getPaymentEventsInRange, groupJobsByCard } from '@/lib/reportUtils';
+import { getJobCardPaymentSummary, getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
 import type { PaymentBreakdown } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/Badge';
-import { getLocalDateString } from '@/lib/dateUtils';
+import { getLocalDateString, getTenDayRange } from '@/lib/dateUtils';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import './RecordsScreen.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type PeriodMode = 'day' | 'week' | 'month' | 'quarter' | 'halfyear' | 'year' | 'all' | 'range';
+type PeriodMode = 'day' | 'week' | 'tenday' | 'month' | 'quarter' | 'halfyear' | 'year' | 'all' | 'range';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
 type ViewMode = 'cards' | 'table';
 type RecordCustomerOption = {
@@ -29,6 +29,7 @@ interface RecordRow {
   date: string;
   jobCardId: string;
   customerName: string;
+  customerType: string;
   lineCount: number;
   workSummary: string;
   finalBill: number;
@@ -39,7 +40,30 @@ interface RecordRow {
   paymentStatus: 'Paid' | 'Pending' | 'Partially Paid';
 }
 
-type RecordTableSortKey = 'customer' | 'lines' | 'finalBill' | 'status';
+type RecordTableSortKey = 'customer' | 'customerType' | 'lines' | 'finalBill' | 'status';
+
+function getRecordTrend(
+  current: number,
+  prev: number,
+  higherIsBetter: boolean
+): { arrow: string; pct: string; cls: string } | null {
+  if (prev === 0 && current === 0) return null;
+  if (prev === 0) return { arrow: '↑', pct: 'new', cls: higherIsBetter ? 'rec-trend-pos' : 'rec-trend-neg' };
+  const pct = ((current - prev) / prev) * 100;
+  if (Math.abs(pct) < 3) return { arrow: '→', pct: `${Math.abs(pct).toFixed(0)}%`, cls: 'rec-trend-neu' };
+  const isUp = pct > 0;
+  return {
+    arrow: isUp ? '↑' : '↓',
+    pct: `${Math.abs(pct).toFixed(0)}%`,
+    cls: isUp === higherIsBetter ? 'rec-trend-pos' : 'rec-trend-neg',
+  };
+}
+
+function RecTrendBadge({ current, prev, higher }: { current: number; prev: number; higher: boolean }) {
+  const t = getRecordTrend(current, prev, higher);
+  if (!t) return null;
+  return <span className={`rec-trend ${t.cls}`}>{t.arrow} {t.pct}</span>;
+}
 
 const recordStatusOrder: Record<RecordRow['paymentStatus'], number> = {
   Pending: 0,
@@ -67,6 +91,7 @@ interface ExportSummaryFields {
   totalNet: boolean;
   totalPaid: boolean;
   totalPending: boolean;
+  totalCommission: boolean;
 }
 
 const DEFAULT_EXPORT_FIELDS: ExportFields = {
@@ -81,11 +106,13 @@ const DEFAULT_EXPORT_SUMMARY_FIELDS: ExportSummaryFields = {
   totalNet: true,
   totalPaid: true,
   totalPending: true,
+  totalCommission: false,
 };
 
 const PERIOD_TABS: { mode: PeriodMode; label: string }[] = [
   { mode: 'day',      label: 'Day' },
   { mode: 'week',     label: 'Week' },
+  { mode: 'tenday',   label: '10-Day' },
   { mode: 'month',    label: 'Month' },
   { mode: 'quarter',  label: 'Quarter' },
   { mode: 'halfyear', label: 'Half-Year' },
@@ -128,6 +155,12 @@ function computeOffsetPeriod(
 ): { from: string; to: string; label: string } {
   const now = new Date();
   const todayStr = getLocalDateString(now);
+
+  if (mode === 'tenday') {
+    const range = getTenDayRange(now, offset, true);
+    const label = `${formatShortDate(range.from)} - ${formatShortDate(range.to)}`;
+    return { from: range.from, to: range.to, label };
+  }
 
   if (mode === 'week') {
     const dow = now.getDay();
@@ -215,12 +248,17 @@ function getCardStatusClass(status: RecordRow['paymentStatus']): string {
 
 export function RecordsScreen() {
   const navigate  = useNavigate();
-  const { jobs, customers, getCustomer, deleteJob } = useDataStore();
+  const { jobs, customers, payments, getCustomer, deleteJob } = useDataStore();
   const toast     = useToast();
   const today     = getLocalDateString(new Date());
 
+  // — URL params (must come first so they seed other state initialisers)
+  const [searchParams] = useSearchParams();
+
   // — Period / date state
-  const [periodMode, setPeriodMode]   = useState<PeriodMode>('day');
+  const [periodMode, setPeriodMode]   = useState<PeriodMode>(() =>
+    searchParams.get('card') || searchParams.get('customer') ? 'all' : 'day'
+  );
   const [periodOffset, setPeriodOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
   const [rangeFrom, setRangeFrom]     = useState('');
@@ -232,19 +270,33 @@ export function RecordsScreen() {
   };
 
   // — Filter state
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [paymentFilter, setPaymentFilter]           = useState<PaymentFilter>('all');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(() => {
+    const cid = searchParams.get('customer');
+    return cid ? parseInt(cid, 10) || null : null;
+  });
+  const [paymentFilter, setPaymentFilter]           = useState<PaymentFilter>(() =>
+    searchParams.get('status') === 'unpaid' ? 'unpaid' : 'all'
+  );
+  const [dcSearch, setDcSearch]                     = useState('');
   const [rmpHandlerFilter, setRmpHandlerFilter]     = useState<'Bhai' | 'Raja' | null>(null);
   const [viewMode, setViewMode]                     = useState<ViewMode>('table');
   const [tableSort, setTableSort]                   = useState<{ key: RecordTableSortKey; order: 'asc' | 'desc' } | null>(null);
 
   // — Modal state
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
-  const [editingCardKey, setEditingCardKey]   = useState<string | null>(null);
+  const [editingCardKey, setEditingCardKey]   = useState<string | null>(() => {
+    const card = searchParams.get('card');
+    return card || null;
+  });
 
-  // — Summary hover
-  const [showReceivedBreakdown, setShowReceivedBreakdown] = useState(false);
-  const [showBillBreakdown, setShowBillBreakdown] = useState(false);
+  useEffect(() => {
+    const card = searchParams.get('card');
+    if (!card) return;
+    setPeriodMode('all');
+    setPeriodOffset(0);
+    setSelectedCardKey(null);
+    setEditingCardKey(card);
+  }, [searchParams]);
 
   // — Export state
   const [showExportMenu, setShowExportMenu]     = useState(false);
@@ -342,6 +394,16 @@ export function RecordsScreen() {
     [jobs, rangeStart, rangeEnd]
   );
 
+  const paymentEventsInRange = useMemo(
+    () => getPaymentEventsInRange(jobs, payments, rangeStart, rangeEnd),
+    [jobs, payments, rangeStart, rangeEnd]
+  );
+
+  const totalReceived = useMemo(
+    () => paymentEventsInRange.reduce((s, e) => s + (e.amount || 0), 0),
+    [paymentEventsInRange]
+  );
+
   const jobsForCustomer = useMemo(() => {
     let filtered = selectedCustomerId
       ? jobsInRange.filter(j => j.customerId === selectedCustomerId)
@@ -355,6 +417,10 @@ export function RecordsScreen() {
   const groupedJobs = useMemo(() =>
     groupJobsByCard(jobsForCustomer)
       .filter(group => {
+        const dcQuery = dcSearch.trim().toLowerCase();
+        if (dcQuery && !group.jobs.some(job => (job.dcNo || '').toLowerCase().includes(dcQuery))) {
+          return false;
+        }
         if (paymentFilter === 'all') return true;
         const s = getJobCardPaymentSummary(group.jobs).status;
         return paymentFilter === 'paid' ? s === 'Paid' : s !== 'Paid';
@@ -365,20 +431,25 @@ export function RecordsScreen() {
         const bt = b.primary.createdAt ? new Date(b.primary.createdAt).getTime() : 0;
         return bt - at;
       }),
-    [jobsForCustomer, paymentFilter]
+    [jobsForCustomer, paymentFilter, dcSearch]
   );
 
   const rows: RecordRow[] = useMemo(() =>
     groupedJobs.map(group => {
-      const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
+      const customer = getCustomer(group.primary.customerId);
+      const customerName = customer?.name || 'Unknown';
+      const customerType = customer?.type || '';
       const payment = getJobCardPaymentSummary(group.jobs);
-      const commission = group.jobs.reduce((s, j) => s + (Number(j.commissionAmount) || 0), 0);
+      const commission = group.jobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0);
       const workSummary = [...new Set(group.jobs.map(j => j.workTypeName))].join(', ');
       return {
         id: group.key,
         date: group.primary.date,
         jobCardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
-        customerName, lineCount: group.lineCount, workSummary,
+        customerName,
+        customerType,
+        lineCount: group.lineCount,
+        workSummary,
         finalBill: payment.finalBill, commission,
         ourNet: payment.net, paid: payment.paid, pending: payment.pending,
         paymentStatus: payment.status,
@@ -394,17 +465,50 @@ export function RecordsScreen() {
     const totalPaid       = rows.reduce((s, r) => s + r.paid,       0);
     const totalPending    = rows.reduce((s, r) => s + r.pending,    0);
     const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+    const grossProfit     = totalNet;
     const uniqueDates = new Set(groupedJobs.flatMap(g => g.jobs.map(j => j.date)));
     const workDays = uniqueDates.size;
     const avgPerDay = workDays > 0 ? totalNet / workDays : 0;
-    return { totalCards, totalBill, totalNet, totalPaid, totalPending, totalCommission, workDays, avgPerDay };
+    // Count paid job cards (cards with at least partial payment)
+    const paidCards = rows.filter(r => r.paymentStatus === 'Paid' || r.paymentStatus === 'Partially Paid').length;
+    return { totalCards, totalBill, totalNet, totalPaid, totalPending, totalCommission, grossProfit, workDays, avgPerDay, paidCards };
   }, [rows, groupedJobs]);
+  const prevSummary = useMemo(() => {
+    if (periodMode === 'all' || periodMode === 'range') return null;
+    let prevFrom: string | undefined;
+    let prevTo: string | undefined;
+    if (periodMode === 'day') {
+      const d = shiftDate(selectedDate, -1);
+      prevFrom = d; prevTo = d;
+    } else {
+      const prev = computeOffsetPeriod(periodMode, periodOffset - 1);
+      prevFrom = prev.from; prevTo = prev.to;
+    }
+    const prevJobs = getJobsInRange(jobs, prevFrom, prevTo);
+    const prevPayEvents = getPaymentEventsInRange(jobs, payments, prevFrom, prevTo);
+    const prevRows = groupJobsByCard(prevJobs).map(group => {
+      const payment = getJobCardPaymentSummary(group.jobs);
+      const commission = group.jobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0);
+      return { finalBill: payment.finalBill, commission, net: payment.net, paid: payment.paid };
+    });
+    const totalBill = prevRows.reduce((s, r) => s + r.finalBill, 0);
+    const totalNet = prevRows.reduce((s, r) => s + r.net, 0);
+    const prevReceived = prevPayEvents.reduce((s, e) => s + (e.amount || 0), 0);
+    return {
+      totalBill,
+      grossProfit: totalNet,
+      totalReceived: prevReceived,
+      outstanding: Math.max(0, totalBill - prevReceived),
+    };
+  }, [periodMode, periodOffset, selectedDate, jobs, payments]);
+
   const sortedTableRows = useMemo(() => {
     if (!tableSort) return rows;
     const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
     const direction = tableSort.order === 'asc' ? 1 : -1;
     return [...rows].sort((a, b) => {
       if (tableSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * direction;
+      if (tableSort.key === 'customerType') return collator.compare(a.customerType, b.customerType) * direction;
       if (tableSort.key === 'lines') return (a.lineCount - b.lineCount) * direction;
       if (tableSort.key === 'finalBill') return (a.finalBill - b.finalBill) * direction;
       return (recordStatusOrder[a.paymentStatus] - recordStatusOrder[b.paymentStatus]) * direction;
@@ -424,21 +528,22 @@ export function RecordsScreen() {
 
   const receivedBreakdown = useMemo<PaymentBreakdown>(() => {
     const bd: PaymentBreakdown = { cash: 0, upi: 0, bank: 0, cheque: 0 };
-    groupedJobs.forEach(group => group.jobs.forEach(job => {
-      const paid = getJobPaidAmount(job);
-      if (paid > 0 && job.paymentMode) {
-        if      (job.paymentMode === 'Cash')   bd.cash   = (bd.cash   || 0) + paid;
-        else if (job.paymentMode === 'UPI')    bd.upi    = (bd.upi    || 0) + paid;
-        else if (job.paymentMode === 'Bank')   bd.bank   = (bd.bank   || 0) + paid;
-        else if (job.paymentMode === 'Cheque') bd.cheque = (bd.cheque || 0) + paid;
+    paymentEventsInRange.forEach(e => {
+      const amount = e.amount || 0;
+      if (amount <= 0) return;
+      if (e.paymentMode === 'Cash') bd.cash = (bd.cash || 0) + amount;
+      else if (e.paymentMode === 'UPI') bd.upi = (bd.upi || 0) + amount;
+      else if (e.paymentMode === 'Bank') bd.bank = (bd.bank || 0) + amount;
+      else if (e.paymentMode === 'Cheque') bd.cheque = (bd.cheque || 0) + amount;
+      else if (e.paymentMode === 'Mixed' && e.breakdown) {
+        bd.cash = (bd.cash || 0) + (e.breakdown.cash || 0);
+        bd.upi = (bd.upi || 0) + (e.breakdown.upi || 0);
+        bd.bank = (bd.bank || 0) + (e.breakdown.bank || 0);
+        bd.cheque = (bd.cheque || 0) + (e.breakdown.cheque || 0);
       }
-    }));
+    });
     return bd;
-  }, [groupedJobs]);
-
-  const hasReceivedBreakdown = Boolean(
-    receivedBreakdown.cash || receivedBreakdown.upi || receivedBreakdown.bank || receivedBreakdown.cheque
-  );
+  }, [paymentEventsInRange]);
 
   const exportSummaryMetrics = useMemo(
     () => [
@@ -463,17 +568,23 @@ export function RecordsScreen() {
       {
         key: 'totalPaid' as const,
         label: 'Received',
-        value: formatCurrency(summary.totalPaid),
+        value: formatCurrency(totalReceived),
         cssClass: 'g',
       },
       {
         key: 'totalPending' as const,
         label: 'Outstanding',
-        value: formatCurrency(summary.totalPending),
-        cssClass: summary.totalPending > 0 ? 'r' : 'g',
+        value: formatCurrency(Math.max(0, summary.totalBill - totalReceived)),
+        cssClass: Math.max(0, summary.totalBill - totalReceived) > 0 ? 'r' : 'g',
+      },
+      {
+        key: 'totalCommission' as const,
+        label: 'Total Commission',
+        value: formatCurrency(summary.totalCommission),
+        cssClass: summary.totalCommission > 0 ? 'r' : '',
       },
     ],
-    [summary.totalCards, summary.totalBill, summary.totalNet, summary.totalPaid, summary.totalPending]
+    [summary.totalCards, summary.totalBill, summary.totalNet, summary.totalPaid, summary.totalPending, summary.totalCommission]
   );
 
   const selectedExportSummaryMetrics = useMemo(
@@ -518,7 +629,7 @@ export function RecordsScreen() {
           cardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
           date: job.date, customer: cust?.name || 'Unknown',
           workType: job.workTypeName, quantity: job.quantity,
-          amount: getJobNetValue(job), commission: job.commissionAmount || 0,
+          amount: getJobNetValue(job), commission: getJobWorkerCommissionExpense(job),
           paid: getJobPaidAmount(job), dcNo: job.dcNo || '-', dcDate: job.dcDate || '-',
           vehicleNo: job.vehicleNo || '-',
         };
@@ -630,6 +741,39 @@ ${summaryGridHtml}
     setShowExportMenu(false);
   };
 
+  const handleSharePdfWhatsApp = async () => {
+    setShowExportMenu(false);
+    const { headers, keys } = buildHeadersAndIndices();
+    const headerRow = headers.map(h => `<th>${h}</th>`).join('');
+    const bodyRows  = reportRows.map((row, i) =>
+      `<tr><td>${i + 1}</td>${keys.map(k => `<td>${row[k] ?? '-'}</td>`).join('')}</tr>`
+    ).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>SLW Records</title>
+<style>body{font-family:sans-serif;font-size:12px;padding:16px}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f0}</style></head>
+<body><h2>SLW Records — ${periodSubtitle ?? formatDayLabel(selectedDate)}</h2>
+<table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const file = new File([blob], `slw-records-${today}.html`, { type: 'text/html' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'SLW Records' });
+      } catch {
+        // user cancelled or share failed — fallback to download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = file.name;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+      }
+    } else {
+      // Desktop / unsupported browser — open WhatsApp text summary instead
+      const lines = [`SLW Records (${periodSubtitle ?? formatDayLabel(selectedDate)})`];
+      selectedExportSummaryMetrics.forEach(m => lines.push(`${m.label}: ${m.value}`));
+      window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
+    }
+  };
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const ChevL = () => (
@@ -653,16 +797,51 @@ ${summaryGridHtml}
           <p className="records-pg-desc">All job cards, filterable and exportable</p>
         </div>
         <div className="records-header-actions">
+          <div className="records-header-filters">
+            <label className="records-dc-search" aria-label="Search by DC number">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <circle cx="6.5" cy="6.5" r="4" />
+                <path d="M10 10l2.5 2.5" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                className="records-dc-input"
+                placeholder="DC No..."
+                value={dcSearch}
+                onChange={e => setDcSearch(e.target.value)}
+                aria-label="Search by DC number"
+              />
+              {dcSearch && (
+                <button type="button" className="records-dc-clear" onClick={() => setDcSearch('')} aria-label="Clear DC search">
+                  &times;
+                </button>
+              )}
+            </label>
+
+            <div className="records-customer-select">
+              <SearchableSelect<RecordCustomerOption>
+                items={customerOptions}
+                value={selectedCustomerOption}
+                onChange={item => { setSelectedCustomerId(item.id === 0 ? null : item.id); setRmpHandlerFilter(null); }}
+                getLabel={item => item.name}
+                getKey={item => String(item.id)}
+                getSearchText={item => `${item.name} ${item.shortCode || ''}`}
+                placeholder="Search customer..."
+              />
+            </div>
+          </div>
+
           <div className="records-export-wrap" ref={exportMenuRef}>
             <button type="button" className="btn btn-secondary records-export-btn" onClick={() => setShowExportMenu(v => !v)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export CSV
+              Export
             </button>
             {showExportMenu && (
               <div className="records-export-menu">
                 <button type="button" className="records-export-item" onClick={handleExportCsv}>Export CSV</button>
                 <button type="button" className="records-export-item" onClick={handleExportPdf}>Export PDF</button>
-                <button type="button" className="records-export-item" onClick={handleExportWhatsApp}>Share WhatsApp</button>
+                <button type="button" className="records-export-item" onClick={handleExportWhatsApp}>WhatsApp (text)</button>
+                <button type="button" className="records-export-item" onClick={() => { void handleSharePdfWhatsApp(); }}>WhatsApp PDF</button>
                 <div className="records-export-divider" />
                 <button type="button" className="records-export-item records-export-item--muted"
                   onClick={() => { setShowExportFields(v => !v); setShowExportMenu(false); }}>
@@ -718,19 +897,6 @@ ${summaryGridHtml}
         )}
 
         <div className="records-toolbar-sep" />
-
-        {/* Customer select */}
-        <div className="records-customer-select">
-          <SearchableSelect<RecordCustomerOption>
-            items={customerOptions}
-            value={selectedCustomerOption}
-            onChange={item => { setSelectedCustomerId(item.id === 0 ? null : item.id); setRmpHandlerFilter(null); }}
-            getLabel={item => item.name}
-            getKey={item => String(item.id)}
-            getSearchText={item => `${item.name} ${item.shortCode || ''}`}
-            placeholder="Search customer..."
-          />
-        </div>
 
         {/* Payment filter */}
         <div className="records-payment-filter">
@@ -806,53 +972,63 @@ ${summaryGridHtml}
         <>
         <div className="records-summary">
           <div className="records-stat">
-            <span className="records-stat-label">Cards</span>
-            <span className="records-stat-value">{summary.totalCards}</span>
-          </div>
-          <div className={`records-stat${summary.totalCommission > 0 ? ' records-stat--hoverable' : ''}`}
-            onMouseEnter={() => summary.totalCommission > 0 && setShowBillBreakdown(true)}
-            onMouseLeave={() => setShowBillBreakdown(false)}>
-            <span className="records-stat-label">Total bill</span>
-            <span className="records-stat-value">{formatCurrency(summary.totalBill)}</span>
-            {summary.totalCommission > 0 && showBillBreakdown && (
-              <div className="records-breakdown">
-                <div className="breakdown-header">Bill breakdown</div>
-                <div className="breakdown-items">
-                  <div className="breakdown-item"><span className="breakdown-label">Net Income</span><span className="breakdown-value">{formatCurrency(summary.totalNet)}</span></div>
-                  <div className="breakdown-item"><span className="breakdown-label">Commission</span><span className="breakdown-value">{formatCurrency(summary.totalCommission)}</span></div>
-                </div>
+            <div className="records-stat-row records-stat-row--split">
+              <div className="records-stat-cell">
+                <span className="records-stat-label">Revenue</span>
+                <span className="records-stat-value">{formatCurrency(summary.totalBill)}</span>
+                <span className="records-stat-sub">
+                  Final bill value
+                  <RecTrendBadge current={summary.totalBill} prev={prevSummary?.totalBill ?? 0} higher />
+                </span>
               </div>
-            )}
+              <div className="records-stat-cell">
+                <span className="records-stat-label">Commission</span>
+                <span className="records-stat-value">{formatCurrency(summary.totalCommission)}</span>
+                <span className="records-stat-sub">Payable to workers</span>
+              </div>
+            </div>
           </div>
           <div className="records-stat records-stat--green">
-            <span className="records-stat-label">Net income</span>
-            <span className="records-stat-value">{formatCurrency(summary.totalNet)}</span>
+            <span className="records-stat-label">Gross profit</span>
+            <span className="records-stat-value">{formatCurrency(summary.grossProfit)}</span>
+            <span className="records-stat-sub">
+              Net income after flow adjustments
+              <RecTrendBadge current={summary.grossProfit} prev={prevSummary?.grossProfit ?? 0} higher />
+            </span>
           </div>
-          <div className={`records-stat${hasReceivedBreakdown ? ' records-stat--hoverable' : ''}`}
-            onMouseEnter={() => hasReceivedBreakdown && setShowReceivedBreakdown(true)}
-            onMouseLeave={() => setShowReceivedBreakdown(false)}>
-            <span className="records-stat-label">Paid</span>
-            <span className="records-stat-value">{formatCurrency(summary.totalPaid)}</span>
-            {hasReceivedBreakdown && showReceivedBreakdown && (
-              <div className="records-breakdown">
-                <div className="breakdown-header">Payment breakdown</div>
-                <div className="breakdown-items">
-                  {(receivedBreakdown.cash   || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Cash</span>  <span className="breakdown-value">{formatCurrency(receivedBreakdown.cash!)}</span></div>}
-                  {(receivedBreakdown.upi    || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">UPI</span>   <span className="breakdown-value">{formatCurrency(receivedBreakdown.upi!)}</span></div>}
-                  {(receivedBreakdown.bank   || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Bank</span>  <span className="breakdown-value">{formatCurrency(receivedBreakdown.bank!)}</span></div>}
-                  {(receivedBreakdown.cheque || 0) > 0 && <div className="breakdown-item"><span className="breakdown-label">Cheque</span><span className="breakdown-value">{formatCurrency(receivedBreakdown.cheque!)}</span></div>}
-                </div>
-              </div>
-            )}
+          <div className="records-stat records-stat--green">
+            <span className="records-stat-label">Received</span>
+            <span className="records-stat-value">{formatCurrency(totalReceived)}</span>
+            <span className="records-stat-sub">
+              {summary.paidCards}/{summary.totalCards} payments
+              <RecTrendBadge current={totalReceived} prev={prevSummary?.totalReceived ?? 0} higher />
+            </span>
           </div>
-          <div className="records-stat records-stat--red">
-            <span className="records-stat-label">Pending</span>
-            <span className="records-stat-value">{formatCurrency(summary.totalPending)}</span>
+          <div className={`records-stat${Math.max(0, summary.totalBill - totalReceived) > 0 ? ' records-stat--red' : ' records-stat--green'}`}>
+            <span className="records-stat-label">Outstanding</span>
+            <span className="records-stat-value">{formatCurrency(Math.max(0, summary.totalBill - totalReceived))}</span>
+            <span className="records-stat-sub">
+              Final bill - received
+              <RecTrendBadge current={Math.max(0, summary.totalBill - totalReceived)} prev={prevSummary?.outstanding ?? 0} higher={false} />
+            </span>
+          </div>
+          <div className="records-stat records-stat--mode">
+            <span className="records-stat-label">By mode</span>
+            <div className="records-mode-grid">
+              <span className="records-mode-name">Cash</span>
+              <span className="records-mode-val">{formatCurrency(receivedBreakdown.cash || 0)}</span>
+              <span className="records-mode-name">UPI</span>
+              <span className="records-mode-val">{formatCurrency(receivedBreakdown.upi || 0)}</span>
+              <span className="records-mode-name">Bank</span>
+              <span className="records-mode-val">{formatCurrency(receivedBreakdown.bank || 0)}</span>
+              <span className="records-mode-name">Cheque</span>
+              <span className="records-mode-val">{formatCurrency(receivedBreakdown.cheque || 0)}</span>
+            </div>
           </div>
         </div>
-        {summary.workDays > 1 && (
+        {summary.workDays >= 1 && (
           <p className="records-avg-caption">
-            Avg {formatCurrency(summary.avgPerDay)}/day · {summary.workDays} working days
+            Avg {formatCurrency(summary.avgPerDay)}/day · {summary.workDays} working day{summary.workDays !== 1 ? 's' : ''}
           </p>
         )}
         </>
@@ -886,6 +1062,7 @@ ${summaryGridHtml}
                 ['totalNet',     'Net Income'],
                 ['totalPaid',    'Received'],
                 ['totalPending', 'Outstanding'],
+                ['totalCommission', 'Total Commission'],
               ] as [keyof ExportSummaryFields, string][]).map(([key, label]) => (
                 <label key={key} className="records-field-check">
                   <input type="checkbox" checked={exportSummaryFields[key]}
@@ -960,8 +1137,8 @@ ${summaryGridHtml}
           <table className="records-table">
             <thead>
               <tr>
-                <th>CARD</th>
                 <th>DATE</th>
+                <th>CARD</th>
                 <th
                   className={`slw-sortable-th${tableSort?.key === 'customer' ? ' is-active' : ''}`}
                   role="button"
@@ -970,6 +1147,15 @@ ${summaryGridHtml}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('customer'); } }}
                 >
                   CUSTOMER {tableSortMark('customer')}
+                </th>
+                <th
+                  className={`slw-sortable-th${tableSort?.key === 'customerType' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('customerType')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('customerType'); } }}
+                >
+                  CUSTOMER TYPE {tableSortMark('customerType')}
                 </th>
                 <th
                   className={`slw-sortable-th${tableSort?.key === 'lines' ? ' is-active' : ''}`}
@@ -989,7 +1175,8 @@ ${summaryGridHtml}
                 >
                   FINAL BILL {tableSortMark('finalBill')}
                 </th>
-                <th className="numeric">COMMISSION</th>
+                <th className="numeric">WORKER COMMISSION</th>
+                <th className="numeric">OUR NET</th>
                 <th className="numeric">PAID</th>
                 <th className="numeric">PENDING</th>
                 <th
@@ -1006,7 +1193,7 @@ ${summaryGridHtml}
             </thead>
             <tbody>
               {sortedTableRows.length === 0 ? (
-                <tr className="rec-table-empty"><td colSpan={10}>No job cards found for the selected filters.</td></tr>
+                <tr className="rec-table-empty"><td colSpan={12}>No job cards found for the selected filters.</td></tr>
               ) : sortedTableRows.map(row => {
                 const cust = getCustomer(groupedJobs.find(g => g.key === row.id)?.primary.customerId ?? 0);
                 const extra = row.lineCount - 1;
@@ -1015,18 +1202,20 @@ ${summaryGridHtml}
                 return (
                   <tr key={row.id} className="rec-row" onClick={() => setSelectedCardKey(row.id)}
                     tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(row.id); } }}>
-                    <td><span className="rec-card-id">{row.jobCardId}</span></td>
                     <td><span className="rec-date-cell">{row.date}</span></td>
+                    <td><span className="rec-card-id">{row.jobCardId}</span></td>
                     <td>
                       <div className="rec-cust-name">{row.customerName}</div>
                       {cust?.shortCode && <div className="rec-cust-code">{cust.shortCode}</div>}
                     </td>
+                    <td>{row.customerType || '—'}</td>
                     <td>
                       <div className="rec-lines-count">{row.lineCount} {row.lineCount === 1 ? 'line' : 'lines'}</div>
                       {linesDesc && <div className="rec-lines-desc">{linesDesc}</div>}
                     </td>
                     <td className="numeric">{formatCurrency(row.finalBill)}</td>
                     <td className="numeric">{row.commission > 0 ? formatCurrency(row.commission) : <span className="rec-zero">—</span>}</td>
+                    <td className="numeric">{formatCurrency(row.ourNet)}</td>
                     <td className={`numeric ${row.paymentStatus === 'Paid' ? 'rec-paid' : row.paymentStatus === 'Partially Paid' ? 'rec-partial' : 'rec-zero'}`}>
                       {formatCurrency(row.paid)}
                     </td>

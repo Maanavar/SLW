@@ -131,22 +131,43 @@ function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
     const normalizedShortCode = String(customer.shortCode || '').trim().toLowerCase();
     const normalizedName = String(customer.name || '').trim().toLowerCase();
     const normalizedNameToken = normalizedName.replace(/[^a-z]/g, '');
+    const isRmp = normalizedShortCode === 'rmp' || normalizedName.includes('ramani motors');
+    const isNm =
+      normalizedShortCode === 'nm' ||
+      normalizedNameToken.includes('mahaling') ||
+      normalizedNameToken.includes('mahalinham');
+    const hasBillNo = customer.hasBillNo === true || isRmp || isNm;
 
     if (normalizedShortCode === 'wp' || normalizedName === 'wagen autos') {
       return {
         ...customer,
+        hasBillNo,
         requiresDc: false,
       };
     }
 
-    if (
-      normalizedShortCode === 'nm' ||
-      normalizedNameToken.includes('mahaling') ||
-      normalizedNameToken.includes('mahalinham')
-    ) {
+    if (isNm) {
       return {
         ...customer,
+        hasBillNo,
         requiresDc: true,
+      };
+    }
+
+    if (isRmp) {
+      return {
+        ...customer,
+        hasBillNo: true,
+      };
+    }
+
+    // AKR has commission but does NOT require DC
+    if (normalizedShortCode === 'akr') {
+      return {
+        ...customer,
+        hasBillNo,
+        hasCommission: true,
+        requiresDc: false,
       };
     }
 
@@ -155,14 +176,16 @@ function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
       return {
         ...customer,
         shortCode: 'AKR',
+        hasBillNo,
         hasCommission: true,
-        requiresDc: true,
+        requiresDc: false,
       };
     }
     if (customer.id === 18 && !customer.shortCode) {
       return {
         ...customer,
         shortCode: 'AVP',
+        hasBillNo,
         hasCommission: true,
         requiresDc: true,
       };
@@ -170,11 +193,16 @@ function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
     if (isCommissionDcCustomer) {
       return {
         ...customer,
+        hasBillNo,
         hasCommission: true,
         requiresDc: true,
       };
     }
-    return customer;
+
+    return {
+      ...customer,
+      hasBillNo,
+    };
   });
 }
 
@@ -822,3 +850,4 @@ useDataStore.subscribe((state) => {
     console.error('Failed to sync compatibility localStorage keys:', error);
   }
 });
+

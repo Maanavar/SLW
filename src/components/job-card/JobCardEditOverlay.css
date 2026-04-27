@@ -1,6 +1,7 @@
+/* ── Edit Overlay Modal ───────────────────────────────────────── */
 .job-card-edit-modal {
-  max-width: 1200px;
-  width: 95vw;
+  max-width: 920px;
+  width: 96vw;
 }
 
 .job-card-edit-modal .modal-header {
@@ -23,51 +24,63 @@ html[data-theme='dark'] .job-card-edit-modal .modal-header {
 }
 
 .job-card-edit-modal .modal-body {
-  padding: var(--space-lg);
+  padding: 0;
 }
 
+/* ── Form — no outer chrome, sections divided by hairlines ────── */
 .edit-card-form {
   display: grid;
-  gap: var(--space-md);
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  gap: 0;
 }
 
 .edit-section {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-  padding: var(--space-md);
-  box-shadow: var(--shadow-sm);
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-color);
 }
 
-.edit-header-fields {
+.edit-section:first-child {
+  border-top: none;
+}
+
+/* ── 1. Header: Customer + Date ─────────────────────────────── */
+.edit-header-2col {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
+/* ── 2. Customer flags ──────────────────────────────────────── */
+.edit-flags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* ── Field primitives ───────────────────────────────────────── */
 .edit-field-group {
   display: grid;
-  gap: 4px;
+  gap: 5px;
 }
 
 .edit-field-label {
-  font-size: var(--text-xs);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.35px;
+  letter-spacing: 0.45px;
   font-weight: 600;
 }
 
 .edit-field-display {
-  min-height: 38px;
+  min-height: 36px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 0 12px;
-  background: var(--bg-input);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--bg-tertiary);
   color: var(--text-primary);
   font-size: var(--text-base);
   font-weight: 600;
@@ -75,18 +88,100 @@ html[data-theme='dark'] .job-card-edit-modal .modal-header {
   align-items: center;
 }
 
-.edit-mode-buttons {
-  min-height: 40px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  padding: 4px;
+/* 2-column utility used throughout */
+.edit-2col {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-xs);
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ── 3. Job lines ───────────────────────────────────────────── */
+.edit-job-details {
+  display: grid;
+  gap: 8px;
+}
+
+.edit-job-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-section-title {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.45px;
+  font-weight: 700;
+}
+
+/* Bill No inline in work lines header */
+.edit-bill-no-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.edit-bill-no-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.edit-bill-no-input {
+  height: 28px;
+  width: 130px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.edit-bill-no-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.edit-add-line-btn {
+  flex-shrink: 0;
+  min-height: 28px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-primary);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.edit-add-line-btn:hover {
+  background: var(--accent-soft);
+}
+
+/* ── Segmented controls ─────────────────────────────────────── */
+.edit-mode-buttons {
+  min-height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  padding: 3px;
+  display: flex;
+  gap: 2px;
 }
 
 .edit-mode-btn {
+  flex: 1;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -94,101 +189,108 @@ html[data-theme='dark'] .job-card-edit-modal .modal-header {
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  min-height: 32px;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .edit-mode-btn.active {
-  background: var(--accent-soft);
-  color: var(--accent-primary);
-  box-shadow: inset 0 0 0 1px rgba(11, 102, 228, 0.32);
-}
-
-html[data-theme='dark'] .edit-mode-btn.active {
-  box-shadow: inset 0 0 0 1px rgba(108, 168, 255, 0.44);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.06);
 }
 
 .edit-mode-btn:hover:not(.active) {
   background: var(--bg-input);
+  color: var(--text-primary);
 }
 
-.edit-job-details {
-  display: grid;
-  gap: 6px;
+/* 4. Flow Type — full width */
+.edit-flow-seg {
+  margin-top: 6px;
 }
 
-.edit-job-details-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
+/* 5. RMP Handler — compact, max-width */
+.edit-rmp-seg {
+  width: fit-content;
+  min-width: 120px;
+  margin-top: 6px;
 }
 
-.edit-section-title {
+/* ── 6a. Worker commission panel — accent blue ──────────────── */
+.edit-worker-commission-panel {
+  border-top-color: rgba(11, 102, 228, 0.22);
+  background: linear-gradient(180deg, rgba(11, 102, 228, 0.05), transparent 70%);
+}
+
+.edit-assignment-empty {
   margin: 0;
   font-size: var(--text-sm);
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.35px;
-  font-weight: 700;
+  color: var(--text-secondary);
 }
 
-.edit-add-line-btn {
-  min-height: 32px;
-  border: 1px solid rgba(11, 102, 228, 0.35);
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent-primary);
-  padding: 0 12px;
-  font-size: var(--text-sm);
-  font-weight: 650;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.edit-add-line-btn:hover {
-  border-color: var(--accent-primary);
-  transform: translateY(-1px);
-}
-
-.edit-summary-grid {
+/* ── 6b. Agent commission panel — amber ─────────────────────── */
+.edit-agent-commission-panel {
+  border-top-color: var(--amber-border);
+  background: linear-gradient(180deg, rgba(217, 119, 6, 0.05), transparent 70%);
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 10px;
+}
+
+/* Agent DC checkbox */
+.edit-agent-dc-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.edit-agent-dc-label input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── 7. Summary ─────────────────────────────────────────────── */
+.edit-summary-grid {
+  display: flex;
   background:
-    linear-gradient(180deg, rgba(11, 102, 228, 0.03), transparent 55%),
-    var(--bg-card);
+    linear-gradient(180deg, rgba(11, 102, 228, 0.04), transparent 60%),
+    var(--bg-tertiary);
+  padding: 0;
 }
 
 html[data-theme='dark'] .edit-summary-grid {
   background:
-    linear-gradient(180deg, rgba(108, 168, 255, 0.09), transparent 55%),
-    var(--bg-card);
-}
-
-.edit-summary-grid.two-column {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+    linear-gradient(180deg, rgba(108, 168, 255, 0.08), transparent 60%),
+    var(--bg-tertiary);
 }
 
 .edit-summary-item {
+  flex: 1;
   display: grid;
-  gap: 4px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-tertiary);
-  padding: 10px;
+  gap: 3px;
+  padding: 12px 16px;
+  border-right: 1px solid var(--border-color);
+}
+
+.edit-summary-item:last-child {
+  border-right: none;
 }
 
 .edit-summary-label {
-  font-size: var(--text-xs);
+  font-size: 10.5px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.35px;
+  letter-spacing: 0.45px;
   font-weight: 600;
 }
 
 .edit-summary-value {
-  margin-top: 2px;
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
@@ -198,91 +300,106 @@ html[data-theme='dark'] .edit-summary-grid {
   color: var(--accent-primary);
 }
 
-.edit-dc-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+/* ── 8. DC Panel — amber bordered, matches creation form ─────── */
+.edit-dc-panel {
+  border-top-color: var(--amber-border);
+  background: linear-gradient(180deg, rgba(217, 119, 6, 0.04), transparent 60%);
 }
 
-.edit-dc-checkbox-wrapper {
-  grid-column: 1 / -1;
+.edit-dc-panel-head {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px dashed var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-tertiary);
+  margin-bottom: 12px;
 }
 
-.edit-dc-checkbox-wrapper input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-primary);
-  cursor: pointer;
+.edit-dc-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amber);
 }
 
-.edit-dc-checkbox-wrapper label {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
+.edit-dc-waived-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
   cursor: pointer;
   -webkit-user-select: none;
   user-select: none;
 }
 
-.edit-payment-section {
-  display: grid;
-  gap: 8px;
-}
-
-.edit-payment-label {
-  margin-bottom: 2px;
-}
-
-.edit-payment-status-buttons {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.edit-payment-btn {
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 9px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+.edit-dc-waived-label input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--amber);
   cursor: pointer;
-  font-size: var(--text-base);
-  font-weight: 600;
-  transition: all var(--transition-fast);
 }
 
-.edit-payment-btn.active {
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: #fff;
-}
-
-html[data-theme='dark'] .edit-payment-btn.active {
-  color: #091321;
-}
-
-.edit-payment-btn:hover:not(.active) {
-  background: var(--bg-input);
-}
-
-.edit-paid-fields {
+.edit-dc-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
 }
 
+/* ── 9. Work Mode + Payment ─────────────────────────────────── */
+.edit-paid-gap {
+  margin-top: 10px;
+}
+
+/* Payment pill toggle */
+.edit-payment-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  background: var(--bg-tertiary);
+  padding: 3px;
+  gap: 2px;
+}
+
+.edit-payment-seg {
+  padding: 5px 20px;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  white-space: nowrap;
+}
+
+.edit-payment-seg.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme='dark'] .edit-payment-seg.active {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.edit-payment-seg.active--paid {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.edit-payment-seg.active--pending {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+/* Paid amount quick-fill chips */
 .edit-paid-chips {
   display: inline-flex;
-  gap: 6px;
-  margin-left: 10px;
+  gap: 5px;
+  margin-left: 6px;
   vertical-align: middle;
 }
 
@@ -291,42 +408,46 @@ html[data-theme='dark'] .edit-payment-btn.active {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 20px;
-  border: 1.5px solid var(--accent);
-  color: var(--accent);
+  border: 1.5px solid var(--accent-primary);
+  color: var(--accent-primary);
   background: transparent;
   cursor: pointer;
   line-height: 1.4;
-  transition: background 0.15s, color 0.15s;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .edit-paid-chip:hover {
-  background: var(--accent);
+  background: var(--accent-primary);
   color: #fff;
 }
 
+/* ── Inputs ─────────────────────────────────────────────────── */
 .edit-input,
 .edit-select,
 .edit-textarea {
-  min-height: 40px;
+  min-height: 36px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 10px var(--space-md);
+  border-radius: 8px;
+  padding: 7px 10px;
   font-size: var(--text-base);
   font-family: var(--font-main);
   font-weight: 500;
   background: var(--bg-input);
   color: var(--text-primary);
   line-height: 1.5;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .edit-textarea {
-  min-height: 88px;
+  min-height: 80px;
   resize: vertical;
 }
 
 .edit-input::placeholder,
 .edit-textarea::placeholder {
   color: var(--text-muted);
+  font-weight: 400;
 }
 
 .edit-input:focus,
@@ -337,45 +458,60 @@ html[data-theme='dark'] .edit-payment-btn.active {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.edit-notes-section {
-  display: grid;
-  gap: var(--space-sm);
+/* Read-only computed fields */
+.edit-input--readonly {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: default;
+  border-style: dashed;
 }
 
+.edit-input--readonly:focus {
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+
+/* ── 10. Notes ──────────────────────────────────────────────── */
+.edit-notes-section {
+  display: grid;
+  gap: 6px;
+}
+
+/* ── 11. Actions bar ────────────────────────────────────────── */
 .edit-actions {
   display: flex;
-  gap: var(--space-sm);
+  gap: 8px;
   justify-content: flex-end;
-  padding-top: var(--space-md);
+  padding: 12px 20px;
   border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
 }
 
 .edit-btn-save,
 .edit-btn-cancel {
-  min-height: 40px;
+  min-height: 36px;
   border-radius: 8px;
-  padding: 10px 16px;
+  padding: 8px 18px;
   font-size: var(--text-sm);
   font-weight: 600;
-  transition: all var(--transition-fast);
+  transition: all 120ms ease;
   border: none;
   cursor: pointer;
 }
 
 .edit-btn-save {
   background: var(--accent-primary);
-  color: white;
-  box-shadow: 0 4px 12px rgba(11, 102, 228, 0.24);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(11, 102, 228, 0.22);
 }
 
 .edit-btn-save:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: 0 8px 16px rgba(11, 102, 228, 0.32);
+  filter: brightness(1.06);
+  box-shadow: 0 4px 12px rgba(11, 102, 228, 0.3);
 }
 
 .edit-btn-save:active:not(:disabled) {
   filter: brightness(0.96);
-  box-shadow: 0 2px 8px rgba(11, 102, 228, 0.16);
 }
 
 .edit-btn-save:disabled {
@@ -385,16 +521,12 @@ html[data-theme='dark'] .edit-payment-btn.active {
 
 .edit-btn-cancel {
   border: 1px solid var(--border-color);
-  background: var(--bg-card);
+  background: transparent;
   color: var(--text-secondary);
 }
 
 .edit-btn-cancel:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-}
-
-.edit-btn-cancel:active:not(:disabled) {
-  background: var(--border-color);
+  background: var(--bg-input);
 }
 
 .edit-btn-cancel:disabled {
@@ -402,122 +534,43 @@ html[data-theme='dark'] .edit-payment-btn.active {
   cursor: not-allowed;
 }
 
+/* Job line rows inherit secondary bg */
 .edit-job-details .job-line-container {
   background: var(--bg-secondary);
 }
 
-.edit-commission-assignment {
-  border-color: rgba(11, 102, 228, 0.36);
-  background:
-    linear-gradient(180deg, rgba(11, 102, 228, 0.05), transparent 70%),
-    var(--bg-card);
-}
-
-.edit-assignment-note {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.edit-rmp-handler-buttons {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.edit-rmp-handler-note {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: 6px;
-}
-
-.edit-assignment-empty {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.edit-assignment-table {
-  margin-top: 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--bg-card);
-}
-
-.edit-assignment-header,
-.edit-assignment-row {
-  display: grid;
-  grid-template-columns: 70px minmax(160px, 2fr) minmax(170px, 2fr) minmax(160px, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-}
-
-.edit-assignment-header {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  color: var(--text-muted);
-  font-weight: 700;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.edit-assignment-row {
-  border-bottom: 1px solid var(--border-light);
-}
-
-.edit-assignment-row:last-child {
-  border-bottom: none;
-}
-
-.edit-assignment-simple {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-@media (max-width: 1024px) {
-  .edit-header-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 840px) {
-  .edit-summary-grid,
-  .edit-summary-grid.two-column,
-  .edit-dc-fields,
-  .edit-paid-fields,
-  .edit-assignment-header,
-  .edit-assignment-row,
-  .edit-assignment-simple {
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .edit-header-2col,
+  .edit-2col,
+  .edit-dc-fields {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 640px) {
-  .job-card-edit-modal .modal-title {
-    font-size: var(--text-lg);
+  .edit-summary-grid {
+    flex-wrap: wrap;
   }
 
-  .job-card-edit-modal .modal-body {
-    padding: 12px;
+  .edit-summary-item {
+    flex: 1 1 40%;
+    border-bottom: 1px solid var(--border-color);
   }
 
-  .edit-card-form {
-    padding: 10px;
-    gap: 10px;
-  }
-
-  .edit-header-fields {
-    grid-template-columns: 1fr;
+  .edit-section {
+    padding: 12px 14px;
   }
 
   .edit-actions {
     justify-content: stretch;
+    padding: 12px 14px;
   }
 
   .edit-btn-save,
   .edit-btn-cancel {
     flex: 1;
+  }
+
+  .edit-rmp-seg {
+    width: 100%;
   }
 }

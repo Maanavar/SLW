@@ -14,7 +14,7 @@ import { PaymentEditModal } from './PaymentEditModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import './PaymentForm.css';
 
-type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'halfyear' | 'all';
+type PeriodType = 'today' | 'week' | 'tenday' | 'month' | 'quarter' | 'halfyear' | 'all';
 
 interface PaymentDisplay extends Payment {
   customerName: string;
@@ -28,6 +28,7 @@ type CustomerOption = { id: number; name: string };
 const PERIOD_TABS: { mode: PeriodType; label: string }[] = [
   { mode: 'today',     label: 'Today' },
   { mode: 'week',      label: 'Week' },
+  { mode: 'tenday',    label: '10-Day' },
   { mode: 'month',     label: 'Month' },
   { mode: 'quarter',   label: 'Quarter' },
   { mode: 'halfyear',  label: 'Half' },
@@ -135,7 +136,6 @@ export function PaymentForm() {
   }, [jobsInRange, getCustomer, cardKeyById]);
 
   const reportPayments: PaymentDisplay[] = useMemo(() => {
-    const customersWithVouchers = new Set(filteredReportPayments.map(p => p.customerId));
     const vouchers = filteredReportPayments.map(p => {
       const linkedCardId = getCardIdFromNotes(p.notes);
       return {
@@ -146,7 +146,30 @@ export function PaymentForm() {
         jobCardKey: linkedCardId ? cardKeyById.get(linkedCardId) : undefined,
       };
     });
-    const fallbacks = fallbackJobPayments.filter(p => !customersWithVouchers.has(p.customerId));
+
+    const vouchersByCustomerDate = new Map<string, PaymentDisplay[]>();
+    vouchers.forEach(v => {
+      const key = `${v.customerId}|${v.date}`;
+      const list = vouchersByCustomerDate.get(key) || [];
+      list.push(v);
+      vouchersByCustomerDate.set(key, list);
+    });
+
+    const fallbacks = fallbackJobPayments.filter(fb => {
+      const key = `${fb.customerId}|${fb.date}`;
+      const sameDay = vouchersByCustomerDate.get(key) || [];
+      if (sameDay.length === 0) return true;
+
+      const cardId = fb.jobCardId;
+      const hasExplicitLink = cardId && sameDay.some(v => (v.notes || '').toLowerCase().includes(cardId.toLowerCase()));
+      if (hasExplicitLink) return false;
+
+      const hasExactAmountMatch = sameDay.some(v => Math.abs((v.amount || 0) - (fb.amount || 0)) < 0.01);
+      if (hasExactAmountMatch) return false;
+
+      return true;
+    });
+
     return [...vouchers, ...fallbacks];
   }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
 
@@ -297,6 +320,8 @@ export function PaymentForm() {
         columns={[
           { key: 'date', label: 'Date', sortable: true },
           { key: 'id', label: 'Payment ID', render: (_, row) => getPaymentDisplayId(row) },
+          { key: 'customerName', label: 'Customer', sortable: true },
+          { key: 'source', label: 'Source', sortable: true },
           {
             key: 'jobCardId',
             label: 'Job Card',
@@ -311,10 +336,8 @@ export function PaymentForm() {
                 </button>
               ) : String(value),
           },
-          { key: 'customerName', label: 'Customer', sortable: true },
           { key: 'amount', label: 'Amount', render: value => formatCurrency(value as number) },
           { key: 'paymentMode', label: 'Mode', render: (_, row) => formatPaymentBreakdown(row), sortable: true },
-          { key: 'source', label: 'Source', sortable: true },
           { key: 'notes', label: 'Notes' },
           {
             key: 'id',

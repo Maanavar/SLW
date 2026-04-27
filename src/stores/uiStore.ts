@@ -25,10 +25,15 @@ interface UIStore {
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
 
-  // Sidebar
+  // Sidebar (desktop only)
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // Mobile drawer (tablet/phone overlay nav — not persisted)
+  mobileDrawerOpen: boolean;
+  openMobileDrawer: () => void;
+  closeMobileDrawer: () => void;
 
   // Modal
   modal: Modal;
@@ -73,6 +78,17 @@ export const useUIStore = create<UIStore>()(
 
       setSidebarCollapsed: (collapsed) => {
         set({ sidebarCollapsed: collapsed });
+      },
+
+      // Mobile drawer state (not persisted — always starts closed)
+      mobileDrawerOpen: false,
+
+      openMobileDrawer: () => {
+        set({ mobileDrawerOpen: true });
+      },
+
+      closeMobileDrawer: () => {
+        set({ mobileDrawerOpen: false });
       },
 
       // Modal state
@@ -125,6 +141,7 @@ export const useUIStore = create<UIStore>()(
       name: 'slw_ui_v1',
       partialize: (state) => ({
         theme: state.theme,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
     }
   )

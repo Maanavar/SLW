@@ -192,8 +192,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  background: var(--bg-sunk);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
   border-radius: 6px;
   cursor: pointer;
   padding: 0;
@@ -204,10 +204,10 @@
 
 .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.icon-edit { color: var(--accent); border-color: var(--accent-border); }
+.icon-edit { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
 .icon-edit:hover { background: var(--accent-soft); border-color: var(--accent); }
 
-.icon-delete { color: var(--red); border-color: var(--red-border); }
+.icon-delete { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
 .icon-delete:hover { background: var(--red-soft); border-color: var(--red); }
 
 /* ── Responsive ──────────────────────────────────────────────── */

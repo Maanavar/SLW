@@ -53,15 +53,24 @@ function isRmpCustomer(customer?: Customer | null) {
   return shortCode === 'rmp' || name.includes('ramani motors');
 }
 
+function isRamaniCarsCustomer(customer?: Customer | null) {
+  if (!customer) return false;
+  const shortCode = normalizeCustomerValue(customer.shortCode);
+  const name = normalizeCustomerValue(customer.name);
+  return shortCode === 'ww' || name.includes('ramani cars');
+}
+
+function isAgentFlowCustomer(customer?: Customer | null) {
+  return isRmpCustomer(customer) || isRamaniCarsCustomer(customer);
+}
+
 function shouldShowDcFields(customer?: Customer | null) {
   if (!customer) return false;
   return isDcApplicableCustomer(customer);
 }
 
 function formatCustomerLabel(customer: Customer) {
-  const code = String(customer.shortCode || '').trim();
-  const safeCode = code !== '0' ? code : '';
-  return safeCode ? `${customer.name} (${safeCode})` : customer.name;
+  return customer.name;
 }
 
 type SubmittedSortKey = 'customer' | 'lines' | 'finalBill' | 'status';
@@ -72,8 +81,35 @@ const paymentStatusOrder: Record<'Paid' | 'Pending' | 'Partially Paid', number> 
   Paid: 2,
 };
 
+function createEmptyJobLine(): JobLineState {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    workType: null,
+    quantity: 1,
+    amount: '',
+    commission: '',
+    commissionWorker: null,
+  };
+}
+
+function isJobLineComplete(line: JobLineState) {
+  return Boolean(line.workType) && line.quantity > 0 && (parseFloat(line.amount) || 0) > 0;
+}
+
+function isPristineJobLine(line: JobLineState) {
+  const commissionRaw = (line.commission || '').trim();
+  const commissionValue = commissionRaw === '' ? 0 : parseFloat(commissionRaw) || 0;
+  return (
+    !line.workType &&
+    line.quantity === 1 &&
+    (line.amount || '').trim() === '' &&
+    commissionValue === 0 &&
+    !line.commissionWorker
+  );
+}
+
 export function JobForm() {
-  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer } = useDataStore();
+  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer, addCustomer, addWorkType, workTypes } = useDataStore();
   const toast = useToast();
 
   const customers = useMemo(() => {
@@ -90,25 +126,22 @@ export function JobForm() {
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [jobDate, setJobDate] = useState(getLocalDateString(new Date()));
-  const [jobLines, setJobLines] = useState<JobLineState[]>([
-    {
-      id: Date.now().toString(),
-      workType: null,
-      quantity: 1,
-      amount: '',
-      commission: '',
-      commissionWorker: null,
-    },
-  ]);
+  const [jobLines, setJobLines] = useState<JobLineState[]>([createEmptyJobLine()]);
   const [workMode, setWorkMode] = useState<'Workshop' | 'Spot'>('Workshop');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [dcNo, setDcNo] = useState('');
+  const [billNo, setBillNo] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [dcDate, setDcDate] = useState('');
   const [dcApproval, setDcApproval] = useState(false);
   const [rmpHandler, setRmpHandler] = useState<'Bhai' | 'Raja' | null>(null);
+  const [jobFlowType, setJobFlowType] = useState<'slw_work' | 'agent_work'>('slw_work');
+  const [externalDc, setExternalDc] = useState(false);
+  const [agentName, setAgentName] = useState('');
+  const [agentCommissionAmount, setAgentCommissionAmount] = useState('');
+  const [agentTdsAmount, setAgentTdsAmount] = useState('');
+  const [paymentIntent, setPaymentIntent] = useState<'now' | 'later'>('later');
   const [paidAmount, setPaidAmount] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Pending');
   const [notes, setNotes] = useState('');
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,11 +156,32 @@ export function JobForm() {
     { key: 'finalBill', order: 'desc' }
   );
 
+  // Quick-add state
+  const [quickAddMode, setQuickAddMode] = useState<null | 'customer' | 'worktype'>(null);
+  const [quickAddPendingLineId, setQuickAddPendingLineId] = useState<string | null>(null);
+  const [qaSubmitting, setQaSubmitting] = useState(false);
+  // Customer form
+  const [qaCustomerName, setQaCustomerName] = useState('');
+  const [qaCustomerCode, setQaCustomerCode] = useState('');
+  const [qaCustomerType, setQaCustomerType] = useState<Customer['type']>('Monthly');
+  const [qaCustomerHasComm, setQaCustomerHasComm] = useState(false);
+  const [qaCustomerRequiresDc, setQaCustomerRequiresDc] = useState(false);
+  const [qaCustomerHasBillNo, setQaCustomerHasBillNo] = useState(false);
+  // Work type form
+  const [qaWorkTypeName, setQaWorkTypeName] = useState('');
+  const [qaWorkTypeCode, setQaWorkTypeCode] = useState('');
+  const [qaWorkTypeCategory, setQaWorkTypeCategory] = useState('');
+  const [qaWorkTypeRate, setQaWorkTypeRate] = useState('');
+
   const showDcFields = shouldShowDcFields(selectedCustomer);
+  const showBillNoField = selectedCustomer?.hasBillNo === true;
   const showVehicleNoField = showDcFields && !isWagenAutosCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
   const showRmpHandlerField = isRmpCustomer(selectedCustomer);
-  const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
+  const showAgentFlowFields = isAgentFlowCustomer(selectedCustomer);
+  const useWorkerCommission = showCommissionFields && jobFlowType === 'slw_work';
+  const useAgentCommission = showAgentFlowFields && jobFlowType === 'agent_work';
+  const commissionWorkersForCustomer = useWorkerCommission && selectedCustomer
     ? getCommissionWorkersForCustomer(selectedCustomer.id)
     : [];
   const sortedCommissionWorkers = useMemo(
@@ -136,7 +190,7 @@ export function JobForm() {
   );
 
   useEffect(() => {
-    if (!showCommissionFields) {
+    if (!useWorkerCommission) {
       return;
     }
 
@@ -154,32 +208,48 @@ export function JobForm() {
     ) {
       setCardCommissionWorker(null);
     }
-  }, [showCommissionFields, sortedCommissionWorkers, cardCommissionWorker]);
+  }, [useWorkerCommission, sortedCommissionWorkers, cardCommissionWorker]);
 
   useEffect(() => {
-    if (!showRmpHandlerField || !rmpHandler) return;
+    if (!showRmpHandlerField || !rmpHandler || !useWorkerCommission) return;
     const matched = sortedCommissionWorkers.find(
       (w) => w.name.trim().toLowerCase() === rmpHandler.toLowerCase()
     );
     if (matched) setCardCommissionWorker(matched);
-  }, [rmpHandler, showRmpHandlerField, sortedCommissionWorkers]);
+  }, [rmpHandler, showRmpHandlerField, sortedCommissionWorkers, useWorkerCommission]);
 
   useEffect(() => {
     if (!showRmpHandlerField) setRmpHandler(null);
   }, [showRmpHandlerField]);
 
+  useEffect(() => {
+    if (!showAgentFlowFields) {
+      setJobFlowType('slw_work');
+      setExternalDc(false);
+      setAgentName('');
+      setAgentCommissionAmount('');
+      setAgentTdsAmount('');
+    }
+  }, [showAgentFlowFields]);
+
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
-  const totalCommission = parseFloat(cardTotalCommission) || 0;
+  const totalCommission = useWorkerCommission ? (parseFloat(cardTotalCommission) || 0) : 0;
+  const agentCommission = useAgentCommission ? (parseFloat(agentCommissionAmount) || 0) : 0;
+  const agentTds = useAgentCommission ? (parseFloat(agentTdsAmount) || 0) : 0;
+  const agentNetPayable = useAgentCommission ? Math.max(0, totalAmount - agentCommission - agentTds) : 0;
   const summary = {
     totalAmount,
     totalCommission,
     netValue: totalAmount,
     finalValue: totalAmount + totalCommission,
+    agentCommission,
+    agentTds,
+    agentNetPayable,
   };
   const nextCardId = useMemo(() => generateJobCardId(jobDate, jobs), [jobDate, jobs]);
 
   useEffect(() => {
-    if (!showCommissionFields) {
+    if (!useWorkerCommission) {
       setJobLines((prev) =>
         prev.map((line) => ({
           ...line,
@@ -190,7 +260,7 @@ export function JobForm() {
       setCardCommissionWorker(null);
       setCardTotalCommission('');
     }
-  }, [showCommissionFields]);
+  }, [useWorkerCommission]);
 
   useEffect(() => {
     if (dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate) {
@@ -199,19 +269,29 @@ export function JobForm() {
   }, [dcNo, vehicleNo, dcDate, showVehicleNoField]);
 
   useEffect(() => {
+    if (!showBillNoField && billNo) {
+      setBillNo('');
+    }
+  }, [showBillNoField, billNo]);
+
+  useEffect(() => {
     if (!showVehicleNoField && vehicleNo) {
       setVehicleNo('');
     }
   }, [showVehicleNoField, vehicleNo]);
 
   useEffect(() => {
-    const val = parseFloat(paidAmount);
-    if (!isNaN(val) && val > 0) {
-      setPaymentStatus('Paid');
-    } else {
-      setPaymentStatus('Pending');
+    if (!selectedCustomer) return;
+    const deferredTypes = ['Monthly', 'Invoice', 'Party-Credit'];
+    setPaymentIntent(deferredTypes.includes(selectedCustomer.type) ? 'later' : 'now');
+    setPaidAmount('');
+  }, [selectedCustomer?.id]);
+
+  useEffect(() => {
+    if (paymentIntent === 'later') {
+      setPaidAmount('');
     }
-  }, [paidAmount]);
+  }, [paymentIntent]);
 
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
@@ -318,17 +398,7 @@ export function JobForm() {
       : 'No JobCards found for the selected date range.';
 
   const handleAddLine = () => {
-    setJobLines([
-      ...jobLines,
-      {
-        id: Date.now().toString(),
-        workType: null,
-        quantity: 1,
-        amount: '',
-        commission: '',
-        commissionWorker: null,
-      },
-    ]);
+    setJobLines((prev) => [...prev, createEmptyJobLine()]);
   };
 
   const handleRemoveLine = (id: string) => {
@@ -341,13 +411,39 @@ export function JobForm() {
   };
 
   const handleLineChange = (updatedLine: JobLineState) => {
-    // If commission is not applicable, set it to 0
-    const finalLine = showCommissionFields ? updatedLine : { ...updatedLine, commission: '0' };
-    setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
+    setJobLines((prev) => {
+      const updatedIndex = prev.findIndex((line) => line.id === updatedLine.id);
+      if (updatedIndex === -1) {
+        return prev;
+      }
+
+      // If commission is not applicable, keep it at 0.
+      const finalLine = useWorkerCommission ? updatedLine : { ...updatedLine, commission: '0' };
+      const nextLines = prev.map((line) => (line.id === updatedLine.id ? finalLine : line));
+
+      const isLastLine = updatedIndex === nextLines.length - 1;
+      if (!isLastLine || !isJobLineComplete(finalLine)) {
+        return nextLines;
+      }
+
+      const hasIncompleteLine = nextLines.some((line) => !isJobLineComplete(line));
+      if (hasIncompleteLine) {
+        return nextLines;
+      }
+
+      return [...nextLines, createEmptyJobLine()];
+    });
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const linesForSubmit = [...jobLines];
+    while (
+      linesForSubmit.length > 1 &&
+      isPristineJobLine(linesForSubmit[linesForSubmit.length - 1])
+    ) {
+      linesForSubmit.pop();
+    }
 
     if (!selectedCustomer) {
       toast.error('Error', 'Please select a customer');
@@ -364,43 +460,58 @@ export function JobForm() {
       return;
     }
 
-    if (jobLines.some((line) => !line.workType)) {
+    if (linesForSubmit.some((line) => !line.workType)) {
       toast.error('Error', 'All job lines must have a work type selected');
       return;
     }
 
-    if (jobLines.some((line) => !line.quantity || line.quantity <= 0)) {
+    if (linesForSubmit.some((line) => !line.quantity || line.quantity <= 0)) {
       toast.error('Error', 'All job lines must include quantity greater than 0');
       return;
     }
 
-    if (jobLines.some((line) => !line.amount || parseFloat(line.amount) <= 0)) {
+    if (linesForSubmit.some((line) => !line.amount || parseFloat(line.amount) <= 0)) {
       toast.error('Error', 'All job lines must include amount');
       return;
     }
 
-    if (showCommissionFields && (cardTotalCommission === '' || parseFloat(cardTotalCommission) < 0)) {
+    if (useWorkerCommission && (cardTotalCommission === '' || parseFloat(cardTotalCommission) < 0)) {
       toast.error('Error', 'Please enter commission amount');
       return;
     }
 
-    if (showCommissionFields && sortedCommissionWorkers.length === 0) {
+    if (useWorkerCommission && sortedCommissionWorkers.length === 0) {
       toast.error('Error', 'Add at least one commission worker for this customer');
       return;
     }
 
-    if (showCommissionFields && !cardCommissionWorker) {
+    if (useWorkerCommission && !cardCommissionWorker) {
       toast.error('Error', 'Select one commission worker for this job card');
       return;
     }
 
-    if (paymentStatus === 'Paid' && (!paidAmount || parseFloat(paidAmount) <= 0)) {
-      toast.error('Error', 'Paid amount is mandatory when status is Paid');
+    if (useAgentCommission && !agentName.trim()) {
+      toast.error('Error', 'Enter agent name');
       return;
     }
 
-    if (paymentStatus === 'Paid' && !paymentMode) {
-      toast.error('Error', 'Payment mode is mandatory when status is Paid');
+    if (useAgentCommission && (agentCommissionAmount === '' || Number(agentCommissionAmount) < 0)) {
+      toast.error('Error', 'Enter valid agent commission amount');
+      return;
+    }
+
+    if (useAgentCommission && (agentTdsAmount === '' || Number(agentTdsAmount) < 0)) {
+      toast.error('Error', 'Enter valid TDS amount');
+      return;
+    }
+
+    if (paymentIntent === 'now' && (!paidAmount || parseFloat(paidAmount) <= 0)) {
+      toast.error('Error', 'Enter paid amount, or switch to "Pay later"');
+      return;
+    }
+
+    if (paymentIntent === 'now' && !paymentMode) {
+      toast.error('Error', 'Payment mode is mandatory when paying now');
       return;
     }
 
@@ -409,49 +520,110 @@ export function JobForm() {
       return;
     }
 
+    if (showBillNoField && !billNo.trim()) {
+      toast.error('Error', 'Bill number is required for this customer');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const enteredPaidAmount = paymentStatus === 'Paid' ? parseFloat(paidAmount) || 0 : 0;
-      const resolvedPaymentStatus =
-        paymentStatus === 'Paid'
-          ? getPaymentStatusFromAmounts(enteredPaidAmount, summary.finalValue)
-          : 'Pending';
+      const enteredPaidAmount = paymentIntent === 'now' ? parseFloat(paidAmount) || 0 : 0;
+
+      const allocateAcrossLines = (lineFinalBills: number[], totalPaid: number) => {
+        let remaining = Math.max(0, totalPaid);
+        return lineFinalBills.map((due) => {
+          const alloc = Math.min(Math.max(0, due), remaining);
+          remaining -= alloc;
+          return alloc;
+        });
+      };
+
+      const lineFinalBills = linesForSubmit.map((line, index) => {
+        const lineAmount = parseFloat(line.amount) || 0;
+        const lineCommission = useWorkerCommission && index === 0 ? parseFloat(cardTotalCommission) || 0 : 0;
+        return lineAmount + lineCommission;
+      });
+
+      const paidAllocations =
+        paymentIntent === 'now' && enteredPaidAmount > 0
+          ? allocateAcrossLines(lineFinalBills, enteredPaidAmount)
+          : linesForSubmit.map(() => 0);
 
       if (isEditMode && editingJobIds.length > 0) {
-        // EDIT MODE: Update existing jobs
+        // EDIT MODE: sync lines (update existing, create added lines, delete removed lines)
+        const existingJobs = editingJobIds
+          .map((id) => jobs.find((j) => j.id === id))
+          .filter((j): j is Job => Boolean(j));
+        const baseCardId = existingJobs[0]?.jobCardId;
+
+        const buildLinePayload = (line: JobLineState, index: number) => ({
+          date: jobDate,
+          workTypeName: line.workType!.name,
+          workName: line.workType!.shortCode,
+          quantity: line.quantity,
+          amount: parseFloat(line.amount),
+          commissionAmount: useWorkerCommission && index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+          commissionWorkerId:
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+          commissionWorkerName:
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.name : undefined,
+          netAmount: parseFloat(line.amount),
+          paymentStatus:
+            paymentIntent === 'now' && enteredPaidAmount > 0
+              ? getPaymentStatusFromAmounts(paidAllocations[index] || 0, lineFinalBills[index] || 0)
+              : 'Pending',
+          paymentMode:
+            paymentIntent === 'now' && (paidAllocations[index] || 0) > 0 ? paymentMode : undefined,
+          paidAmount: paymentIntent === 'now' ? (paidAllocations[index] || 0) : 0,
+          workMode,
+          isSpotWork: workMode === 'Spot',
+          notes: notes.trim() || undefined,
+          jobCardId: baseCardId || undefined,
+          jobCardLine: index + 1,
+          billNo: showBillNoField ? billNo.trim() : undefined,
+          ...(showDcFields && {
+            dcNo: dcNo || undefined,
+            vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
+            dcDate: dcDate || undefined,
+            dcApproval: dcApproval || undefined,
+          }),
+          rmpHandler: showRmpHandlerField ? rmpHandler : null,
+          jobFlowType,
+          externalDc: useAgentCommission ? externalDc : false,
+          agentName: useAgentCommission ? agentName.trim() : undefined,
+          agentCommissionAmount: useAgentCommission && index === 0 ? Number(agentCommissionAmount) || 0 : 0,
+          agentTdsAmount: useAgentCommission && index === 0 ? Number(agentTdsAmount) || 0 : 0,
+          agentSettlementPaidAmount:
+            index === 0
+              ? (existingJobs[0]?.agentSettlementPaidAmount || 0)
+              : 0,
+        });
+
+        const commonLength = Math.min(existingJobs.length, linesForSubmit.length);
         await Promise.all(
-          jobLines.map((line, index) =>
-            updateJob(editingJobIds[index], {
-              date: jobDate,
-              workTypeName: line.workType!.name,
-              workName: line.workType!.shortCode,
-              quantity: line.quantity,
-              amount: parseFloat(line.amount),
-              commissionAmount: index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
-              commissionWorkerId:
-                showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
-              commissionWorkerName:
-                showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
-              netAmount: parseFloat(line.amount),
-              paymentStatus: resolvedPaymentStatus,
-              paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
-              paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
-              workMode,
-              isSpotWork: workMode === 'Spot',
-              notes: notes.trim() || undefined,
-              ...(showDcFields && {
-                dcNo: dcNo || undefined,
-                vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
-                dcDate: dcDate || undefined,
-                dcApproval: dcApproval || undefined,
-              }),
-              rmpHandler: showRmpHandlerField ? rmpHandler : null,
-            })
-          )
+          linesForSubmit.slice(0, commonLength).map((line, index) => updateJob(existingJobs[index].id, buildLinePayload(line, index)))
         );
 
+        if (linesForSubmit.length > existingJobs.length) {
+          const extraLines = linesForSubmit.slice(existingJobs.length);
+          await addJobsBulk(
+            extraLines.map((line, extraIndex) => {
+              const index = existingJobs.length + extraIndex;
+              return {
+                customerId: selectedCustomer.id,
+                ...buildLinePayload(line, index),
+              };
+            })
+          );
+        }
+
+        if (existingJobs.length > linesForSubmit.length) {
+          const removedJobs = existingJobs.slice(linesForSubmit.length);
+          await Promise.all(removedJobs.map((job) => deleteJob(job.id)));
+        }
+
         // Create advance if payment > finalBill (edit mode)
-        if (selectedCustomer && paymentStatus === 'Paid') {
+        if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
           if (overpayment > 0) {
@@ -464,7 +636,7 @@ export function JobForm() {
         }
 
         // Deduct advance if it was applied during edit
-        if (selectedCustomer && paymentStatus === 'Paid') {
+        if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const currentAdvance = selectedCustomer.advanceBalance || 0;
           const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
@@ -482,27 +654,32 @@ export function JobForm() {
       } else {
         // CREATE MODE: Create new jobs
         const jobCardId = generateJobCardId(jobDate, jobs);
-        const newJobs: Job[] = jobLines.map((line, index) => ({
+        const newJobs: Job[] = linesForSubmit.map((line, index) => ({
           id: Date.now() + Math.random(),
           customerId: selectedCustomer.id,
           workTypeName: line.workType!.name,
           workName: line.workType!.shortCode,
           quantity: line.quantity,
           amount: parseFloat(line.amount),
-          commissionAmount: index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+          commissionAmount: useWorkerCommission && index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
           commissionWorkerId:
-            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.id : undefined,
           commissionWorkerName:
-            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.name : undefined,
           netAmount: parseFloat(line.amount),
           date: jobDate,
-          paymentStatus: resolvedPaymentStatus,
-          paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
-          paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
+          paymentStatus:
+            paymentIntent === 'now' && enteredPaidAmount > 0
+              ? getPaymentStatusFromAmounts(paidAllocations[index] || 0, lineFinalBills[index] || 0)
+              : 'Pending',
+          paymentMode:
+            paymentIntent === 'now' && (paidAllocations[index] || 0) > 0 ? paymentMode : undefined,
+          paidAmount: paymentIntent === 'now' ? (paidAllocations[index] || 0) : 0,
           workMode,
           isSpotWork: workMode === 'Spot',
           jobCardId,
           jobCardLine: index + 1,
+          billNo: showBillNoField ? billNo.trim() : undefined,
           notes: notes.trim() || undefined,
           ...(showDcFields && {
             dcNo: dcNo || undefined,
@@ -511,13 +688,19 @@ export function JobForm() {
             dcApproval: dcApproval || undefined,
           }),
           rmpHandler: showRmpHandlerField ? rmpHandler : null,
+          jobFlowType,
+          externalDc: useAgentCommission ? externalDc : false,
+          agentName: useAgentCommission ? agentName.trim() : undefined,
+          agentCommissionAmount: useAgentCommission && index === 0 ? Number(agentCommissionAmount) || 0 : 0,
+          agentTdsAmount: useAgentCommission && index === 0 ? Number(agentTdsAmount) || 0 : 0,
+          agentSettlementPaidAmount: 0,
         }));
 
         await addJobsBulk(newJobs);
         toast.success('Success', `JobCard ${jobCardId} created with ${newJobs.length} line(s)`);
 
         // Create advance if payment > finalBill
-        if (selectedCustomer && paymentStatus === 'Paid') {
+        if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
           if (overpayment > 0) {
@@ -531,7 +714,7 @@ export function JobForm() {
       }
 
       // Deduct advance if it was applied during creation (edit mode)
-      if (selectedCustomer && paymentStatus === 'Paid') {
+      if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
         const enteredPaidAmount = parseFloat(paidAmount) || 0;
         const currentAdvance = selectedCustomer.advanceBalance || 0;
         const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
@@ -544,25 +727,22 @@ export function JobForm() {
 
       // Reset form (keep current date per design spec)
       setSelectedCustomer(null);
-      setJobLines([
-        {
-          id: Date.now().toString(),
-          workType: null,
-          quantity: 1,
-          amount: '',
-          commission: '',
-          commissionWorker: null,
-        },
-      ]);
+      setJobLines([createEmptyJobLine()]);
       setWorkMode('Workshop');
+      setPaymentIntent('later');
       setPaymentMode('Cash');
       setPaidAmount('');
-      setPaymentStatus('Pending');
       setDcNo('');
+      setBillNo('');
       setVehicleNo('');
       setDcDate('');
       setDcApproval(false);
       setRmpHandler(null);
+      setJobFlowType('slw_work');
+      setExternalDc(false);
+      setAgentName('');
+      setAgentCommissionAmount('');
+      setAgentTdsAmount('');
       setNotes('');
       setCardCommissionWorker(null);
       setCardTotalCommission('');
@@ -584,6 +764,11 @@ export function JobForm() {
     setSelectedCustomer(editCustomer);
     setJobDate(cardToEdit.primary.date);
     setWorkMode(cardToEdit.primary.workMode as 'Workshop' | 'Spot');
+    setJobFlowType(cardToEdit.primary.jobFlowType || 'slw_work');
+    setExternalDc(Boolean(cardToEdit.primary.externalDc));
+    setAgentName(cardToEdit.primary.agentName || '');
+    setAgentCommissionAmount(String(cardToEdit.primary.agentCommissionAmount || 0));
+    setAgentTdsAmount(String(cardToEdit.primary.agentTdsAmount || 0));
 
     const lines: JobLineState[] = cardToEdit.jobs.map((job) => {
       const legacyDistribution = (job as Job & { commissionDistribution?: Array<{ workerId?: number }> })
@@ -618,6 +803,7 @@ export function JobForm() {
 
     setJobLines(lines);
     setNotes(cardToEdit.primary.notes || '');
+    setBillNo(cardToEdit.primary.billNo || '');
 
     // Set card-level commission from first job
     const firstJob = cardToEdit.primary;
@@ -636,12 +822,17 @@ export function JobForm() {
 
     if (cardToEdit.primary.rmpHandler) {
       setRmpHandler(cardToEdit.primary.rmpHandler as 'Bhai' | 'Raja');
+    } else {
+      setRmpHandler(null);
     }
 
     if (cardToEdit.primary.paymentStatus === 'Paid' && cardToEdit.primary.paidAmount) {
-      setPaymentStatus('Paid');
+      setPaymentIntent('now');
       setPaidAmount(String(cardToEdit.primary.paidAmount));
-      setPaymentMode(cardToEdit.primary.paymentMode || '');
+      setPaymentMode(cardToEdit.primary.paymentMode || 'Cash');
+    } else {
+      setPaymentIntent('later');
+      setPaidAmount('');
     }
 
     setEditingJobIds(cardToEdit.jobs.map((j) => j.id));
@@ -673,18 +864,99 @@ export function JobForm() {
     }
   };
 
+  const openQuickAddCustomer = (searchText: string) => {
+    setQaCustomerName(searchText);
+    setQaCustomerCode('');
+    setQaCustomerType('Monthly');
+    setQaCustomerHasComm(false);
+    setQaCustomerRequiresDc(false);
+    setQaCustomerHasBillNo(false);
+    setQuickAddMode('customer');
+  };
+
+  const openQuickAddWorkType = (lineId: string, searchText: string) => {
+    const cats = [...new Set(workTypes.map((wt) => wt.category).filter(Boolean))].sort() as string[];
+    setQaWorkTypeName(searchText);
+    setQaWorkTypeCode('');
+    setQaWorkTypeCategory(cats[0] || '');
+    setQaWorkTypeRate('');
+    setQuickAddPendingLineId(lineId);
+    setQuickAddMode('worktype');
+  };
+
+  const handleQuickAddCustomerSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!qaCustomerName.trim()) return;
+    setQaSubmitting(true);
+    try {
+      const newCustomer = await addCustomer({
+        name: qaCustomerName.trim(),
+        shortCode: qaCustomerCode.trim(),
+        type: qaCustomerType,
+        hasCommission: qaCustomerHasComm,
+        requiresDc: qaCustomerRequiresDc,
+        hasBillNo: qaCustomerHasBillNo,
+        advanceBalance: 0,
+        notes: '',
+        isActive: true,
+      });
+      setSelectedCustomer(newCustomer);
+      setQuickAddMode(null);
+      toast.success('Customer added', `"${newCustomer.name}" created and selected`);
+    } catch {
+      toast.error('Error', 'Failed to create customer');
+    } finally {
+      setQaSubmitting(false);
+    }
+  };
+
+  const handleQuickAddWorkTypeSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!qaWorkTypeName.trim()) return;
+    setQaSubmitting(true);
+    try {
+      const newWorkType = await addWorkType({
+        name: qaWorkTypeName.trim(),
+        shortCode: qaWorkTypeCode.trim(),
+        category: qaWorkTypeCategory.trim() || 'General',
+        defaultUnit: 'nos',
+        defaultRate: parseFloat(qaWorkTypeRate) || 0,
+        isActive: true,
+      });
+      if (quickAddPendingLineId) {
+        setJobLines((prev) =>
+          prev.map((line) =>
+            line.id === quickAddPendingLineId ? { ...line, workType: newWorkType } : line
+          )
+        );
+      }
+      setQuickAddMode(null);
+      setQuickAddPendingLineId(null);
+      toast.success('Work type added', `"${newWorkType.name}" created and selected`);
+    } catch {
+      toast.error('Error', 'Failed to create work type');
+    } finally {
+      setQaSubmitting(false);
+    }
+  };
+
   const handleReset = () => {
     setSelectedCustomer(null);
-    setJobLines([{ id: Date.now().toString(), workType: null, quantity: 1, amount: '', commission: '', commissionWorker: null }]);
+    setJobLines([createEmptyJobLine()]);
     setWorkMode('Workshop');
+    setPaymentIntent('later');
     setPaymentMode('Cash');
     setPaidAmount('');
-    setPaymentStatus('Pending');
     setDcNo('');
+    setBillNo('');
     setVehicleNo('');
     setDcDate('');
     setDcApproval(false);
     setRmpHandler(null);
+    setJobFlowType('slw_work');
+    setAgentName('');
+    setAgentCommissionAmount('');
+    setAgentTdsAmount('');
     setNotes('');
     setCardCommissionWorker(null);
     setCardTotalCommission('');
@@ -741,9 +1013,11 @@ export function JobForm() {
                   value={selectedCustomer}
                   onChange={setSelectedCustomer}
                   getLabel={formatCustomerLabel}
+                  getSearchText={(c) => `${c.name} ${String(c.shortCode || '').trim()}`}
                   getKey={(c) => String(c.id)}
                   placeholder="Search customer..."
                   disabled={isEditMode}
+                  onAddNew={isEditMode ? undefined : openQuickAddCustomer}
                 />
                 {isEditMode && <p className="form-hint">Customer cannot be changed when editing.</p>}
               </div>
@@ -771,6 +1045,7 @@ export function JobForm() {
                 </span>
                 {showCommissionFields && <span className="cust-flag flag-commission">Commission</span>}
                 {showDcFields && <span className="cust-flag flag-dc">DC required</span>}
+                {showBillNoField && <span className="cust-flag">Bill No required</span>}
                 {showRmpHandlerField && <span className="cust-flag flag-rmp">RMP</span>}
                 {(selectedCustomer.advanceBalance || 0) > 0 && (
                   <span className="cust-flag flag-advance">
@@ -791,12 +1066,25 @@ export function JobForm() {
               </div>
             )}
 
-            {/* Work lines */}
             <div className="work-lines-section">
               <div className="work-lines-head">
                 <span className="work-lines-title">
                   Work lines <span className="tamil work-lines-ta">வேலை வரிகள்</span>
                 </span>
+                {showBillNoField && (
+                  <div className="bill-no-inline">
+                    <label className="bill-no-label">Bill No <span className="req-star">*</span></label>
+                    <input
+                      type="text"
+                      className="bill-no-input mono"
+                      value={billNo}
+                      onChange={(e) => setBillNo(e.target.value)}
+                      placeholder="Bill number"
+                      maxLength={40}
+                      required={showBillNoField}
+                    />
+                  </div>
+                )}
                 <button type="button" className="btn-add-line" onClick={handleAddLine}>
                   + Add line
                 </button>
@@ -818,13 +1106,119 @@ export function JobForm() {
                     showCommission={false}
                     showInlineWorker={false}
                     showInlineCommission={false}
+                    onAddNewWorkType={(searchText) => openQuickAddWorkType(line.id, searchText)}
                   />
                 ))}
               </div>
             </div>
 
-            {/* Commission assignment */}
-            {showCommissionFields && (
+            {/* Flow type for Ramani customers */}
+            {showAgentFlowFields && (
+              <div className="form-group">
+                <label className="form-label">Flow Type</label>
+                <div className="seg-control">
+                  <button
+                    type="button"
+                    className={`seg-btn${jobFlowType === 'slw_work' ? ' active' : ''}`}
+                    onClick={() => setJobFlowType('slw_work')}
+                  >
+                    SLW Work (Pay Worker)
+                  </button>
+                  <button
+                    type="button"
+                    className={`seg-btn${jobFlowType === 'agent_work' ? ' active' : ''}`}
+                    onClick={() => setJobFlowType('agent_work')}
+                  >
+                    Agent Work (Receive Commission)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* RMP Handler (shown before commission block) */}
+            {showRmpHandlerField && (
+              <div className="form-group">
+                <label className="form-label">RMP Handler</label>
+                <div className="seg-control rmp-seg">
+                  {(['Bhai', 'Raja'] as const).map((handler) => (
+                    <button
+                      key={handler}
+                      type="button"
+                      className={`seg-btn${rmpHandler === handler ? ' active' : ''}`}
+                      onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
+                    >
+                      {handler}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Agent commission flow */}
+            {useAgentCommission && (
+              <div className="commission-section">
+                <div className="form-group">
+                  <label className="dc-waived-toggle-label">
+                    <ToggleSwitch
+                      checked={externalDc}
+                      onChange={setExternalDc}
+                      id="agent-external-dc"
+                    />
+                    <span>External DC (not worked by SLW)</span>
+                  </label>
+                </div>
+                <div className="njc-row-2">
+                  <div className="form-group">
+                    <label className="form-label">Agent Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
+                      placeholder={isRmpCustomer(selectedCustomer) ? 'Sudha / Bhai / Raja' : 'Palanisamy'}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Our Commission (INR)</label>
+                    <input
+                      type="number"
+                      className="form-input mono"
+                      value={agentCommissionAmount}
+                      onChange={(e) => setAgentCommissionAmount(e.target.value)}
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                </div>
+                <div className="njc-row-2">
+                  <div className="form-group">
+                    <label className="form-label">TDS (INR)</label>
+                    <input
+                      type="number"
+                      className="form-input mono"
+                      value={agentTdsAmount}
+                      onChange={(e) => setAgentTdsAmount(e.target.value)}
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Net Payable To Agent</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      value={formatCurrency(summary.agentNetPayable)}
+                      disabled
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Worker commission assignment */}
+            {useWorkerCommission && (
               <div className="commission-section">
                 {sortedCommissionWorkers.length === 0 ? (
                   <p className="note-text">No commission workers for this customer. Add in Customer settings.</p>
@@ -915,27 +1309,8 @@ export function JobForm() {
               </div>
             )}
 
-            {/* RMP Handler */}
-            {showRmpHandlerField && (
-              <div className="form-group">
-                <label className="form-label">RMP Handler</label>
-                <div className="seg-control rmp-seg">
-                  {(['Bhai', 'Raja'] as const).map((handler) => (
-                    <button
-                      key={handler}
-                      type="button"
-                      className={`seg-btn${rmpHandler === handler ? ' active' : ''}`}
-                      onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
-                    >
-                      {handler}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Work mode + Payment mode + Paid amount */}
-            <div className="njc-row-3">
+            {/* Work mode + Payment intent */}
+            <div className="njc-row-2">
               <div className="form-group">
                 <label className="form-label">Work mode</label>
                 <div className="seg-control">
@@ -944,51 +1319,64 @@ export function JobForm() {
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label" htmlFor="payment-mode">Payment mode</label>
-                <select
-                  id="payment-mode"
-                  className="form-input"
-                  value={paymentMode}
-                  onChange={(e) => setPaymentMode(e.target.value)}
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank">Bank</option>
-                  <option value="Cheque">Cheque</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="paid-amount">
-                  Paid amount ₹
-                  {summary.finalValue > 0 && (
-                    <button
-                      type="button"
-                      className="fill-chip"
-                      onClick={() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const due = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          return sum + Math.max(0, due - (job.paidAmount || 0));
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        setPaidAmount(String(Math.max(0, backlog + summary.finalValue - advance)));
-                      }}
-                    >
-                      Fill
-                    </button>
-                  )}
-                </label>
-                <input
-                  id="paid-amount"
-                  type="number"
-                  className="form-input mono"
-                  value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                  placeholder="0"
-                  min="0"
-                />
+                <label className="form-label">Payment</label>
+                <div className="seg-control">
+                  <button type="button" className={`seg-btn seg-btn--paid-now${paymentIntent === 'now' ? ' active' : ''}`} onClick={() => setPaymentIntent('now')}>Paid now</button>
+                  <button type="button" className={`seg-btn seg-btn--later${paymentIntent === 'later' ? ' active' : ''}`} onClick={() => setPaymentIntent('later')}>Pay later</button>
+                </div>
               </div>
             </div>
+
+            {/* Payment mode + Paid amount — shown only when paying now */}
+            {paymentIntent === 'now' && (
+              <div className="njc-row-2">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="payment-mode">Payment mode</label>
+                  <select
+                    id="payment-mode"
+                    className="form-input"
+                    value={paymentMode}
+                    onChange={(e) => setPaymentMode(e.target.value)}
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Bank">Bank</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="paid-amount">
+                    Paid amount ₹
+                    {summary.finalValue > 0 && (
+                      <button
+                        type="button"
+                        className="fill-chip"
+                        onClick={() => {
+                          const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
+                          const backlog = customerJobs.reduce((sum, job) => {
+                            const due = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                            return sum + Math.max(0, due - (job.paidAmount || 0));
+                          }, 0);
+                          const advance = selectedCustomer?.advanceBalance || 0;
+                          setPaidAmount(String(Math.max(0, backlog + summary.finalValue - advance)));
+                        }}
+                      >
+                        Fill
+                      </button>
+                    )}
+                  </label>
+                  <input
+                    id="paid-amount"
+                    type="number"
+                    className="form-input mono"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Notes */}
             <textarea
@@ -1007,7 +1395,7 @@ export function JobForm() {
               <button
                 type="submit"
                 className="btn btn-accent"
-                disabled={!selectedCustomer || isSubmitting || (showCommissionFields && sortedCommissionWorkers.length === 0)}
+                disabled={!selectedCustomer || isSubmitting || (useWorkerCommission && sortedCommissionWorkers.length === 0)}
               >
                 {isSubmitting ? (isEditMode ? 'Updating...' : 'Saving...') : (
                   <>
@@ -1187,6 +1575,7 @@ export function JobForm() {
               ) : (
                 sortedTodayJobCards.map((group) => {
                   const cardNo = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+                  const cardBillNo = group.primary.billNo || '';
                   const customer = getCustomer(group.primary.customerId);
                   const customerName = customer?.name || 'Unknown';
                   const customerCode = customer?.shortCode || '';
@@ -1204,7 +1593,10 @@ export function JobForm() {
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(group.key); } }}
                     >
-                      <td className="mono card-no-cell">{cardNo}</td>
+                      <td className="mono card-no-cell">
+                        <div>{cardNo}</div>
+                        {cardBillNo && <div className="cust-cell-code">Bill: {cardBillNo}</div>}
+                      </td>
                       <td>
                         <div className="cust-cell-name">{customerName}</div>
                         {customerCode && <div className="cust-cell-code">{customerCode}</div>}
@@ -1244,6 +1636,174 @@ export function JobForm() {
         onEdit={handleEditCard}
         onDelete={handleDeleteCard}
       />
+
+      {/* Quick-add Customer Modal */}
+      {quickAddMode === 'customer' && (
+        <div className="modal-overlay" onClick={() => setQuickAddMode(null)}>
+          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <span className="modal-title">Add new customer</span>
+                <p className="modal-subtitle">Will be selected automatically after creation</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setQuickAddMode(null)} aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form className="modal-body qa-form" onSubmit={handleQuickAddCustomerSubmit}>
+              <div className="qa-row-2">
+                <div className="form-group">
+                  <label className="form-label">Name <span className="req-star">*</span></label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={qaCustomerName}
+                    onChange={(e) => setQaCustomerName(e.target.value)}
+                    placeholder="Customer name"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Short code</label>
+                  <input
+                    className="form-input mono"
+                    type="text"
+                    value={qaCustomerCode}
+                    onChange={(e) => setQaCustomerCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. ABC"
+                    maxLength={6}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Type</label>
+                <select
+                  className="form-input"
+                  value={qaCustomerType}
+                  onChange={(e) => setQaCustomerType(e.target.value as Customer['type'])}
+                  aria-label="Customer type"
+                >
+                  <option value="Monthly">Monthly</option>
+                  <option value="Invoice">Invoice</option>
+                  <option value="Party-Credit">Party-Credit</option>
+                  <option value="Cash">Cash</option>
+                </select>
+              </div>
+              <div className="qa-checks">
+                <label className="qa-check-label">
+                  <input type="checkbox" checked={qaCustomerHasComm} onChange={(e) => setQaCustomerHasComm(e.target.checked)} />
+                  Has commission
+                </label>
+                <label className="qa-check-label">
+                  <input type="checkbox" checked={qaCustomerRequiresDc} onChange={(e) => setQaCustomerRequiresDc(e.target.checked)} />
+                  Requires DC
+                </label>
+                <label className="qa-check-label">
+                  <input type="checkbox" checked={qaCustomerHasBillNo} onChange={(e) => setQaCustomerHasBillNo(e.target.checked)} />
+                  Has bill no
+                </label>
+              </div>
+              <div className="qa-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setQuickAddMode(null)}>Cancel</button>
+                <button type="submit" className="btn btn-accent" disabled={qaSubmitting || !qaCustomerName.trim()}>
+                  {qaSubmitting ? 'Creating...' : 'Create customer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick-add Work Type Modal */}
+      {quickAddMode === 'worktype' && (
+        <div className="modal-overlay" onClick={() => setQuickAddMode(null)}>
+          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <span className="modal-title">Add new work type</span>
+                <p className="modal-subtitle">Will be selected in the job line automatically</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setQuickAddMode(null)} aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form className="modal-body qa-form" onSubmit={handleQuickAddWorkTypeSubmit}>
+              <div className="qa-row-2">
+                <div className="form-group">
+                  <label className="form-label">Name <span className="req-star">*</span></label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={qaWorkTypeName}
+                    onChange={(e) => setQaWorkTypeName(e.target.value)}
+                    placeholder="Work type name"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Short code</label>
+                  <input
+                    className="form-input mono"
+                    type="text"
+                    value={qaWorkTypeCode}
+                    onChange={(e) => setQaWorkTypeCode(e.target.value)}
+                    placeholder="e.g. TURN"
+                    maxLength={8}
+                  />
+                </div>
+              </div>
+              <div className="qa-row-2">
+                <div className="form-group">
+                  <label className="form-label">Category</label>
+                  {(() => {
+                    const cats = [...new Set(workTypes.map((wt) => wt.category).filter(Boolean))].sort() as string[];
+                    return cats.length > 0 ? (
+                      <select
+                        className="form-input"
+                        value={qaWorkTypeCategory}
+                        onChange={(e) => setQaWorkTypeCategory(e.target.value)}
+                        aria-label="Category"
+                      >
+                        {cats.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="form-input"
+                        type="text"
+                        value={qaWorkTypeCategory}
+                        onChange={(e) => setQaWorkTypeCategory(e.target.value)}
+                        placeholder="e.g. Turning"
+                      />
+                    );
+                  })()}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Default rate ₹</label>
+                  <input
+                    className="form-input mono"
+                    type="number"
+                    value={qaWorkTypeRate}
+                    onChange={(e) => setQaWorkTypeRate(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+              <div className="qa-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setQuickAddMode(null)}>Cancel</button>
+                <button type="submit" className="btn btn-accent" disabled={qaSubmitting || !qaWorkTypeName.trim()}>
+                  {qaSubmitting ? 'Creating...' : 'Create work type'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

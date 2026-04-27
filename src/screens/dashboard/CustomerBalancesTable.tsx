@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
+import { rankCustomers } from '@/lib/customerRankingUtils';
 import { Customer } from '@/types';
 
 type CustomerTypeFilter = 'All' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
@@ -30,7 +31,7 @@ function getTypeBadgeClass(type: Customer['type']): string {
 }
 
 export function CustomerBalancesTable({ showFilters = true, dateRange }: CustomerBalancesTableProps) {
-  const { getActiveCustomers, jobs } = useDataStore();
+  const { getActiveCustomers, jobs, payments } = useDataStore();
   const [typeFilter, setTypeFilter] = useState<CustomerTypeFilter>('All');
   const [customerFilter, setCustomerFilter] = useState('');
   const [sortState, setSortState] = useState<{ key: BalanceSortKey; order: 'asc' | 'desc' }>({
@@ -42,6 +43,10 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
     () => getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name)),
     [getActiveCustomers]
   );
+  const customerRankMap = useMemo(() => {
+    const entries = rankCustomers(jobs, payments, customers);
+    return new Map(entries.map((entry) => [entry.customerId, entry]));
+  }, [jobs, payments, customers]);
 
   const scopedJobs = useMemo(
     () =>
@@ -54,7 +59,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
       .map((customer) => {
         const customerJobs = scopedJobs.filter((job) => job.customerId === customer.id);
         const ourIncome = customerJobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
-        const commission = customerJobs.reduce((sum, job) => sum + (Number(job.commissionAmount) || 0), 0);
+        const commission = customerJobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
         const finalBill = ourIncome + commission;
         const paidAmount = customerJobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
         const balance = finalBill - paidAmount;
@@ -70,7 +75,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
           advance,
         };
       })
-      .filter((customer) => customer.balance !== 0 || customer.advance > 0 || customer.ourIncome > 0);
+      .filter((customer) => customer.balance !== 0 || customer.advance > 0);
   }, [customers, scopedJobs]);
 
   const filtered = useMemo(() => {
@@ -218,7 +223,25 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
                 return (
                   <tr key={customer.id}>
                     <td>
-                      <div className="customer-name">{customer.name}</div>
+                      <div className="customer-name">
+                        {customerRankMap.get(customer.id) ? (
+                          <span
+                            className={`customer-health-dot ${
+                              customerRankMap.get(customer.id)!.healthLabel === 'Excellent'
+                                ? 'excellent'
+                                : customerRankMap.get(customer.id)!.healthLabel === 'Good'
+                                  ? 'good'
+                                  : customerRankMap.get(customer.id)!.healthLabel === 'Attention'
+                                    ? 'attention'
+                                    : 'risk'
+                            }`}
+                            title={`Health: ${customerRankMap.get(customer.id)!.healthScore}/100 - ${
+                              customerRankMap.get(customer.id)!.healthLabel
+                            }`}
+                          />
+                        ) : null}
+                        <span>{customer.name}</span>
+                      </div>
                       <div className="customer-code">{customer.shortCode || '-'}</div>
                     </td>
                     <td>

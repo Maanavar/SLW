@@ -22,6 +22,7 @@ interface JobLineProps {
   showInlineWorker?: boolean;
   showInlineCommission?: boolean;
   commissionWorkers?: CommissionWorker[];
+  onAddNewWorkType?: (searchText: string) => void;
 }
 
 export function JobLine({
@@ -32,6 +33,7 @@ export function JobLine({
   showInlineWorker = true,
   showInlineCommission = true,
   commissionWorkers = [],
+  onAddNewWorkType,
 }: JobLineProps) {
   const { workTypes } = useDataStore();
 
@@ -89,12 +91,8 @@ export function JobLine({
           getKey={(wt) => String(wt.id)}
           groupBy={(wt) => wt.category}
           placeholder="Select work type..."
+          onAddNew={onAddNewWorkType}
         />
-        {suggestedAmount !== '0' && (
-          <button type="button" className="wl-suggest" onClick={handleApplySuggestedAmount}>
-            ₹{suggestedAmount}
-          </button>
-        )}
       </div>
 
       <div className="wl-cell wl-cell--qty">
@@ -112,6 +110,11 @@ export function JobLine({
           min="0"
           required
         />
+        {suggestedAmount !== '0' && (
+          <button type="button" className="wl-suggest" onClick={handleApplySuggestedAmount}>
+            ₹{suggestedAmount}
+          </button>
+        )}
       </div>
 
       {showCommissionField && (

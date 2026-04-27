@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { formatCurrency } from '@/lib/currencyUtils';
+import { getLocalDateString } from '@/lib/dateUtils';
 import { useToast } from '@/hooks/useToast';
 import { useDataStore } from '@/stores/dataStore';
-import { getJobFinalBillValue, getJobNetValue, groupJobsByCard } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobNetValue, getJobWorkerCommissionExpense, groupJobsByCard } from '@/lib/jobUtils';
 import type { Expense } from '@/types';
 import {
   EXPENSE_CATEGORIES,
@@ -14,7 +15,6 @@ import {
   type BreakEvenAnalysis,
   type ExpenseMetrics,
   type ExpenseSummary,
-  type ProfitAnalysis,
 } from '@/lib/expenseUtils';
 import './ExpenseManager.css';
 
@@ -30,14 +30,14 @@ interface ExpenseFormState {
   recurringDay: number;
 }
 
-function getTodayString(): string { return new Date().toISOString().split('T')[0]; }
+function getTodayString(): string { return getLocalDateString(new Date()); }
 function getCurrentMonthStr(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 function getMonthRangeForStr(yearMonth: string): DateRange {
   const [year, month] = yearMonth.split('-').map(Number);
-  const from = new Date(year, month - 1, 1).toISOString().split('T')[0];
+  const from = getLocalDateString(new Date(year, month - 1, 1));
   const lastDay = new Date(year, month, 0).getDate();
   const rawTo = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
   const today = getTodayString();
@@ -64,7 +64,7 @@ function getDefaultFormData(today: string): ExpenseFormState {
 }
 
 export function ExpenseManager() {
-  const { expenses, jobs, addExpense, deleteExpense } = useDataStore();
+  const { expenses, jobs, addExpense, updateExpense, deleteExpense } = useDataStore();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<ExpenseTab>('overview');
   const [formData, setFormData] = useState<ExpenseFormState>(() => getDefaultFormData(getTodayString()));
@@ -79,12 +79,13 @@ export function ExpenseManager() {
 
   const monthJobs = useMemo(() => jobs.filter((j) => j.date >= monthRange.from && j.date <= monthRange.to), [jobs, monthRange]);
   const monthRevenue = useMemo(() => monthJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0), [monthJobs]);
-  const monthCommission = useMemo(() => monthJobs.reduce((s, j) => s + (Number(j.commissionAmount) || 0), 0), [monthJobs]);
+  const monthCommission = useMemo(() => monthJobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0), [monthJobs]);
+  const monthNetIncome = useMemo(() => monthJobs.reduce((s, j) => s + getJobNetValue(j), 0), [monthJobs]);
   const monthJobCards = useMemo(() => groupJobsByCard(monthJobs).length, [monthJobs]);
 
   const profitAnalysis = useMemo(
-    () => calculateProfitAnalysis(monthRevenue, monthCommission, monthMetrics.totalExpenses),
-    [monthRevenue, monthCommission, monthMetrics]
+    () => calculateProfitAnalysis(monthRevenue, monthCommission, monthMetrics.totalExpenses, monthNetIncome),
+    [monthRevenue, monthCommission, monthMetrics, monthNetIncome]
   );
 
   const avgProfitPerJob = useMemo(() => {
@@ -134,6 +135,16 @@ export function ExpenseManager() {
     } catch (error) {
       console.error('Failed to delete expense', error);
       toast.error('Error', 'Failed to delete expense');
+    }
+  };
+
+  const handleUpdateExpense = async (id: number, updates: Partial<Expense>) => {
+    try {
+      await updateExpense(id, updates);
+      toast.success('Success', 'Expense updated');
+    } catch (error) {
+      console.error('Failed to update expense', error);
+      toast.error('Error', 'Failed to update expense');
     }
   };
 
@@ -318,7 +329,7 @@ export function ExpenseManager() {
       {/* History */}
       {activeTab === 'history' && (
         <div className="exp-tab-content">
-          <HistoryTab expenses={expenses} onDelete={handleDeleteExpense} />
+          <HistoryTab expenses={expenses} onDelete={handleDeleteExpense} onUpdate={handleUpdateExpense} />
         </div>
       )}
 
@@ -401,8 +412,53 @@ function BreakdownTab({ metrics }: { metrics: ExpenseMetrics }) {
   );
 }
 
-function HistoryTab({ expenses, onDelete }: { expenses: Expense[]; onDelete: (id: number) => Promise<void> }) {
+function HistoryTab({
+  expenses,
+  onDelete,
+  onUpdate,
+}: {
+  expenses: Expense[];
+  onDelete: (id: number) => Promise<void>;
+  onUpdate: (id: number, updates: Partial<Expense>) => Promise<void>;
+}) {
   const sorted = [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<ExpenseFormState>(getDefaultFormData(getTodayString()));
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (expense: Expense) => {
+    setEditForm({
+      category: expense.category,
+      description: expense.description,
+      amount: String(expense.amount),
+      date: expense.date,
+      isRecurring: expense.isRecurring,
+      recurringDay: expense.recurringDay ?? getDayFromDateString(expense.date),
+    });
+    setEditingId(expense.id);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async (id: number) => {
+    const amount = Number.parseFloat(editForm.amount);
+    if (!editForm.description.trim() || !Number.isFinite(amount) || amount <= 0) return;
+    setSaving(true);
+    try {
+      await onUpdate(id, {
+        category: editForm.category,
+        description: editForm.description.trim(),
+        amount,
+        date: editForm.date,
+        isRecurring: editForm.isRecurring,
+        recurringDay: editForm.isRecurring ? clampRecurringDay(editForm.recurringDay) : undefined,
+      });
+      setEditingId(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="exp-section">
       <div className="exp-section-title">Expense History</div>
@@ -415,29 +471,97 @@ function HistoryTab({ expenses, onDelete }: { expenses: Expense[]; onDelete: (id
               <th>Description</th>
               <th className="ta-r">Amount</th>
               <th className="ta-c">Type</th>
-              <th className="ta-c">Action</th>
+              <th className="ta-c">Actions</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && (
               <tr><td colSpan={6} className="ta-c exp-td-muted">No expenses recorded yet</td></tr>
             )}
-            {sorted.map((expense) => (
-              <tr key={expense.id}>
-                <td>{new Date(expense.date).toLocaleDateString('en-IN')}</td>
-                <td>{EXPENSE_CATEGORIES[expense.category]?.label || expense.category}</td>
-                <td>{expense.description}</td>
-                <td className="ta-r fw-600">{formatCurrency(expense.amount)}</td>
-                <td className="ta-c">
-                  <span className={`exp-badge${expense.isRecurring ? ' exp-badge--recurring' : ' exp-badge--variable'}`}>
-                    {expense.isRecurring ? 'Recurring' : 'Variable'}
-                  </span>
-                </td>
-                <td className="ta-c">
-                  <button type="button" className="exp-delete-btn" onClick={() => void onDelete(expense.id)} title="Delete expense">Delete</button>
-                </td>
-              </tr>
-            ))}
+            {sorted.map((expense) =>
+              editingId === expense.id ? (
+                <tr key={expense.id} className="exp-edit-row">
+                  <td>
+                    <input
+                      type="date"
+                      className="exp-edit-input"
+                      value={editForm.date}
+                      onChange={(e) => setEditForm(p => ({ ...p, date: e.target.value }))}
+                      aria-label="Expense date"
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="exp-edit-input"
+                      value={editForm.category}
+                      onChange={(e) => setEditForm(p => ({ ...p, category: e.target.value as Expense['category'] }))}
+                      aria-label="Category"
+                    >
+                      {Object.entries(EXPENSE_CATEGORIES).map(([key, val]) => (
+                        <option key={key} value={key}>{val.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="exp-edit-input exp-edit-input--wide"
+                      value={editForm.description}
+                      onChange={(e) => setEditForm(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Description"
+                      aria-label="Description"
+                    />
+                  </td>
+                  <td className="ta-r">
+                    <input
+                      type="number"
+                      className="exp-edit-input exp-edit-input--num"
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm(p => ({ ...p, amount: e.target.value }))}
+                      min="0"
+                      step="0.01"
+                      aria-label="Amount"
+                    />
+                  </td>
+                  <td className="ta-c">
+                    <label className="exp-edit-recurring" title="Recurring monthly">
+                      <input
+                        type="checkbox"
+                        checked={editForm.isRecurring}
+                        onChange={(e) => setEditForm(p => ({ ...p, isRecurring: e.target.checked }))}
+                      />
+                      Recurring
+                    </label>
+                  </td>
+                  <td className="ta-c">
+                    <div className="exp-edit-actions">
+                      <button type="button" className="exp-save-btn" onClick={() => void saveEdit(expense.id)} disabled={saving}>
+                        {saving ? '…' : 'Save'}
+                      </button>
+                      <button type="button" className="exp-cancel-btn" onClick={cancelEdit}>Cancel</button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={expense.id}>
+                  <td>{new Date(expense.date).toLocaleDateString('en-IN')}</td>
+                  <td>{EXPENSE_CATEGORIES[expense.category]?.label || expense.category}</td>
+                  <td>{expense.description}</td>
+                  <td className="ta-r fw-600">{formatCurrency(expense.amount)}</td>
+                  <td className="ta-c">
+                    <span className={`exp-badge${expense.isRecurring ? ' exp-badge--recurring' : ' exp-badge--variable'}`}>
+                      {expense.isRecurring ? 'Recurring' : 'Variable'}
+                    </span>
+                  </td>
+                  <td className="ta-c">
+                    <div className="exp-row-actions">
+                      <button type="button" className="exp-edit-btn" onClick={() => startEdit(expense)} title="Edit expense">Edit</button>
+                      <button type="button" className="exp-delete-btn" onClick={() => void onDelete(expense.id)} title="Delete expense">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       </div>

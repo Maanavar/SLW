@@ -1,43 +1,87 @@
 .app-container {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   color: var(--text);
   background: var(--bg);
+}
+
+.app-container.sidebar-collapsed {
+  grid-template-columns: var(--sidebar-collapsed-width) 1fr;
 }
 
 .app-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-}
-
-.app-main.sidebar-collapsed {
-  margin-left: 0;
+  height: 100dvh;
 }
 
 .app-content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px 28px 60px;
 }
 
 .auth-check-screen {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   color: var(--text-muted);
 }
 
-@media (max-width: 1024px) {
+/* Tablet portrait: single column, bottom nav present — clear its height */
+@media (max-width: 1024px) and (orientation: portrait) {
   .app-container {
     grid-template-columns: 1fr;
   }
 
   .app-content {
-    padding: 16px 14px calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 20px);
+    padding: 16px 16px calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 24px);
   }
+}
+
+/* Tablet landscape: no persistent nav — full width, normal padding */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .app-container {
+    grid-template-columns: 1fr;
+  }
+
+  .app-content {
+    padding: 14px 16px 24px;
+  }
+}
+
+/* Small phone portrait — tighten horizontal padding */
+@media (max-width: 640px) and (orientation: portrait) {
+  .app-content {
+    padding: 12px 12px calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 16px);
+  }
+}
+
+/* ── Mobile drawer backdrop ───────────────────────────────── */
+.mobile-drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 299; /* just below sidebar z-index: 300 */
+    background: rgba(0, 0, 0, 0.38);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    animation: backdrop-in 0.2s ease;
+  }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }

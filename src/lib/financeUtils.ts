@@ -4,7 +4,8 @@
  */
 
 import type { Job, Payment, Customer, CommissionPayment, CommissionWorker } from '@/types';
-import { getJobFinalBillValue, getJobPaidAmount, groupJobsByCard } from './jobUtils';
+import { getJobFinalBillValue, getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense, groupJobsByCard } from './jobUtils';
+import { getLocalDateString } from './dateUtils';
 
 // ============================================================================
 // ACCOUNTING STANDARD TYPES
@@ -67,6 +68,18 @@ export interface AgeingBucket {
   customerCount: number;
 }
 
+export interface CustomerAgeingRow {
+  customerId: number;
+  customerName: string;
+  current: number;
+  band1: number;
+  band2: number;
+  band3: number;
+  band4: number;
+  total: number;
+  oldestInvoiceDays: number;
+}
+
 // ============================================================================
 // REVENUE & PROFIT CALCULATIONS
 // ============================================================================
@@ -81,14 +94,14 @@ export function calculateRevenueMetrics(
 
   const totalRevenue = filtered.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const commissionExpense = filtered.reduce(
-    (sum, job) => sum + (Number(job.commissionAmount) || 0),
+    (sum, job) => sum + getJobWorkerCommissionExpense(job),
     0
   );
 
   return {
     totalRevenue,
     commissionExpense,
-    grossProfit: totalRevenue - commissionExpense,
+    grossProfit: filtered.reduce((sum, job) => sum + getJobNetValue(job), 0),
     jobCount: groupJobsByCard(filtered).length,
   };
 }
@@ -96,6 +109,87 @@ export function calculateRevenueMetrics(
 // ============================================================================
 // PAYMENT & COLLECTION CALCULATIONS
 // ============================================================================
+
+type CollectionEvent = {
+  customerId: number;
+  date: string;
+  amount: number;
+  paymentMode: Payment['paymentMode'];
+  breakdown?: Payment['breakdown'];
+  notes?: string;
+  source: 'Payment Voucher' | 'Job Paid Entry';
+  jobCardId?: string;
+};
+
+function getCardIdFromNotes(notes?: string) {
+  return notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
+}
+
+function buildCollectionEvents(
+  jobs: Job[],
+  payments: Payment[],
+  filterByDate?: { from: string; to: string }
+): CollectionEvent[] {
+  const paymentsInRange = filterByDate
+    ? payments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
+    : payments;
+  const jobsInRange = filterByDate
+    ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
+    : jobs;
+
+  const voucherEvents: CollectionEvent[] = paymentsInRange.map((p) => ({
+    customerId: p.customerId,
+    date: p.date,
+    amount: Number(p.amount) || 0,
+    paymentMode: p.paymentMode,
+    breakdown: p.breakdown,
+    notes: p.notes,
+    source: 'Payment Voucher',
+    jobCardId: getCardIdFromNotes(p.notes),
+  }));
+
+  const vouchersByCustomerDate = new Map<string, CollectionEvent[]>();
+  voucherEvents.forEach((v) => {
+    const key = `${v.customerId}|${v.date}`;
+    const list = vouchersByCustomerDate.get(key) || [];
+    list.push(v);
+    vouchersByCustomerDate.set(key, list);
+  });
+
+  const paidGroups = groupJobsByCard(jobsInRange.filter((j) => getJobPaidAmount(j) > 0));
+  const jobPaidEvents: CollectionEvent[] = paidGroups.map((group) => {
+    const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+    const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
+    return {
+      customerId: group.primary.customerId,
+      date: group.primary.date,
+      amount,
+      paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
+      source: 'Job Paid Entry',
+      jobCardId: cardId,
+      notes: `From JobCard ${cardId}`,
+    };
+  });
+
+  const dedupedJobPaidEvents = jobPaidEvents.filter((jobEvent) => {
+    const key = `${jobEvent.customerId}|${jobEvent.date}`;
+    const sameDayVouchers = vouchersByCustomerDate.get(key) || [];
+    if (sameDayVouchers.length === 0) return true;
+
+    const cardId = jobEvent.jobCardId || '';
+    const hasExplicitLink = cardId
+      ? sameDayVouchers.some((v) => (v.notes || '').toLowerCase().includes(cardId.toLowerCase()))
+      : false;
+    if (hasExplicitLink) return false;
+
+    const hasExactAmountMatch = sameDayVouchers.some((v) => Math.abs((v.amount || 0) - jobEvent.amount) < 0.01);
+    if (hasExactAmountMatch) return false;
+
+    return true;
+  });
+
+  return [...voucherEvents, ...dedupedJobPaidEvents].filter((e) => (e.amount || 0) > 0);
+}
 
 export function calculatePaymentMetrics(
   jobs: Job[],
@@ -107,16 +201,9 @@ export function calculatePaymentMetrics(
     : jobs;
 
   const totalRevenue = filtered.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
-
-  const paymentsInRange = filterByDate
-    ? payments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
-    : payments;
-
-  const paymentsFromJobs = filtered.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-  const paymentsFromVouchers = paymentsInRange.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  const totalReceived = Math.max(paymentsFromVouchers, paymentsFromJobs);
-  const totalOutstanding = totalRevenue - totalReceived;
+  const events = buildCollectionEvents(jobs, payments, filterByDate);
+  const totalReceived = events.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalOutstanding = Math.max(0, totalRevenue - totalReceived);
 
   // Calculate average days to payment
   let totalDays = 0;
@@ -152,7 +239,7 @@ export function calculateCommissionMetrics(
     ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
     : jobs;
 
-  const commissionDue = filtered.reduce((sum, job) => sum + (Number(job.commissionAmount) || 0), 0);
+  const commissionDue = filtered.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
 
   const paymentsInRange = filterByDate
     ? commissionPayments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
@@ -190,7 +277,7 @@ export function calculateWorkerCommissionSummary(
 
   // Calculate total due from tagged commission worker on each job line
   jobs.forEach((job) => {
-    const commission = Number(job.commissionAmount) || 0;
+    const commission = getJobWorkerCommissionExpense(job);
     if (commission <= 0) {
       return;
     }
@@ -272,9 +359,6 @@ export function calculateCustomerFinancials(
   const filteredJobs = filterByDate
     ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
     : jobs;
-  const filteredPayments = filterByDate
-    ? payments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
-    : payments;
 
   const customerMap = new Map<number, CustomerFinancials>();
 
@@ -286,38 +370,34 @@ export function calculateCustomerFinancials(
       totalRevenue: 0,
       commissionExpense: 0,
       grossProfit: 0,
-      totalReceived: 0,
+      totalReceived: 0, // resolved after comparing jobs vs vouchers to avoid double counting
       totalOutstanding: 0,
       jobCount: 0,
       paymentRate: 0,
       daysOutstanding: 0,
     };
 
-    const amount = Number(job.amount) || 0;
-    const commission = Number(job.commissionAmount) || 0;
-    const finalBill = amount + commission;
+    const finalBill = getJobFinalBillValue(job);
+    const commission = getJobWorkerCommissionExpense(job);
 
     existing.totalRevenue += finalBill;
     existing.commissionExpense += commission;
-    existing.grossProfit = existing.totalRevenue - existing.commissionExpense;
-    existing.totalReceived += getJobPaidAmount(job);
+    existing.grossProfit += getJobNetValue(job);
     existing.jobCount += 1;
 
     customerMap.set(job.customerId, existing);
   });
 
-  // Process additional payments (vouchers)
-  filteredPayments.forEach((payment) => {
-    const existing = customerMap.get(payment.customerId);
-    if (existing) {
-      existing.totalReceived += payment.amount || 0;
-    }
+  const receivedByCustomer = new Map<number, number>();
+  buildCollectionEvents(jobs, payments, filterByDate).forEach((e) => {
+    receivedByCustomer.set(e.customerId, (receivedByCustomer.get(e.customerId) || 0) + (e.amount || 0));
   });
 
   // Calculate derived metrics
   const results: CustomerFinancials[] = [];
   customerMap.forEach((customer) => {
-    customer.totalOutstanding = customer.totalRevenue - customer.totalReceived;
+    customer.totalReceived = receivedByCustomer.get(customer.customerId) || 0;
+    customer.totalOutstanding = Math.max(0, customer.totalRevenue - customer.totalReceived);
     customer.paymentRate =
       customer.totalRevenue > 0 ? (customer.totalReceived / customer.totalRevenue) * 100 : 0;
     results.push(customer);
@@ -355,6 +435,52 @@ export function calculatePaymentMethodBreakdown(
     } else if (payment.paymentMode && methods.includes(payment.paymentMode as any)) {
       const existing = breakdown.get(payment.paymentMode)!;
       existing.amount += payment.amount || 0;
+      existing.count += 1;
+    }
+  });
+
+  const totalAmount = Array.from(breakdown.values()).reduce((sum, v) => sum + v.amount, 0);
+
+  return methods
+    .map((method) => {
+      const data = breakdown.get(method)!;
+      return {
+        method,
+        amount: data.amount,
+        percentage: totalAmount > 0 ? (data.amount / totalAmount) * 100 : 0,
+        count: data.count,
+      };
+    })
+    .filter((item) => item.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+
+export function calculateCollectionMethodBreakdown(
+  jobs: Job[],
+  payments: Payment[],
+  filterByDate?: { from: string; to: string }
+): PaymentMethodBreakdown[] {
+  const events = buildCollectionEvents(jobs, payments, filterByDate);
+
+  const breakdown = new Map<string, { amount: number; count: number }>();
+  const methods: Array<'Cash' | 'UPI' | 'Bank' | 'Cheque'> = ['Cash', 'UPI', 'Bank', 'Cheque'];
+
+  methods.forEach((method) => {
+    breakdown.set(method, { amount: 0, count: 0 });
+  });
+
+  events.forEach((entry) => {
+    if (entry.paymentMode === 'Mixed' && entry.breakdown) {
+      if (entry.breakdown.cash) breakdown.get('Cash')!.amount += entry.breakdown.cash;
+      if (entry.breakdown.upi) breakdown.get('UPI')!.amount += entry.breakdown.upi;
+      if (entry.breakdown.bank) breakdown.get('Bank')!.amount += entry.breakdown.bank;
+      if (entry.breakdown.cheque) breakdown.get('Cheque')!.amount += entry.breakdown.cheque;
+      return;
+    }
+
+    if (entry.paymentMode && methods.includes(entry.paymentMode as any)) {
+      const existing = breakdown.get(entry.paymentMode)!;
+      existing.amount += entry.amount || 0;
       existing.count += 1;
     }
   });
@@ -432,6 +558,132 @@ export function calculateOutstandingAgeing(
   return buckets.filter((b) => b.amount > 0);
 }
 
+export function calculateCustomerAgeing(
+  jobs: Job[],
+  _payments: Payment[],
+  customers: Customer[]
+): CustomerAgeingRow[] {
+  const today = new Date();
+  const rows = new Map<number, CustomerAgeingRow>();
+
+  jobs.forEach((job) => {
+    const outstanding = Math.max(0, getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0));
+    if (outstanding <= 0) {
+      return;
+    }
+
+    const existing = rows.get(job.customerId) || {
+      customerId: job.customerId,
+      customerName: customers.find((customer) => customer.id === job.customerId)?.name || 'Unknown',
+      current: 0,
+      band1: 0,
+      band2: 0,
+      band3: 0,
+      band4: 0,
+      total: 0,
+      oldestInvoiceDays: 0,
+    };
+
+    const days = Math.max(
+      0,
+      Math.floor((today.getTime() - new Date(`${job.date}T00:00:00`).getTime()) / 86400000)
+    );
+
+    if (days <= 7) {
+      existing.current += outstanding;
+    } else if (days <= 30) {
+      existing.band1 += outstanding;
+    } else if (days <= 60) {
+      existing.band2 += outstanding;
+    } else if (days <= 90) {
+      existing.band3 += outstanding;
+    } else {
+      existing.band4 += outstanding;
+    }
+
+    existing.total += outstanding;
+    existing.oldestInvoiceDays = Math.max(existing.oldestInvoiceDays, days);
+    rows.set(job.customerId, existing);
+  });
+
+  return Array.from(rows.values()).sort((a, b) => b.total - a.total);
+}
+
+// ============================================================================
+// TEN-DAY PERIOD ANALYSIS
+// ============================================================================
+
+export interface TenDayDayData {
+  date: string;
+  dayNum: number;
+  revenue: number;
+  commission: number;
+  netProfit: number;
+  cards: number;
+}
+
+export interface TenDaySet {
+  setNumber: 1 | 2 | 3;
+  label: string;
+  fromDate: string;
+  toDate: string;
+  days: TenDayDayData[];
+  totalRevenue: number;
+  totalCommission: number;
+  totalNetProfit: number;
+  totalCards: number;
+}
+
+export function calculateTenDayBreakdown(
+  jobs: Job[],
+  year: number,
+  month: number  // 1-indexed: 1=Jan, 12=Dec
+): TenDaySet[] {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthName = MONTH_NAMES[month - 1];
+  const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+  const jobsInMonth = jobs.filter(j => j.date.startsWith(monthStr));
+
+  const sets: Array<{ setNumber: 1 | 2 | 3; from: number; to: number }> = [
+    { setNumber: 1, from: 1,  to: 10 },
+    { setNumber: 2, from: 11, to: 20 },
+    { setNumber: 3, from: 21, to: daysInMonth },
+  ];
+
+  return sets.map(({ setNumber, from, to }) => {
+    const fromDate = `${monthStr}-${String(from).padStart(2, '0')}`;
+    const toDate   = `${monthStr}-${String(to).padStart(2, '0')}`;
+    const label    = `Set ${setNumber} — ${monthName} ${from}–${to}`;
+
+    const days: TenDayDayData[] = [];
+    for (let d = from; d <= to; d++) {
+      const dateStr = `${monthStr}-${String(d).padStart(2, '0')}`;
+      const dayJobs = jobsInMonth.filter(j => j.date === dateStr);
+      days.push({
+        date: dateStr,
+        dayNum: d,
+        revenue:    dayJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0),
+        commission: dayJobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0),
+        netProfit:  dayJobs.reduce((s, j) => s + getJobNetValue(j), 0),
+        cards:      groupJobsByCard(dayJobs).length,
+      });
+    }
+
+    return {
+      setNumber,
+      label,
+      fromDate,
+      toDate,
+      days,
+      totalRevenue:    days.reduce((s, d) => s + d.revenue, 0),
+      totalCommission: days.reduce((s, d) => s + d.commission, 0),
+      totalNetProfit:  days.reduce((s, d) => s + d.netProfit, 0),
+      totalCards:      days.reduce((s, d) => s + d.cards, 0),
+    };
+  });
+}
+
 // ============================================================================
 // CASH FLOW ANALYSIS
 // ============================================================================
@@ -451,13 +703,14 @@ export function calculateDailyCashFlow(
   days: number = 30
 ): DailyCashFlow[] {
   const today = new Date();
+  const todayStr = getLocalDateString(today);
   const cashFlows: Map<string, DailyCashFlow> = new Map();
 
   // Initialize all days
   for (let i = 0; i < days; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(date);
 
     cashFlows.set(dateStr, {
       date: dateStr,
@@ -474,17 +727,19 @@ export function calculateDailyCashFlow(
     const flow = cashFlows.get(job.date);
     if (flow) {
       flow.revenue += getJobFinalBillValue(job);
-      flow.commission += Number(job.commissionAmount) || 0;
-      flow.netIncome = flow.revenue - flow.commission;
+      flow.commission += getJobWorkerCommissionExpense(job);
+      flow.netIncome += getJobNetValue(job);
       flow.outstanding += Math.max(0, getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0));
     }
   });
 
-  // Add payment receipts
-  payments.forEach((payment) => {
-    const flow = cashFlows.get(payment.date);
+  // Add receipts (vouchers + job-paid entries) for the window
+  const fromStr = Array.from(cashFlows.keys()).sort()[0] || todayStr;
+  const events = buildCollectionEvents(jobs, payments, { from: fromStr, to: todayStr });
+  events.forEach((entry) => {
+    const flow = cashFlows.get(entry.date);
     if (flow) {
-      flow.received += payment.amount || 0;
+      flow.received += entry.amount || 0;
     }
   });
 

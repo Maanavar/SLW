@@ -1,21 +1,25 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { TypeBadge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/currencyUtils';
+import { rankCustomers } from '@/lib/customerRankingUtils';
+import { calculateCustomerAgeing } from '@/lib/financeUtils';
 import { Customer } from '@/types';
 import './CustomersScreen.css';
 
 type TypeFilter = 'all' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
 
 export function CustomersScreen() {
-  const { getActiveCustomers } = useDataStore();
+  const { customers: allCustomers, jobs, payments, getActiveCustomers } = useDataStore();
   const { openModal } = useUIStore();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [showInactive, setShowInactive] = useState(false);
 
-  const customers = getActiveCustomers();
+  const customers = showInactive ? allCustomers : getActiveCustomers();
+  const inactiveCount = allCustomers.filter((c) => !c.isActive).length;
 
   const typeCounts: Record<Exclude<TypeFilter, 'all'>, number> = {
     Monthly: customers.filter((c) => c.type === 'Monthly').length,
@@ -32,8 +36,68 @@ export function CustomersScreen() {
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const customerRankMap = useMemo(() => {
+    const rankEntries = rankCustomers(jobs, payments, allCustomers);
+    return new Map(rankEntries.map((entry) => [entry.customerId, entry]));
+  }, [jobs, payments, allCustomers]);
+
+  const customerAgeingMap = useMemo(() => {
+    const ageingRows = calculateCustomerAgeing(jobs, payments, allCustomers);
+    return new Map(ageingRows.map((row) => [row.customerId, row]));
+  }, [jobs, payments, allCustomers]);
+
   const columns: Column<Customer>[] = [
-    { key: 'name', label: 'Name', sortable: true },
+    {
+      key: 'name',
+      label: 'Name',
+      sortable: true,
+      render: (value, row) => {
+        const rank = customerRankMap.get(row.id);
+        const healthClass =
+          rank?.healthLabel === 'Excellent'
+            ? 'excellent'
+            : rank?.healthLabel === 'Good'
+              ? 'good'
+              : rank?.healthLabel === 'Attention'
+                ? 'attention'
+                : 'risk';
+        const ageing = customerAgeingMap.get(row.id);
+        const ageingClass =
+          !ageing || ageing.total <= 0
+            ? ''
+            : ageing.band4 > 0 || ageing.band3 > 0
+              ? 'critical'
+              : ageing.band2 > 0
+                ? 'high'
+                : 'pending';
+        const ageingLabel =
+          !ageing || ageing.total <= 0
+            ? ''
+            : ageing.band4 > 0
+              ? '90d+'
+              : ageing.band3 > 0
+                ? '61-90d'
+                : ageing.band2 > 0
+                  ? '60d'
+                  : '30d';
+        return (
+          <div className="cust-name-wrap">
+            {rank ? (
+              <span
+                className={`cust-health-dot ${healthClass}`}
+                title={`Health: ${rank.healthScore}/100 - ${rank.healthLabel}`}
+              />
+            ) : null}
+            <span>{value as string}</span>
+            {ageingLabel ? (
+              <span className={`cust-ageing-badge ${ageingClass}`} title="Worst outstanding ageing bucket">
+                {ageingLabel}
+              </span>
+            ) : null}
+          </div>
+        );
+      },
+    },
     { key: 'shortCode', label: 'Code', sortable: true },
     {
       key: 'type',
@@ -56,6 +120,16 @@ export function CustomersScreen() {
       render: (value) =>
         value ? (
           <span className="badge badge-warning badge-sm">DC</span>
+        ) : (
+          <span className="muted-dash">—</span>
+        ),
+    },
+    {
+      key: 'hasBillNo',
+      label: 'Bill No',
+      render: (value) =>
+        value ? (
+          <span className="badge badge-info badge-sm">Required</span>
         ) : (
           <span className="muted-dash">—</span>
         ),
@@ -118,6 +192,16 @@ export function CustomersScreen() {
             </button>
           ))}
         </div>
+        {inactiveCount > 0 && (
+          <label className="cust-inactive-toggle">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+            />
+            Show inactive ({inactiveCount})
+          </label>
+        )}
       </div>
 
       <div className="cust-content">
@@ -142,3 +226,4 @@ export function CustomersScreen() {
     </div>
   );
 }
+

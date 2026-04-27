@@ -5,7 +5,7 @@
   gap: 8px;
   padding: 8px 10px;
   border-bottom: 1px dashed var(--border);
-  align-items: center;
+  align-items: start;
 }
 
 .wl-row:last-child {
@@ -59,6 +59,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: center;
 }
 
 .wl-remove-btn {
@@ -90,4 +91,41 @@
 .wl-cell--type .searchable-select-wrap,
 .wl-cell--worker .searchable-select-wrap {
   width: 100%;
+}
+
+/* ── Mobile: stack each work-line as a labeled card ─────────── */
+@media (max-width: 640px) {
+  .wl-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "type  type"
+      "qty   amount"
+      "remove remove";
+    gap: 8px;
+    padding: 12px 10px;
+  }
+
+  .wl-cell--type   { grid-area: type; }
+  .wl-cell--qty    { grid-area: qty; }
+  .wl-cell--amount { grid-area: amount; }
+  .wl-cell--remove {
+    grid-area: remove;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 400px) {
+  .wl-row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "type"
+      "qty"
+      "amount"
+      "remove";
+  }
+
+  .wl-cell--remove {
+    justify-content: flex-start;
+  }
 }

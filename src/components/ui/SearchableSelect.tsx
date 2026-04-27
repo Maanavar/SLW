@@ -12,6 +12,7 @@ export interface SearchableSelectProps<T> {
   disabled?: boolean;
   groupBy?: (item: T) => string;
   className?: string;
+  onAddNew?: (searchText: string) => void;
 }
 
 const SearchIcon = () => (
@@ -46,6 +47,7 @@ export function SearchableSelect<T>({
   disabled = false,
   groupBy,
   className = '',
+  onAddNew,
 }: SearchableSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -95,6 +97,12 @@ export function SearchableSelect<T>({
 
   const handleSelect = (item: T) => {
     onChange(item);
+    setSearch('');
+    setIsOpen(false);
+  };
+
+  const handleAddNew = () => {
+    onAddNew?.(search.trim());
     setSearch('');
     setIsOpen(false);
   };
@@ -156,6 +164,18 @@ export function SearchableSelect<T>({
               ))
             )}
           </div>
+          {onAddNew ? (
+            <div className="ss-add-footer">
+              <button
+                type="button"
+                className="ss-add-btn"
+                onMouseDown={(e) => { e.preventDefault(); handleAddNew(); }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                {search.trim() ? `Add "${search.trim()}"` : 'Add new'}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -1,0 +1,110 @@
+.ageing-heatmap-tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.ageing-heatmap-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ageing-heatmap-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ageing-heatmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ageing-heatmap-table thead tr {
+  background: var(--bg-sunk);
+}
+
+.ageing-heatmap-table th {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ageing-heatmap-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.ageing-heatmap-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cell-clear {
+  color: var(--green);
+}
+
+.cell-yellow {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+}
+
+.cell-orange {
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+}
+
+.cell-red {
+  background: var(--red-soft);
+}
+
+.ageing-risk-badge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.ageing-risk-badge.risk-clear {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.ageing-risk-badge.risk-0-30d {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.ageing-risk-badge.risk-31-60d {
+  background: color-mix(in srgb, var(--amber) 24%, transparent);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.ageing-risk-badge.risk-61-90d,
+.ageing-risk-badge.risk-90dplus {
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.ageing-heatmap-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-faint);
+  text-align: center;
+  padding: 20px 0;
+}

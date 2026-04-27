@@ -3,7 +3,6 @@ import { Badge, StatusBadge, TypeBadge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/currencyUtils';
 import {
   getJobCardPaymentSummary,
-  getJobNetValue,
   getJobPaymentMode,
   isDcApplicableCustomer,
 } from '@/lib/jobUtils';
@@ -51,6 +50,14 @@ export function JobCardDetailsModal({
   const payment = getJobCardPaymentSummary(sortedJobs);
   const totalAmount     = sortedJobs.reduce((s, j) => s + (Number(j.amount) || 0), 0);
   const totalCommission = sortedJobs.reduce((s, j) => s + (Number(j.commissionAmount) || 0), 0);
+  const flowType = primary?.jobFlowType || 'slw_work';
+  const isAgentFlow = flowType === 'agent_work';
+  const agentName = primary?.agentName || '';
+  const agentCommission = Number(primary?.agentCommissionAmount) || 0;
+  const agentTds = Number(primary?.agentTdsAmount) || 0;
+  const agentNetPayable = Math.max(0, totalAmount - agentCommission - agentTds);
+  const agentSettled = Number(primary?.agentSettlementPaidAmount) || 0;
+  const agentPending = Math.max(0, agentNetPayable - agentSettled);
   const paymentModes = [
     ...new Set(
       sortedJobs.map(j => getJobPaymentMode(j)).filter(m => Boolean(m) && m !== '-')
@@ -58,6 +65,7 @@ export function JobCardDetailsModal({
   ];
 
   const cardId = primary ? (primary.jobCardId || `LEGACY-${primary.id}`) : '';
+  const cardBillNo = primary?.billNo || '';
   const subtitle = primary ? `${fmtDate(primary.date)} · ${customer?.name || 'Unknown'}` : '';
 
   return (
@@ -75,9 +83,26 @@ export function JobCardDetailsModal({
           <div className="jcd-badges">
             <StatusBadge status={payment.status} />
             {customer?.type && <TypeBadge type={customer.type} />}
+            {cardBillNo && <Badge label={`Bill ${cardBillNo}`} variant="info" />}
             {shouldShowDc && !primary.dcApproval && <Badge label="DC" variant="primary" />}
             {primary.workMode === 'Spot' && <Badge label="Spot" variant="info" />}
+            <Badge label={isAgentFlow ? 'Agent Work' : 'SLW Work'} variant={isAgentFlow ? 'warning' : 'success'} />
+            {isAgentFlow && primary?.externalDc && <Badge label="External DC" variant="error" />}
           </div>
+
+          {isAgentFlow && (
+            <div className="jcd-dc-box">
+              <div className="jcd-dc-title">Agent Settlement</div>
+              <div className="jcd-dc-row">
+                {agentName && <span>Agent: <strong>{agentName}</strong></span>}
+                <span>Our Commission: <strong>{formatCurrency(agentCommission)}</strong></span>
+                <span>TDS: <strong>{formatCurrency(agentTds)}</strong></span>
+                <span>Net To Agent: <strong>{formatCurrency(agentNetPayable)}</strong></span>
+                <span>Settled: <strong>{formatCurrency(agentSettled)}</strong></span>
+                <span>Pending: <strong>{formatCurrency(agentPending)}</strong></span>
+              </div>
+            </div>
+          )}
 
           {/* ── Work lines table ── */}
           <div className="jcd-table-wrap">

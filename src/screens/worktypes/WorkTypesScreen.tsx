@@ -12,21 +12,32 @@ export function WorkTypesScreen() {
   const { openModal } = useUIStore();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
+  const [showInactive, setShowInactive] = useState(false);
+
+  const activeWorkTypes = useMemo(
+    () => (showInactive ? workTypes : workTypes.filter((wt) => wt.isActive !== false)),
+    [workTypes, showInactive]
+  );
+
+  const inactiveCount = useMemo(
+    () => workTypes.filter((wt) => wt.isActive === false).length,
+    [workTypes]
+  );
 
   const categories = useMemo(
-    () => [...new Set(workTypes.map((wt) => wt.category))].sort((a, b) => a.localeCompare(b)),
-    [workTypes]
+    () => [...new Set(activeWorkTypes.map((wt) => wt.category))].sort((a, b) => a.localeCompare(b)),
+    [activeWorkTypes]
   );
 
   const catCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const wt of workTypes) {
+    for (const wt of activeWorkTypes) {
       map[wt.category] = (map[wt.category] ?? 0) + 1;
     }
     return map;
-  }, [workTypes]);
+  }, [activeWorkTypes]);
 
-  const filtered = workTypes
+  const filtered = activeWorkTypes
     .filter((wt) => {
       if (catFilter !== 'all' && wt.category !== catFilter) return false;
       const q = search.toLowerCase();
@@ -51,6 +62,16 @@ export function WorkTypesScreen() {
       label: 'Default Rate',
       render: (value) => formatCurrency(value as number),
     },
+    {
+      key: 'isActive',
+      label: 'Status',
+      render: (value) => (
+        <span className={`badge badge-sm status-badge ${value !== false ? 'badge-success' : 'badge-default'}`}>
+          <span className="status-dot" aria-hidden="true" />
+          {value !== false ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
   ];
 
   return (
@@ -61,7 +82,7 @@ export function WorkTypesScreen() {
             Work Types <span className="wt-pg-title-ta tamil">வேலை வகைகள்</span>
           </h1>
           <p className="wt-pg-desc">
-            {workTypes.length} work type{workTypes.length !== 1 ? 's' : ''} · service and material categories
+            {activeWorkTypes.length} work type{activeWorkTypes.length !== 1 ? 's' : ''} · service and material categories
           </p>
         </div>
         <div className="wt-header-actions">
@@ -108,10 +129,20 @@ export function WorkTypesScreen() {
             ))}
           </div>
         )}
+        {inactiveCount > 0 && (
+          <label className="cust-inactive-toggle">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+            />
+            Show inactive ({inactiveCount})
+          </label>
+        )}
       </div>
 
       <div className="wt-content">
-        {workTypes.length === 0 ? (
+        {activeWorkTypes.length === 0 ? (
           <div className="empty-screen-state">
             <p className="empty-screen-title">No work types yet</p>
             <p className="empty-screen-desc">Add work types to use them when creating job lines.</p>

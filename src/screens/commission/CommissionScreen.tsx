@@ -5,11 +5,37 @@ import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { calculateWorkerCommissionSummary } from '@/lib/financeUtils';
+import { getJobAgentCommissionIncome, getJobAgentNetPayable, getJobAgentSettlementPaid, getJobAgentSettlementPending, getJobFinalBillValue, getJobWorkerCommissionExpense, isAgentWorkJob } from '@/lib/jobUtils';
 import type { CommissionWorker, Job } from '@/types';
 import './CommissionScreen.css';
 
-type TabType = 'workers' | 'history';
+type TabType = 'workers' | 'history' | 'agents';
 type WorkerSortKey = 'customer' | 'outstanding' | 'status';
+type WorkerRowStatus = 'Pending' | 'Settled';
+interface WorkerRow {
+  workerId: number;
+  workerName: string;
+  customerId: number;
+  totalDue: number;
+  totalPaid: number;
+  outstanding: number;
+  customerName: string;
+  status: WorkerRowStatus;
+}
+interface AgentRow {
+  key: string;
+  jobId: number;
+  date: string;
+  customerName: string;
+  jobCardId: string;
+  agentName: string;
+  externalDc: boolean;
+  invoiceAmount: number;
+  ourCommissionIncome: number;
+  netPayable: number;
+  settled: number;
+  pending: number;
+}
 type WorkerJobCardDetail = {
   jobCardId: string;
   date: string;
@@ -30,7 +56,7 @@ function resolveCommissionWorkerId(job: Job, workers: CommissionWorker[]): numbe
 }
 
 export function CommissionScreen() {
-  const { jobs, commissionWorkers, commissionPayments, addCommissionPayment, deleteCommissionPayment, getCustomer } =
+  const { jobs, commissionWorkers, commissionPayments, addCommissionPayment, deleteCommissionPayment, getCustomer, updateJob } =
     useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
@@ -47,6 +73,7 @@ export function CommissionScreen() {
   const [workerSort, setWorkerSort] = useState<{ key: WorkerSortKey; order: 'asc' | 'desc' } | null>(
     null
   );
+  const [agentOnlyPending, setAgentOnlyPending] = useState(true);
 
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
@@ -56,7 +83,7 @@ export function CommissionScreen() {
   const workerJobCardDetails = useMemo(() => {
     const groupedByWorker = new Map<number, Map<string, WorkerJobCardDetail>>();
     jobs.forEach((job) => {
-      const commission = Number(job.commissionAmount) || 0;
+      const commission = getJobWorkerCommissionExpense(job);
       if (commission <= 0) return;
       const workerId = resolveCommissionWorkerId(job, commissionWorkers);
       if (workerId === null) return;
@@ -85,9 +112,9 @@ export function CommissionScreen() {
     () => selectedWorkerForDetails === null ? [] : (workerJobCardDetails.get(selectedWorkerForDetails) ?? []),
     [workerJobCardDetails, selectedWorkerForDetails]
   );
-  const workerRows = useMemo(
+  const workerRows = useMemo<WorkerRow[]>(
     () =>
-      workerSummary.map((worker) => {
+      workerSummary.map((worker): WorkerRow => {
         const outstanding = worker.outstanding;
         return {
           ...worker,
@@ -97,6 +124,63 @@ export function CommissionScreen() {
       }),
     [workerSummary, getCustomer]
   );
+
+  const agentRows = useMemo<AgentRow[]>(() => {
+    const groups = new Map<string, Job[]>();
+    jobs
+      .filter((job) => isAgentWorkJob(job))
+      .forEach((job) => {
+        const key = job.jobCardId ? `card:${job.jobCardId}` : `legacy:${job.id}`;
+        const list = groups.get(key) || [];
+        list.push(job);
+        groups.set(key, list);
+      });
+
+    return Array.from(groups.entries()).map(([key, groupJobs]) => {
+      const sorted = [...groupJobs].sort((a, b) => (a.jobCardLine || a.id) - (b.jobCardLine || b.id));
+      const primary = sorted[0];
+      const invoiceAmount = sorted.reduce((sum, j) => sum + getJobFinalBillValue(j), 0);
+      const ourCommissionIncome = sorted.reduce((sum, j) => sum + getJobAgentCommissionIncome(j), 0);
+      const netPayable = sorted.reduce((sum, j) => sum + getJobAgentNetPayable(j), 0);
+      const settled = sorted.reduce((sum, j) => sum + getJobAgentSettlementPaid(j), 0);
+      const pending = Math.max(0, sorted.reduce((sum, j) => sum + getJobAgentSettlementPending(j), 0));
+      const cardId = primary.jobCardId || `LEGACY-${primary.id}`;
+
+      return {
+        key,
+        jobId: primary.id,
+        date: primary.date,
+        customerName: getCustomer(primary.customerId)?.name || '-',
+        jobCardId: cardId,
+        agentName: primary.agentName || (primary.rmpHandler || 'Agent'),
+        externalDc: Boolean(primary.externalDc),
+        invoiceAmount,
+        ourCommissionIncome,
+        netPayable,
+        settled,
+        pending,
+      };
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [jobs, getCustomer]);
+
+  const visibleAgentRows = useMemo(
+    () => (agentOnlyPending ? agentRows.filter((row) => row.pending > 0) : agentRows),
+    [agentRows, agentOnlyPending]
+  );
+
+  const agentTotals = useMemo(() => {
+    return visibleAgentRows.reduce(
+      (acc, row) => {
+        acc.invoice += row.invoiceAmount;
+        acc.ourIncome += row.ourCommissionIncome;
+        acc.netPayable += row.netPayable;
+        acc.settled += row.settled;
+        acc.pending += row.pending;
+        return acc;
+      },
+      { invoice: 0, ourIncome: 0, netPayable: 0, settled: 0, pending: 0 }
+    );
+  }, [visibleAgentRows]);
   const sortedWorkerRows = useMemo(() => {
     if (!workerSort) return workerRows;
     const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
@@ -104,7 +188,7 @@ export function CommissionScreen() {
     return [...workerRows].sort((a, b) => {
       if (workerSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * direction;
       if (workerSort.key === 'outstanding') return (a.outstanding - b.outstanding) * direction;
-      const statusRank = { Pending: 0, Settled: 1 } as const;
+      const statusRank: Record<WorkerRowStatus, number> = { Pending: 0, Settled: 1 };
       return (statusRank[a.status] - statusRank[b.status]) * direction;
     });
   }, [workerRows, workerSort]);
@@ -159,6 +243,25 @@ export function CommissionScreen() {
       toast.error('Error', 'Failed to delete payment');
     } finally {
       setConfirmDeleteId(null);
+    }
+  };
+
+  const handleMarkAgentSettled = async (row: AgentRow) => {
+    const input = window.prompt(
+      `Set settled amount for ${row.agentName} on ${row.jobCardId}\nNet payable: ${formatCurrency(row.netPayable)}`,
+      String(row.netPayable)
+    );
+    if (input === null) return;
+    const value = Number(input);
+    if (!Number.isFinite(value) || value < 0) {
+      toast.error('Error', 'Enter a valid amount');
+      return;
+    }
+    try {
+      await updateJob(row.jobId, { agentSettlementPaidAmount: value });
+      toast.success('Updated', `Settlement saved for ${row.agentName}`);
+    } catch {
+      toast.error('Error', 'Failed to update settlement');
     }
   };
 
@@ -288,6 +391,7 @@ export function CommissionScreen() {
       <div className="comm-nav-tabs">
         <button type="button" className={`comm-nav-tab${activeTab === 'workers' ? ' active' : ''}`} onClick={() => setActiveTab('workers')}>Workers</button>
         <button type="button" className={`comm-nav-tab${activeTab === 'history' ? ' active' : ''}`} onClick={() => setActiveTab('history')}>Payment History</button>
+        <button type="button" className={`comm-nav-tab${activeTab === 'agents' ? ' active' : ''}`} onClick={() => setActiveTab('agents')}>Agent Settlements</button>
       </div>
 
       {/* Workers tab */}
@@ -420,6 +524,78 @@ export function CommissionScreen() {
             </table>
           </div>
         )
+      )}
+
+      {activeTab === 'agents' && (
+        <>
+          <div className="comm-form-box">
+            <div className="comm-form-title">Agent Settlement Summary</div>
+            <div className="comm-form-grid">
+              <div className="comm-field"><label className="comm-label">Invoice Total</label><div className="comm-hint"><strong>{formatCurrency(agentTotals.invoice)}</strong></div></div>
+              <div className="comm-field"><label className="comm-label">Our Income</label><div className="comm-hint"><strong>{formatCurrency(agentTotals.ourIncome)}</strong></div></div>
+              <div className="comm-field"><label className="comm-label">Net Payable</label><div className="comm-hint"><strong>{formatCurrency(agentTotals.netPayable)}</strong></div></div>
+              <div className="comm-field"><label className="comm-label">Pending</label><div className="comm-hint"><strong>{formatCurrency(agentTotals.pending)}</strong></div></div>
+              <div className="comm-field comm-field--full">
+                <label className="dc-waived-toggle-label">
+                  <input type="checkbox" checked={agentOnlyPending} onChange={(e) => setAgentOnlyPending(e.target.checked)} />
+                  <span>Show only pending settlements</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {visibleAgentRows.length === 0 ? (
+            <div className="comm-empty">
+              <p className="comm-empty-title">No agent settlement rows</p>
+              <p className="comm-empty-sub">Create Agent Work cards for Sudha/Palanisamy to track settlements.</p>
+            </div>
+          ) : (
+            <div className="comm-table-wrap">
+              <table className="comm-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Card</th>
+                    <th>Customer</th>
+                    <th>Agent</th>
+                    <th className="ta-c">External DC</th>
+                    <th className="ta-r">Invoice</th>
+                    <th className="ta-r">Our Income</th>
+                    <th className="ta-r">Net Payable</th>
+                    <th className="ta-r">Settled</th>
+                    <th className="ta-r">Pending</th>
+                    <th className="ta-c">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleAgentRows.map((row) => (
+                    <tr key={row.key}>
+                      <td>{new Date(row.date).toLocaleDateString('en-IN')}</td>
+                      <td className="fw-600 comm-td-accent">{row.jobCardId}</td>
+                      <td>{row.customerName}</td>
+                      <td className="fw-600">{row.agentName}</td>
+                      <td className="ta-c">
+                        {row.externalDc
+                          ? <span className="comm-badge comm-badge--pending">Yes</span>
+                          : <span className="comm-badge comm-badge--settled">No</span>}
+                      </td>
+                      <td className="ta-r">{formatCurrency(row.invoiceAmount)}</td>
+                      <td className="ta-r comm-td-green">{formatCurrency(row.ourCommissionIncome)}</td>
+                      <td className="ta-r">{formatCurrency(row.netPayable)}</td>
+                      <td className="ta-r comm-td-green">{formatCurrency(row.settled)}</td>
+                      <td className={`ta-r${row.pending > 0 ? ' comm-td-red' : ' comm-td-green'}`}>{formatCurrency(row.pending)}</td>
+                      <td className="ta-c">
+                        <button type="button" className="comm-submit-btn" onClick={() => void handleMarkAgentSettled(row)}>
+                          Settle
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {/* Worker detail modal */}

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { useUIStore } from '@/stores/uiStore';
 import { Icon } from '@/components/ui/Icon';
+import type { IconName } from '@/components/ui/Icon';
 import './QuickActions.css';
 
 interface QuickAction {
@@ -8,12 +8,11 @@ interface QuickAction {
   tamil: string;
   description: string;
   action: () => void;
-  icon: 'plus' | 'customers' | 'payments' | 'records';
+  icon: IconName;
 }
 
 export function QuickActions() {
   const navigate = useNavigate();
-  const { openModal } = useUIStore();
 
   const actions: QuickAction[] = [
     {
@@ -24,18 +23,11 @@ export function QuickActions() {
       icon: 'plus',
     },
     {
-      label: 'Add Customer',
-      tamil: 'புதிய வாடிக்கையாளர்',
-      description: 'New customer master',
-      action: () => openModal('customer'),
-      icon: 'customers',
-    },
-    {
-      label: 'Record Payment',
-      tamil: 'பணம் பதிவு செய்',
-      description: 'Log received amount',
-      action: () => navigate('/payments'),
-      icon: 'payments',
+      label: '10-Day Finance',
+      tamil: '10 நாள் நிதி',
+      description: 'Period-wise revenue view',
+      action: () => navigate('/finance?tab=tenday'),
+      icon: 'finance',
     },
     {
       label: 'View Records',
@@ -43,6 +35,13 @@ export function QuickActions() {
       description: 'Export & filter',
       action: () => navigate('/records'),
       icon: 'records',
+    },
+    {
+      label: 'Record Expense',
+      tamil: 'செலவு பதிவு செய்',
+      description: 'Add workshop expense',
+      action: () => navigate('/expenses'),
+      icon: 'expenses',
     },
   ];
 

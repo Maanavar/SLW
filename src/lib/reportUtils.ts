@@ -14,6 +14,20 @@ export function getReportRange(period: string): PeriodRange {
 
 export { groupJobsByCard };
 
+export type PaymentEventSource = 'Payment Voucher' | 'Job Paid Entry';
+
+export interface PaymentEvent {
+  id: string;
+  customerId: number;
+  amount: number;
+  date: string;
+  paymentMode: Payment['paymentMode'];
+  breakdown?: Payment['breakdown'];
+  notes?: string;
+  source: PaymentEventSource;
+  jobCardId?: string;
+}
+
 /**
  * Filter jobs within date range
  */
@@ -34,6 +48,93 @@ export function getPaymentsInRange(
   endDate?: string
 ): Payment[] {
   return payments.filter((payment) => isDateInRange(payment.date, startDate, endDate));
+}
+
+function getCardIdFromNotes(notes?: string) {
+  return notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
+}
+
+/**
+ * Get payment events in range (vouchers + job-paid fallbacks).
+ *
+ * Notes:
+ * - Payment vouchers are always included by `payment.date`.
+ * - Job-paid entries are grouped by JobCard and included by `job.date`.
+ * - Simple de-dupe: if a voucher on the same customer+date explicitly references
+ *   the JobCard in its notes OR matches the exact amount, we skip the fallback.
+ */
+export function getPaymentEventsInRange(
+  jobs: Job[],
+  payments: Payment[],
+  startDate?: string,
+  endDate?: string
+): PaymentEvent[] {
+  const paymentsInRange = getPaymentsInRange(payments, startDate, endDate);
+  const jobsInRange = getJobsInRange(jobs, startDate, endDate);
+
+  const voucherEvents: PaymentEvent[] = paymentsInRange.map((p) => {
+    const linkedCardId = getCardIdFromNotes(p.notes);
+    return {
+      id: `payment:${p.id}`,
+      customerId: p.customerId,
+      amount: Number(p.amount) || 0,
+      date: p.date,
+      paymentMode: p.paymentMode,
+      breakdown: p.breakdown,
+      notes: p.notes,
+      source: 'Payment Voucher',
+      jobCardId: linkedCardId || undefined,
+    };
+  });
+
+  const vouchersByCustomerDate = new Map<string, PaymentEvent[]>();
+  voucherEvents.forEach((v) => {
+    const key = `${v.customerId}|${v.date}`;
+    const list = vouchersByCustomerDate.get(key) || [];
+    list.push(v);
+    vouchersByCustomerDate.set(key, list);
+  });
+
+  const paidGroups = groupJobsByCard(jobsInRange.filter((j) => getJobPaidAmount(j) > 0));
+  const jobPaidEvents: PaymentEvent[] = paidGroups.map((group) => {
+    const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+    const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
+    return {
+      id: `job:${cardId}`,
+      customerId: group.primary.customerId,
+      amount,
+      date: group.primary.date,
+      paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
+      notes: `From JobCard ${cardId}`,
+      source: 'Job Paid Entry',
+      jobCardId: cardId,
+    };
+  });
+
+  const dedupedJobPaidEvents = jobPaidEvents.filter((jobEvent) => {
+    const key = `${jobEvent.customerId}|${jobEvent.date}`;
+    const sameDayVouchers = vouchersByCustomerDate.get(key) || [];
+    if (sameDayVouchers.length === 0) {
+      return true;
+    }
+
+    const cardId = jobEvent.jobCardId || '';
+    const hasExplicitLink = cardId
+      ? sameDayVouchers.some((v) => (v.notes || '').toLowerCase().includes(cardId.toLowerCase()))
+      : false;
+    if (hasExplicitLink) {
+      return false;
+    }
+
+    const hasExactAmountMatch = sameDayVouchers.some((v) => Math.abs((v.amount || 0) - jobEvent.amount) < 0.01);
+    if (hasExactAmountMatch) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return [...voucherEvents, ...dedupedJobPaidEvents].filter((e) => (e.amount || 0) > 0);
 }
 
 /**

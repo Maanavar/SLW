@@ -9,6 +9,7 @@ export interface Customer {
   type: 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
   hasCommission: boolean;
   requiresDc: boolean;
+  hasBillNo?: boolean;
   advanceBalance?: number;
   notes: string;
   isActive: boolean;
@@ -41,6 +42,7 @@ export interface Job {
   isSpotWork?: boolean;
   jobCardId?: string;
   jobCardLine?: number;
+  billNo?: string;
   notes?: string;
   // DC Fields
   dcNo?: string;
@@ -49,6 +51,15 @@ export interface Job {
   dcApproval?: boolean;
   // RMP handler tag (Bhai = people vehicles, Raja = commercial vehicles)
   rmpHandler?: 'Bhai' | 'Raja' | null;
+  // Job ownership and commission direction:
+  // - slw_work: SLW did the work, worker commission is payable (expense)
+  // - agent_work: external agent job routed via SLW, agent commission is receivable (income)
+  jobFlowType?: 'slw_work' | 'agent_work';
+  externalDc?: boolean;
+  agentName?: string;
+  agentCommissionAmount?: number;
+  agentTdsAmount?: number;
+  agentSettlementPaidAmount?: number;
   // Commission Worker Tagging
   commissionWorkerId?: number;
   commissionWorkerName?: string;

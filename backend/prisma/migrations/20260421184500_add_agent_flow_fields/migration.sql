@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "jobs"
+  ADD COLUMN "jobFlowType" VARCHAR(20),
+  ADD COLUMN "externalDc" BOOLEAN DEFAULT false,
+  ADD COLUMN "agentName" VARCHAR(120),
+  ADD COLUMN "agentCommissionAmount" DOUBLE PRECISION DEFAULT 0,
+  ADD COLUMN "agentTdsAmount" DOUBLE PRECISION DEFAULT 0,
+  ADD COLUMN "agentSettlementPaidAmount" DOUBLE PRECISION DEFAULT 0;

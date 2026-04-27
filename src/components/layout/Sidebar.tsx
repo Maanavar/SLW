@@ -1,9 +1,11 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { groupJobsByCard } from '@/lib/reportUtils';
 import { apiClient } from '@/lib/apiClient';
+import { useUIStore } from '@/stores/uiStore';
 import { Icon } from '@/components/ui/Icon';
 import './Sidebar.css';
 
@@ -22,7 +24,16 @@ interface NavSection {
 
 export function Sidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const jobs = useDataStore((s) => s.jobs);
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
+  const mobileDrawerOpen = useUIStore((s) => s.mobileDrawerOpen);
+  const closeMobileDrawer = useUIStore((s) => s.closeMobileDrawer);
+
+  // Close drawer whenever the route changes (user tapped a nav link)
+  useEffect(() => {
+    closeMobileDrawer();
+  }, [location.pathname, closeMobileDrawer]);
 
   const handleLogout = async () => {
     await apiClient.logout();
@@ -67,7 +78,10 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="sidebar" aria-label="Sidebar navigation">
+    <aside
+      className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileDrawerOpen ? 'mobile-open' : ''}`}
+      aria-label="Sidebar navigation"
+    >
       <div className="sidebar-header">
         <div className="brand-mark" aria-hidden="true">
           S
@@ -76,6 +90,17 @@ export function Sidebar() {
           <h1 className="sidebar-title">Siva Lathe Works</h1>
           <p className="sidebar-subtitle tamil">சிவா லேத் வொர்க்ஸ்</p>
         </div>
+        {/* Close button — only rendered as a drawer on mobile/tablet */}
+        <button
+          type="button"
+          className="sidebar-drawer-close"
+          onClick={closeMobileDrawer}
+          aria-label="Close navigation"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+        </button>
       </div>
 
       <nav className="sidebar-nav" aria-label="Primary navigation">

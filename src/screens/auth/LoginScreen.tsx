@@ -14,7 +14,7 @@ export function LoginScreen() {
 
   const redirectPath = useMemo(() => {
     const from = (location.state as { from?: unknown } | null)?.from;
-    return typeof from === 'string' && from.trim() ? from : '/';
+    return typeof from === 'string' && from.trim() ? from : '/dashboard';
   }, [location.state]);
 
   useEffect(() => {

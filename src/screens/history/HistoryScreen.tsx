@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
-import { DataTable, Column } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobCardPaymentSummary } from '@/lib/jobUtils';
+import { getJobCardPaymentSummary, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
 import { StatusBadge } from '@/components/ui/Badge';
 import { getLocalDateString } from '@/lib/dateUtils';
 import './HistoryScreen.css';
@@ -65,20 +64,28 @@ export function HistoryScreen() {
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<HistoryViewMode>('table');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
+  const [dcSearch, setDcSearch] = useState('');
 
+  const isDcMode = dcSearch.trim().length > 0;
   const isToday = selectedDate === today;
 
-  const jobsInRange = getJobsInRange(jobs, selectedDate, selectedDate);
+  // When DC search is active, search across ALL jobs, not just the selected date
+  const jobsInRange = isDcMode ? jobs : getJobsInRange(jobs, selectedDate, selectedDate);
   const groups = groupJobsByCard(jobsInRange);
 
   const filteredGroups = useMemo(
     () =>
       groups.filter(group => {
+        // DC number filter — any job in the card must have a matching dcNo
+        if (isDcMode) {
+          const q = dcSearch.trim().toLowerCase();
+          if (!group.jobs.some(j => j.dcNo && j.dcNo.toLowerCase().includes(q))) return false;
+        }
         if (paymentFilter === 'all') return true;
         const status = getJobCardPaymentSummary(group.jobs).status;
         return paymentFilter === 'paid' ? status === 'Paid' : status !== 'Paid';
       }),
-    [groups, paymentFilter]
+    [groups, paymentFilter, isDcMode, dcSearch]
   );
 
   const rows: CardHistoryRow[] = useMemo(
@@ -86,7 +93,7 @@ export function HistoryScreen() {
       filteredGroups.map(group => {
         const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
         const payment = getJobCardPaymentSummary(group.jobs);
-        const commission = group.jobs.reduce((s, j) => s + (Number(j.commissionAmount) || 0), 0);
+        const commission = group.jobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0);
         const workSummary = [...new Set(group.jobs.map(j => j.workTypeName))].join(', ');
         return {
           id: group.key,
@@ -111,18 +118,23 @@ export function HistoryScreen() {
     [rows]
   );
 
-  const summary = useMemo(() => ({
-    totalCards:   rows.length,
-    totalBill:    rows.reduce((s, r) => s + r.finalBill, 0),
-    totalNet:     rows.reduce((s, r) => s + r.ourNet, 0),
-    totalPaid:    rows.reduce((s, r) => s + r.paid, 0),
-    totalPending: rows.reduce((s, r) => s + r.pending, 0),
-  }), [rows]);
+  const summary = useMemo(() => {
+    const totalCards   = rows.length;
+    const totalBill    = rows.reduce((s, r) => s + r.finalBill, 0);
+    const totalNet     = rows.reduce((s, r) => s + r.ourNet, 0);
+    const totalPaid    = rows.reduce((s, r) => s + r.paid, 0);
+    const totalPending = rows.reduce((s, r) => s + r.pending, 0);
+    const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+    const grossProfit = totalNet;
+    // Count paid job cards (cards with at least partial payment)
+    const paidCards = rows.filter(r => r.paymentStatus === 'Paid' || r.paymentStatus === 'Partially Paid').length;
+    return { totalCards, totalBill, totalNet, totalPaid, totalPending, totalCommission, grossProfit, paidCards };
+  }, [rows]);
 
   const paymentModeBreakdown = useMemo(() => {
     const bd = { cash: 0, upi: 0, bank: 0, cheque: 0 };
     filteredGroups.forEach(g => g.jobs.forEach(j => {
-      const paid = (j as any).paidAmount || 0;
+      const paid = getJobPaidAmount(j);
       if (paid > 0 && j.paymentMode) {
         if (j.paymentMode === 'Cash') bd.cash += paid;
         else if (j.paymentMode === 'UPI') bd.upi += paid;
@@ -156,19 +168,6 @@ export function HistoryScreen() {
       toast.error('Error', 'Failed to delete job card');
     }
   };
-
-  const columns: Column<CardHistoryRow>[] = [
-    { key: 'date',          label: 'Date',       sortable: true },
-    { key: 'jobCardId',     label: 'JobCard',    sortable: true },
-    { key: 'customerName',  label: 'Customer',   sortable: true },
-    { key: 'workSummary',   label: 'Works',      render: v => String(v) },
-    { key: 'finalBill',     label: 'Final Bill', sortable: true, render: v => formatCurrency(v as number) },
-    { key: 'commission',    label: 'Commission', render: v => formatCurrency(v as number) },
-    { key: 'ourNet',        label: 'Our Net',    render: v => formatCurrency(v as number) },
-    { key: 'paid',          label: 'Paid',       render: v => formatCurrency(v as number) },
-    { key: 'pending',       label: 'Pending',    render: v => formatCurrency(v as number) },
-    { key: 'paymentStatus', label: 'Status',     sortable: true, render: v => <StatusBadge status={v as string} /> },
-  ];
 
   return (
     <div className="history-screen">
@@ -208,6 +207,26 @@ export function HistoryScreen() {
         {!isToday && (
           <button type="button" className="hist-today-btn" onClick={() => setSelectedDate(today)}>Today</button>
         )}
+
+        <div className="hist-toolbar-sep" />
+
+        {/* DC number search */}
+        <label className="hist-dc-search" aria-label="Search by DC number">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="4"/><path d="M10 10l2.5 2.5" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            className="hist-dc-input"
+            placeholder="DC No..."
+            value={dcSearch}
+            onChange={e => setDcSearch(e.target.value)}
+            aria-label="Search by DC number"
+          />
+          {dcSearch && (
+            <button type="button" className="hist-dc-clear" onClick={() => setDcSearch('')} aria-label="Clear DC search">×</button>
+          )}
+        </label>
 
         <div className="hist-toolbar-sep" />
 
@@ -251,24 +270,48 @@ export function HistoryScreen() {
         </div>
       </div>
 
+      {/* DC search mode banner */}
+      {isDcMode && (
+        <div className="hist-dc-banner">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="4"/><path d="M10 10l2.5 2.5" strokeLinecap="round"/>
+          </svg>
+          Searching all dates for DC No. <strong>"{dcSearch.trim()}"</strong> — {filteredGroups.length} result{filteredGroups.length !== 1 ? 's' : ''}
+          <button type="button" className="hist-dc-banner-clear" onClick={() => setDcSearch('')}>Clear</button>
+        </div>
+      )}
+
       {/* Row 3 – Summary stats */}
       {rows.length > 0 && (
         <div className="hist-stats">
           <div className="hist-stat">
-            <span className="hist-stat-label">Cards</span>
-            <span className="hist-stat-value">{summary.totalCards}</span>
-          </div>
-          <div className="hist-stat">
-            <span className="hist-stat-label">Total Bill</span>
-            <span className="hist-stat-value">{formatCurrency(summary.totalBill)}</span>
+            <div className="hist-stat-row hist-stat-row--split">
+              <div className="hist-stat-cell">
+                <span className="hist-stat-label">Revenue</span>
+                <span className="hist-stat-value">{formatCurrency(summary.totalBill)}</span>
+                <span className="hist-stat-sub">Final bill value</span>
+              </div>
+              <div className="hist-stat-cell">
+                <span className="hist-stat-label">Commission</span>
+                <span className="hist-stat-value">{formatCurrency(summary.totalCommission)}</span>
+                <span className="hist-stat-sub">Payable to workers</span>
+              </div>
+            </div>
           </div>
           <div className="hist-stat hist-stat--green">
-            <span className="hist-stat-label">Net Income</span>
-            <span className="hist-stat-value">{formatCurrency(summary.totalNet)}</span>
+            <span className="hist-stat-label">Gross profit</span>
+            <span className="hist-stat-value">{formatCurrency(summary.grossProfit)}</span>
+            <span className="hist-stat-sub">Net income after flow adjustments</span>
+          </div>
+          <div className="hist-stat hist-stat--green">
+            <span className="hist-stat-label">Received</span>
+            <span className="hist-stat-value">{formatCurrency(summary.totalPaid)}</span>
+            <span className="hist-stat-sub">{summary.paidCards}/{summary.totalCards} payments</span>
           </div>
           <div className={`hist-stat${summary.totalPending > 0 ? ' hist-stat--red' : ' hist-stat--green'}`}>
             <span className="hist-stat-label">Outstanding</span>
             <span className="hist-stat-value">{formatCurrency(summary.totalPending)}</span>
+            <span className="hist-stat-sub">Final bill - received</span>
           </div>
           <div className="hist-stat hist-stat--mode">
             <span className="hist-stat-label">By mode</span>
@@ -351,28 +394,72 @@ export function HistoryScreen() {
               <line x1="15" y1="30" x2="24" y2="30" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
             <p className="hist-empty-title">
-              {paymentFilter === 'all' ? 'No job cards for this date'
+              {isDcMode ? `No cards found for DC No. "${dcSearch.trim()}"` :
+                paymentFilter === 'all' ? 'No job cards for this date'
                 : paymentFilter === 'paid' ? 'No paid job cards for this date'
                 : 'No unpaid job cards for this date'}
             </p>
-            <p className="hist-empty-sub">Try a different date or filter</p>
+            <p className="hist-empty-sub">{isDcMode ? 'Try a different DC number' : 'Try a different date or filter'}</p>
             <button type="button" className="btn btn-accent" onClick={() => navigate('/')}>+ New job card</button>
           </div>
         )
       ) : (
-        <DataTable<CardHistoryRow>
-          columns={columns}
-          data={rows}
-          keyFn={item => item.id}
-          sortBy="date"
-          sortOrder="desc"
-          onRowClick={row => setSelectedCardId(row.id)}
-          emptyMessage={
-            paymentFilter === 'all' ? 'No job cards for this date'
-              : paymentFilter === 'paid' ? 'No paid job cards'
-              : 'No unpaid job cards'
-          }
-        />
+        <div className="hist-table-wrap">
+          <table className="hist-table">
+            <thead>
+              <tr>
+                <th>DATE</th>
+                <th>CARD</th>
+                <th>CUSTOMER</th>
+                <th>WORKS</th>
+                <th className="numeric">FINAL BILL</th>
+                <th className="numeric">COMMISSION</th>
+                <th className="numeric">OUR NET</th>
+                <th className="numeric">PAID</th>
+                <th className="numeric">PENDING</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.length > 0 ? (
+                sortedRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="hist-row"
+                    onClick={() => setSelectedCardId(row.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardId(row.id); } }}
+                  >
+                    <td><span className="hist-date-cell">{row.date}</span></td>
+                    <td><span className="hist-card-id-cell">{row.jobCardId}</span></td>
+                    <td><span className="hist-cust-name">{row.customerName}</span></td>
+                    <td><span className="hist-works-cell">{row.workSummary || '—'}</span></td>
+                    <td className="numeric">{formatCurrency(row.finalBill)}</td>
+                    <td className="numeric">{row.commission > 0 ? formatCurrency(row.commission) : <span className="hist-zero">—</span>}</td>
+                    <td className="numeric">{formatCurrency(row.ourNet)}</td>
+                    <td className="numeric hist-paid">{formatCurrency(row.paid)}</td>
+                    <td className="numeric">
+                      <span className={row.pending > 0 ? 'hist-pending-val' : ''}>
+                        {formatCurrency(row.pending)}
+                      </span>
+                    </td>
+                    <td><StatusBadge status={row.paymentStatus} /></td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="hist-table-empty">
+                  <td colSpan={10}>
+                    {isDcMode ? `No cards found for DC No. "${dcSearch.trim()}"` :
+                      paymentFilter === 'all' ? 'No job cards for this date'
+                      : paymentFilter === 'paid' ? 'No paid job cards'
+                      : 'No unpaid job cards'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <JobCardDetailsModal

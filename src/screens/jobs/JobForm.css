@@ -231,6 +231,39 @@ select.form-input {
   margin-left: 4px;
 }
 
+.bill-no-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.bill-no-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.bill-no-input {
+  height: 28px;
+  width: 130px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.bill-no-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 .btn-add-line {
   background: transparent;
   border: none;
@@ -327,32 +360,56 @@ select.form-input {
 /* ── Segmented control ────────────────────────────────────── */
 .seg-control {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
   background: var(--bg-sunk);
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
   width: 100%;
 }
 
 .seg-btn {
   flex: 1;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 4px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.seg-btn:hover:not(.active) {
+  color: var(--text);
+  background: var(--bg-hover);
 }
 
 .seg-btn.active {
   background: var(--bg-elev);
   color: var(--text);
-  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+
+/* Payment intent: Paid now → green */
+.seg-btn--paid-now.active {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: var(--green-border);
+  box-shadow: none;
+}
+
+/* Payment intent: Pay later → amber */
+.seg-btn--later.active {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border-color: var(--amber-border);
+  box-shadow: none;
 }
 
 .rmp-seg {
@@ -745,19 +802,26 @@ select.form-input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
   border-radius: 6px;
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--accent);
 }
 
 .row-act-btn:hover { background: var(--bg-hover); color: var(--text); }
 
-.row-act-btn--del { color: var(--red); border-color: var(--red-border); }
+.row-act-btn--del { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
 .row-act-btn--del:hover { background: var(--red-soft); }
 
 /* ── Responsive ───────────────────────────────────────────── */
+
+/* Tablet: stack the 3-column form row to 2 columns early */
+@media (max-width: 1024px) {
+  .njc-row-3 { grid-template-columns: 1fr 1fr; }
+  .dc-fields-3 { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 900px) {
   .jobs-top-grid {
     grid-template-columns: 1fr;
@@ -786,4 +850,50 @@ select.form-input {
   .submitted-head { flex-direction: column; align-items: stretch; }
   .submitted-head .seg-control { width: 100%; }
   .jobs-right-col { flex-direction: column; }
+
+  /* Hide col headers when work-lines reflow to card layout */
+  .wl-col-header { display: none; }
+
+  .jobs-pg-title { font-size: 19px; }
+}
+
+@media (max-width: 400px) {
+  .jobs-pg-title { font-size: 17px; }
+}
+
+/* ── Quick-add modals ─────────────────────────────────────── */
+.qa-form {
+  display: grid;
+  gap: 14px;
+}
+
+.qa-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.qa-checks {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.qa-check-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.qa-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
 }

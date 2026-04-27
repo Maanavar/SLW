@@ -506,6 +506,90 @@
 
 .exp-delete-btn:hover { background: var(--red-soft); border-color: var(--red); }
 
+/* ── Expense row edit ─────────────────────────────────────────── */
+.exp-row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.exp-edit-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all var(--transition-fast);
+}
+
+.exp-edit-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+.exp-edit-row { background: var(--bg-sunk) !important; }
+
+.exp-edit-input {
+  width: 100%;
+  min-width: 80px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.exp-edit-input:focus { outline: none; border-color: var(--accent); }
+.exp-edit-input--wide { min-width: 140px; }
+.exp-edit-input--num  { max-width: 90px; text-align: right; font-family: var(--font-mono); }
+
+.exp-edit-recurring {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.exp-edit-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.exp-save-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.exp-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.exp-cancel-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.exp-cancel-btn:hover { background: var(--bg-hover); }
+
 /* ── Break-Even ───────────────────────────────────────────────── */
 .exp-breakeven-stats {
   display: grid;
@@ -540,6 +624,25 @@
   .exp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+@media (max-width: 1024px) {
+  .exp-pg-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Nav tabs: scroll horizontally */
+  .exp-nav-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .exp-nav-tabs::-webkit-scrollbar { display: none; }
+
+  /* Month navigator: tighten */
+  .exp-month-label { min-width: 120px; }
+}
+
 @media (max-width: 900px) {
   .exp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .exp-tiles-row { grid-template-columns: 1fr; }
@@ -553,9 +656,11 @@
   .exp-monthly-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .exp-form-row2 { grid-template-columns: 1fr; }
   .exp-cat-row { grid-template-columns: 80px 1fr 70px 30px; }
+  .exp-pg-title { font-size: 19px; }
 }
 
 @media (max-width: 420px) {
   .exp-stats { grid-template-columns: 1fr; }
   .exp-breakeven-stats { grid-template-columns: 1fr; }
+  .exp-pg-title { font-size: 17px; }
 }

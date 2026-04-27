@@ -112,9 +112,17 @@
   border-bottom: 1px solid var(--border);
   gap: 0;
   margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
 }
 
+.fin-nav-tabs::-webkit-scrollbar { display: none; }
+
 .fin-nav-tab {
+  flex-shrink: 0;
+  scroll-snap-align: start;
   padding: 8px 16px;
   border: none;
   background: transparent;
@@ -375,7 +383,495 @@
   margin: 0;
 }
 
+/* ── Ten-day range tab ───────────────────────────────────────── */
+.td-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.td-month-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.td-month-btn:hover { background: var(--bg-hover); }
+
+.td-month-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 160px;
+  text-align: center;
+}
+
+.td-sets-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.td-set-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.td-set-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.td-set-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.td-set-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-faint);
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* Vertical bar chart */
+.td-vbar-wrap {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.td-vbar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 80px;
+}
+
+.td-vbar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  cursor: pointer;
+  min-width: 0;
+  border-radius: 3px;
+  transition: background-color 0.1s;
+}
+
+.td-vbar-col:hover,
+.td-vbar-col:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.td-vbar-bar {
+  width: 100%;
+  height: var(--bar-height, 1px);
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.25s ease, opacity 0.15s, background-color 0.15s;
+}
+
+.td-vbar-bar--empty {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.td-vbar-bar--selected {
+  background: var(--green);
+}
+
+.td-vbar-col:hover .td-vbar-bar:not(.td-vbar-bar--empty):not(.td-vbar-bar--selected) { opacity: 0.72; }
+
+.td-vbar-label {
+  font-size: 9px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Set summary stats */
+.td-set-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.td-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.td-stat-key {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.td-stat-val {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.td-stat-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 1px 0;
+}
+
+/* Day detail panel — shown on bar tap/click */
+.td-day-detail {
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: td-detail-in 0.15s ease;
+}
+
+@keyframes td-detail-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.td-day-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.td-day-detail-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.td-day-detail-close {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.td-day-detail-close:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.td-day-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 6px;
+}
+
+.td-day-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.td-day-detail-item span:first-child {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.td-day-detail-item span:last-child {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Comparison table total row */
+.td-total-row td {
+  border-top: 2px solid var(--border);
+  background: var(--bg-sunk);
+}
+
+/* ── Month total summary strip ──────────────────────────────── */
+.td-month-summary {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 10px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+
+.td-month-summary::-webkit-scrollbar { display: none; }
+
+.td-ms-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.td-ms-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  margin: 0 14px;
+  flex-shrink: 0;
+}
+
+.td-ms-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.td-ms-key {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.td-ms-val {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ── Daily Revenue 3-column grid ────────────────────────────── */
+.td-daily-3col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.td-daily-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.td-daily-col:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.td-daily-col-hd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px 8px;
+  background: var(--bg-sunk);
+  border-bottom: 2px solid var(--border);
+}
+
+.td-daily-col-set {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.td-daily-col-range {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.td-daily-col-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.td-daily-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-faint, var(--border));
+  min-height: 30px;
+  transition: background-color 0.1s;
+}
+
+.td-daily-row:last-child {
+  border-bottom: none;
+}
+
+.td-daily-row:hover {
+  background: var(--bg-hover);
+}
+
+.td-daily-row.is-zero .td-daily-daynum,
+.td-daily-row.is-zero .td-daily-amount {
+  color: var(--text-faint);
+  opacity: 0.6;
+}
+
+.td-daily-row.is-today {
+  background: var(--accent-subtle, rgba(99, 102, 241, 0.08));
+}
+
+.td-daily-row.is-today .td-daily-daynum {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.td-daily-daynum {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  width: 18px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.td-daily-bar-wrap {
+  flex: 1;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 12px;
+}
+
+.td-daily-bar {
+  height: 100%;
+  width: var(--pct, 0%);
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.td-daily-row.is-zero .td-daily-bar {
+  background: transparent;
+}
+
+.td-daily-amount {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 56px;
+}
+
+.td-daily-col-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: var(--bg-sunk);
+  border-top: 2px solid var(--border);
+  gap: 6px;
+}
+
+.td-daily-footer-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.td-daily-footer-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .fin-pg-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Period tabs: scroll horizontally instead of wrapping awkwardly */
+  .fin-period-tabs {
+    overflow-x: auto;
+    max-width: 100%;
+    width: 100%;
+  }
+  .fin-period-tabs::-webkit-scrollbar { display: none; }
+
+  /* Ten-day sets: stack vertically on tablet/mobile */
+  .td-sets-row { grid-template-columns: 1fr; }
+
+  /* Daily 3-col: hide bar on smaller screens (too narrow) */
+  .td-daily-bar-wrap { display: none; }
+  .td-daily-amount { min-width: 48px; font-size: 11px; }
+  .td-daily-col-hd { padding: 7px 8px 6px; }
+  .td-daily-row { padding: 4px 8px; gap: 4px; }
+  .td-daily-col-footer { padding: 6px 8px; }
+
+  /* Finance tables: tighten for tablet */
+  .fin-table th,
+  .fin-table td {
+    padding: 7px 10px;
+    font-size: 12.5px;
+  }
+}
+
 @media (max-width: 900px) {
   .fin-stats-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fin-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -390,9 +886,13 @@
   .fin-pg-header { flex-direction: column; align-items: flex-start; }
   .fin-bar-item { grid-template-columns: 90px 1fr 70px; }
   .fin-method-row { grid-template-columns: 70px 1fr 90px 40px 50px; }
+  .fin-pg-title { font-size: 19px; }
+  .fin-table th,
+  .fin-table td { padding: 6px 8px; font-size: 12px; }
 }
 
 @media (max-width: 420px) {
   .fin-stats-4,
   .fin-stats-3 { grid-template-columns: 1fr; }
+  .fin-pg-title { font-size: 17px; }
 }

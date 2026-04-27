@@ -73,6 +73,40 @@ export function getJobFinalBillValue(job: Job): number {
   return (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
 }
 
+export function isAgentWorkJob(job: Job): boolean {
+  return job.jobFlowType === 'agent_work';
+}
+
+export function getJobWorkerCommissionExpense(job: Job): number {
+  if (isAgentWorkJob(job)) return 0;
+  return Number(job.commissionAmount) || 0;
+}
+
+export function getJobAgentCommissionIncome(job: Job): number {
+  if (!isAgentWorkJob(job)) return 0;
+  return Number(job.agentCommissionAmount) || 0;
+}
+
+export function getJobAgentTdsAmount(job: Job): number {
+  if (!isAgentWorkJob(job)) return 0;
+  return Number(job.agentTdsAmount) || 0;
+}
+
+export function getJobAgentNetPayable(job: Job): number {
+  if (!isAgentWorkJob(job)) return 0;
+  return Math.max(0, (Number(job.amount) || 0) - getJobAgentCommissionIncome(job) - getJobAgentTdsAmount(job));
+}
+
+export function getJobAgentSettlementPaid(job: Job): number {
+  if (!isAgentWorkJob(job)) return 0;
+  return Number(job.agentSettlementPaidAmount) || 0;
+}
+
+export function getJobAgentSettlementPending(job: Job): number {
+  if (!isAgentWorkJob(job)) return 0;
+  return Math.max(0, getJobAgentNetPayable(job) - getJobAgentSettlementPaid(job));
+}
+
 /**
  * Get payment status for job
  */
@@ -125,7 +159,11 @@ export function getPaymentStatusFromAmounts(paid: number, due: number): PaymentS
  * Business rule: `job.amount` already stores our net income.
  */
 export function getJobNetValue(job: Job): number {
-  return Number(job.amount) || 0;
+  if (!isAgentWorkJob(job)) {
+    return Number(job.amount) || 0;
+  }
+  // In agent flow, SLW income is retained commission + TDS.
+  return getJobAgentCommissionIncome(job) + getJobAgentTdsAmount(job);
 }
 
 /**
@@ -193,7 +231,7 @@ export function groupJobsByCard(jobs: Job[]): JobGroup[] {
       totalAmount: sortedJobs.reduce((sum, job) => sum + (Number(job.amount) || 0), 0),
       totalNet: sortedJobs.reduce((sum, job) => sum + getJobNetValue(job), 0),
       totalCommission: sortedJobs.reduce(
-        (sum, job) => sum + (Number(job.commissionAmount) || 0),
+        (sum, job) => sum + getJobWorkerCommissionExpense(job),
         0
       ),
       totalQuantity: sortedJobs.reduce((sum, job) => sum + (Number(job.quantity) || 0), 0),
@@ -207,7 +245,7 @@ export function groupJobsByCard(jobs: Job[]): JobGroup[] {
  */
 export function getJobSummary(jobs: Job[]): JobSummary {
   const billed = jobs.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
-  const commission = jobs.reduce((sum, job) => sum + (Number(job.commissionAmount) || 0), 0);
+  const commission = jobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
   const net = jobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
   const received = jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
   const pending = billed - received;
@@ -229,12 +267,24 @@ export function getJobSummary(jobs: Job[]): JobSummary {
 export function getJobCardPaymentSummary(jobs: Job[]) {
   const finalBill = jobs.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const net = jobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
+  const workerCommissionExpense = jobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
+  const agentCommissionIncome = jobs.reduce((sum, job) => sum + getJobAgentCommissionIncome(job), 0);
+  const agentTdsIncome = jobs.reduce((sum, job) => sum + getJobAgentTdsAmount(job), 0);
+  const agentNetPayable = jobs.reduce((sum, job) => sum + getJobAgentNetPayable(job), 0);
+  const agentSettlementPaid = jobs.reduce((sum, job) => sum + getJobAgentSettlementPaid(job), 0);
+  const agentSettlementPending = Math.max(0, agentNetPayable - agentSettlementPaid);
   const paid = jobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
   const pending = Math.max(0, finalBill - paid);
 
   return {
     finalBill,
     net,
+    workerCommissionExpense,
+    agentCommissionIncome,
+    agentTdsIncome,
+    agentNetPayable,
+    agentSettlementPaid,
+    agentSettlementPending,
     paid,
     pending,
     status: getPaymentStatusFromAmounts(paid, finalBill),

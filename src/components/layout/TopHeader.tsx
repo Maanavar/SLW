@@ -1,6 +1,10 @@
-import { useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/stores/uiStore';
 import { Icon } from '@/components/ui/Icon';
+import { UniversalSearch } from '@/components/ui/UniversalSearch';
+import { NotificationBell } from './NotificationBell';
+import { apiClient } from '@/lib/apiClient';
 import './TopHeader.css';
 
 interface PageMeta {
@@ -24,36 +28,127 @@ const pageMap: Record<string, PageMeta> = {
 
 export function TopHeader() {
   const location = useLocation();
-  const { theme, toggleTheme } = useUIStore();
+  const navigate = useNavigate();
+  const { theme, toggleTheme, sidebarCollapsed, toggleSidebar, openMobileDrawer } = useUIStore();
 
-  const page = pageMap[location.pathname] || {
+  // Desktop: collapse/expand the sidebar. Mobile/tablet: open the slide-in drawer.
+  const handleNavToggle = () => {
+    if (window.innerWidth <= 1024) {
+      openMobileDrawer();
+    } else {
+      toggleSidebar();
+    }
+  };
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const page = pageMap[location.pathname] ?? {
     title: 'Siva Lathe Works',
     subtitle: 'Workshop operations',
   };
 
+  const handleLogout = async () => {
+    await apiClient.logout();
+    window.dispatchEvent(new Event('slw-auth-changed'));
+    navigate('/login', { replace: true });
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [userMenuOpen]);
+
+  // Close dropdown on Escape
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setUserMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [userMenuOpen]);
+
   return (
     <header className="top-header" role="banner">
-      <div className="top-header-title">
-        <span className="top-header-main">{page.title}</span>
-        <span className="top-header-sep">/</span>
-        <span className="top-header-sub">{page.subtitle}</span>
+      {/* Left: nav toggle + breadcrumb */}
+      <div className="top-header-left">
+        <button
+          type="button"
+          className="top-icon-btn"
+          onClick={handleNavToggle}
+          title="Toggle navigation"
+          aria-label="Toggle navigation"
+        >
+          <Icon name="menu" width={16} height={16} />
+        </button>
+
+        <div className="top-header-title">
+          <span className="top-header-main">{page.title}</span>
+          <span className="top-header-sep" aria-hidden="true">/</span>
+          <span className="top-header-sub">{page.subtitle}</span>
+        </div>
       </div>
 
-      <div className="top-header-actions" aria-label="Header actions">
-        <button type="button" className="top-icon-btn" title="Search">
-          <Icon name="search" width={16} height={16} />
-        </button>
-        <button type="button" className="top-icon-btn" title="Notifications">
-          <Icon name="bell" width={16} height={16} />
-        </button>
+      {/* Right: Search → Theme → User (Atlassian order) */}
+      <div className="top-header-actions" aria-label="Global actions">
+        <UniversalSearch />
+
         <button
           type="button"
           className="top-icon-btn"
           onClick={toggleTheme}
-          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          title={theme === 'light' ? 'Dark mode' : 'Light mode'}
+          aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
         >
           <Icon name={theme === 'light' ? 'moon' : 'sun'} width={16} height={16} />
         </button>
+
+        <NotificationBell />
+
+        {/* User avatar — opens account dropdown */}
+        <div className="top-user-menu" ref={menuRef}>
+          <button
+            type="button"
+            className="top-avatar-btn"
+            onClick={() => setUserMenuOpen((v) => !v)}
+            aria-label="Account menu"
+            aria-haspopup="true"
+          >
+            <span className="top-avatar-label" aria-hidden="true">SA</span>
+          </button>
+
+          {userMenuOpen && (
+            <div className="top-user-dropdown" role="menu" aria-label="Account options">
+              <div className="top-user-identity">
+                <span className="top-user-avatar-lg" aria-hidden="true">SA</span>
+                <div className="top-user-meta">
+                  <span className="top-user-name">SLW Admin</span>
+                  <span className="top-user-role">Owner · Siva Lathe Works</span>
+                </div>
+              </div>
+              <hr className="top-user-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="top-user-action top-user-action--danger"
+                onClick={() => { setUserMenuOpen(false); void handleLogout(); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -1,30 +1,49 @@
+/* ── Core layout ──────────────────────────────────────────── */
 .top-header {
   height: 48px;
+  flex-shrink: 0;          /* never squish in flex-column app-main */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 20px;
+  gap: 8px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
+  /* dropdown must overflow the header */
+  overflow: visible;
+  position: relative;
+  z-index: 50;
+}
+
+/* ── Left group: hamburger + breadcrumb ──────────────────── */
+.top-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .top-header-title {
-  min-width: 0;
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .top-header-main {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
 }
 
 .top-header-sep {
   color: var(--text-faint);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .top-header-sub {
@@ -35,16 +54,19 @@
   text-overflow: ellipsis;
 }
 
+/* ── Right group: Search → Theme → Avatar ────────────────── */
 .top-header-actions {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;         /* never hidden or squished */
 }
 
+/* ── Icon buttons (search, theme) ────────────────────────── */
 .top-icon-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
+  width: 34px;
+  height: 34px;
+  border: none;
   border-radius: var(--r-md);
   background: transparent;
   color: var(--text-muted);
@@ -52,20 +74,228 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .top-icon-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
-  border-color: var(--border);
 }
 
+.top-icon-btn:active {
+  transform: scale(0.9);
+}
+
+/* ── User avatar button ───────────────────────────────────── */
+.top-user-menu {
+  position: relative;
+}
+
+.top-avatar-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: opacity 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.top-avatar-btn:hover {
+  opacity: 0.88;
+  border-color: var(--accent-border);
+}
+
+.top-avatar-btn:active {
+  transform: scale(0.9);
+}
+
+.top-avatar-btn[aria-expanded='true'] {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.top-avatar-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+/* ── Account dropdown ────────────────────────────────────── */
+.top-user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 210px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  z-index: 500;
+  overflow: hidden;
+  /* subtle slide-in */
+  animation: dropdown-in 0.14s ease;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.top-user-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 12px;
+}
+
+.top-user-avatar-lg {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.top-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.top-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-user-role {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.top-user-sep {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.top-user-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 450;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.top-user-action:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.top-user-action--danger:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+/* Tablet (sidebar gone, mobile nav active) */
 @media (max-width: 1024px) {
   .top-header {
     padding: 0 12px;
+    height: 52px;         /* slightly taller for touch */
+  }
+
+  /* 44px minimum touch targets (Apple HIG) */
+  .top-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .top-avatar-btn {
+    width: 40px;
+    height: 40px;
   }
 
   .top-header-sub {
-    max-width: 170px;
+    max-width: 160px;
+  }
+}
+
+/* Portrait phone ≤ 680px */
+@media (max-width: 680px) {
+  .top-header {
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .top-header-sub {
+    max-width: 90px;
+  }
+
+  .top-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .top-avatar-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Very small phones — hide subtitle to free space for actions */
+@media (max-width: 480px) {
+  .top-header-sep,
+  .top-header-sub {
+    display: none;
+  }
+
+  .top-header-main {
+    font-size: 13.5px;
+  }
+}
+
+/* Tiny phones — hide title entirely, just show logo area + actions */
+@media (max-width: 360px) {
+  .top-header-title {
+    display: none;
+  }
+
+  .top-header {
+    padding: 0 8px;
   }
 }

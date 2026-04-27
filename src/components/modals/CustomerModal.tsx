@@ -34,6 +34,7 @@ export function CustomerModal() {
   const [customerType, setCustomerType] = useState<'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash'>('Monthly');
   const [hasCommission, setHasCommission] = useState(false);
   const [requiresDc, setRequiresDc] = useState(false);
+  const [hasBillNo, setHasBillNo] = useState(false);
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
 
@@ -57,6 +58,7 @@ export function CustomerModal() {
         setCustomerType(customer.type);
         setHasCommission(customer.hasCommission);
         setRequiresDc(customer.requiresDc);
+        setHasBillNo(customer.hasBillNo === true);
         setNotes(customer.notes);
         setIsActive(customer.isActive);
 
@@ -69,6 +71,7 @@ export function CustomerModal() {
       setCustomerType('Monthly');
       setHasCommission(false);
       setRequiresDc(false);
+      setHasBillNo(false);
       setNotes('');
       setIsActive(true);
       setCommissionWorkers([]);
@@ -195,6 +198,7 @@ export function CustomerModal() {
         type: customerType,
         hasCommission,
         requiresDc,
+        hasBillNo,
         notes: notes.trim(),
         isActive,
       };
@@ -303,6 +307,17 @@ export function CustomerModal() {
                 onChange={setRequiresDc}
                 label="Requires DC"
                 id="requires-dc"
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <div className="checkbox-group">
+              <ToggleSwitch
+                checked={hasBillNo}
+                onChange={setHasBillNo}
+                label="Has Bill No"
+                id="has-bill-no"
               />
             </div>
           </div>

@@ -16,7 +16,7 @@
   .toast-container {
     right: 12px;
     left: 12px;
-    bottom: calc(var(--mobile-nav-height) + 12px);
+    bottom: 20px;
   }
 
   .toast-container .toast {

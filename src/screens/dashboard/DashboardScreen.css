@@ -225,12 +225,12 @@
   padding: 4px 0;
 }
 
-/* ── Redesigned payment breakdown rows ───────────────── */
+/* ── Payment breakdown rows — single-line layout ─────── */
 .pb-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+  gap: 10px;
+  padding: 9px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -239,8 +239,8 @@
 }
 
 .pb-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -250,40 +250,44 @@
 .pb-dot.mode-bank   { background: var(--amber); }
 .pb-dot.mode-cheque { background: var(--red); }
 
-.pb-row-info {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.pb-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-
 .pb-row-label {
   font-size: 12.5px;
   font-weight: 500;
   color: var(--text);
-}
-
-.pb-row-right {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+  min-width: 44px;
   flex-shrink: 0;
 }
+
+/* Track fills remaining space between label and pct/val */
+.pb-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-sunk);
+  overflow: hidden;
+  margin: 0 4px;
+}
+
+.pb-fill {
+  height: 100%;
+  width: var(--pb-w, 0%);
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+
+.pb-fill.mode-cash   { background: var(--green); opacity: 0.8; }
+.pb-fill.mode-upi    { background: var(--accent); opacity: 0.8; }
+.pb-fill.mode-bank   { background: var(--amber); opacity: 0.8; }
+.pb-fill.mode-cheque { background: var(--red); opacity: 0.8; }
 
 .pb-row-pct {
   font-size: 11px;
   color: var(--text-faint);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  min-width: 30px;
+  min-width: 28px;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .pb-row-val {
@@ -292,28 +296,10 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text);
-  min-width: 64px;
+  min-width: 68px;
   text-align: right;
+  flex-shrink: 0;
 }
-
-.pb-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--bg-sunk);
-  overflow: hidden;
-}
-
-.pb-fill {
-  height: 100%;
-  width: var(--pb-w, 0%);
-  border-radius: inherit;
-  transition: width 0.35s ease;
-}
-
-.pb-fill.mode-cash   { background: var(--green); opacity: 0.75; }
-.pb-fill.mode-upi    { background: var(--accent); opacity: 0.75; }
-.pb-fill.mode-bank   { background: var(--amber); opacity: 0.75; }
-.pb-fill.mode-cheque { background: var(--red); opacity: 0.75; }
 
 .customer-balances {
   display: grid;
@@ -450,9 +436,36 @@
 }
 
 .customer-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 13.5px;
   line-height: 1.3;
   font-weight: 500;
+}
+
+.customer-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.customer-health-dot.excellent {
+  background: var(--green);
+}
+
+.customer-health-dot.good {
+  background: var(--accent);
+}
+
+.customer-health-dot.attention {
+  background: var(--amber);
+}
+
+.customer-health-dot.risk {
+  background: var(--red);
 }
 
 .customer-code {
@@ -554,6 +567,18 @@
   .customer-search {
     width: 100%;
   }
+
+  /* Reduce customer table min-width so tablets fit without scrolling */
+  .customer-table {
+    min-width: 640px;
+  }
+
+  .customer-table thead th,
+  .customer-table tbody td,
+  .customer-table tfoot td {
+    padding: 9px 10px;
+    font-size: 12.5px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -599,4 +624,52 @@
   .period-cards {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 480px) {
+  .customer-table {
+    min-width: 480px;
+  }
+
+  .customer-table thead th,
+  .customer-table tbody td,
+  .customer-table tfoot td {
+    padding: 8px 8px;
+    font-size: 12px;
+  }
+}
+
+/* ── Trend badges ─────────────────────────────────────────── */
+.period-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.period-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.period-trend.trend-pos {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.period-trend.trend-neg {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.period-trend.trend-neu {
+  color: var(--text-faint);
+  background: var(--bg-input);
 }

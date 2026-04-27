@@ -28,6 +28,7 @@ model Customer {
   type           String    @db.VarChar(20)
   hasCommission  Boolean   @default(false)
   requiresDc     Boolean   @default(false)
+  hasBillNo      Boolean   @default(false)
   advanceBalance Float     @default(0)
   notes          String    @default("")
   isActive       Boolean   @default(true)
@@ -77,11 +78,18 @@ model Job {
   isSpotWork       Boolean   @default(false)
   jobCardId        String?   @db.VarChar(30)
   jobCardLine      Int?
+  billNo           String?   @db.VarChar(40)
   dcNo             String?   @db.VarChar(40)
   vehicleNo        String?   @db.VarChar(40)
   dcDate           String?   @db.VarChar(10)
   dcApproval       Boolean?
   rmpHandler       String?   @db.VarChar(20)
+  jobFlowType          String?   @db.VarChar(20)
+  externalDc           Boolean?  @default(false)
+  agentName            String?   @db.VarChar(120)
+  agentCommissionAmount Float?   @default(0)
+  agentTdsAmount        Float?   @default(0)
+  agentSettlementPaidAmount Float? @default(0)
   notes            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -92,6 +100,7 @@ model Job {
   @@index([customerId, date])
   @@index([commissionWorkerId])
   @@index([jobCardId])
+  @@index([billNo])
   @@map("jobs")
 }
 
