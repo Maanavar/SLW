@@ -26,24 +26,34 @@ export function Badge({
 }
 
 /**
- * Status Badge - Shows job/payment status
+ * Status Badge - Shows job/payment status with a leading dot
  */
 export function StatusBadge({ status }: { status: string }) {
   let variant: BadgeProps['variant'] = 'default';
+  let label = status;
 
-  if (status.toLowerCase() === 'paid') {
+  const s = status.toLowerCase();
+  if (s === 'paid') {
     variant = 'success';
-  } else if (status.toLowerCase() === 'partially paid') {
-    variant = 'info';
-  } else if (status.toLowerCase() === 'pending') {
+    label = 'Paid';
+  } else if (s === 'partially paid') {
     variant = 'warning';
-  } else if (status.toLowerCase() === 'completed') {
+    label = 'Partial';
+  } else if (s === 'pending') {
+    variant = 'error';
+    label = 'Pending';
+  } else if (s === 'completed') {
     variant = 'success';
-  } else if (status.toLowerCase().includes('approved')) {
-    variant = 'info';
+  } else if (s.includes('approved')) {
+    variant = 'primary';
   }
 
-  return <Badge label={status} variant={variant} />;
+  return (
+    <span className={`badge badge-${variant} badge-md status-badge`}>
+      <span className="status-dot" aria-hidden="true" />
+      {label}
+    </span>
+  );
 }
 
 /**
@@ -55,7 +65,7 @@ export function TypeBadge({ type }: { type: string }) {
   if (type === 'Monthly') {
     variant = 'primary';
   } else if (type === 'Invoice') {
-    variant = 'info';
+    variant = 'default';
   } else if (type === 'Party-Credit') {
     variant = 'warning';
   } else if (type === 'Cash') {

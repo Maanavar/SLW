@@ -16,7 +16,7 @@ export function Toast({
   message,
   type,
   onDismiss,
-  duration = 4000,
+  duration = 2400,
 }: ToastProps) {
   useEffect(() => {
     const timer = setTimeout(() => onDismiss(id), duration);
@@ -55,7 +55,7 @@ export function Toast({
         className="toast-close"
         onClick={() => onDismiss(id)}
         type="button"
-        title="Dismiss (closes automatically in 4 seconds)"
+        title="Dismiss"
         aria-label={`Dismiss ${title}`}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

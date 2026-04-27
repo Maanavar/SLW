@@ -1,15 +1,13 @@
-/**
- * Customer Balances Table Component
- * Shows customer balances with type filtering
- */
-
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
-import { DataTable, Column } from '@/components/ui/DataTable';
-import { TypeBadge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { calculateCustomerBalance, getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
+import { rankCustomers } from '@/lib/customerRankingUtils';
 import { Customer } from '@/types';
+
+type CustomerTypeFilter = 'All' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
+type BalanceSortKey = 'customer' | 'finalBill' | 'balance';
 
 interface CustomerBalance extends Customer {
   ourIncome: number;
@@ -20,216 +18,271 @@ interface CustomerBalance extends Customer {
   advance: number;
 }
 
-export function CustomerBalancesTable() {
+interface CustomerBalancesTableProps {
+  showFilters?: boolean;
+  dateRange?: { from: string; to: string };
+}
+
+function getTypeBadgeClass(type: Customer['type']): string {
+  if (type === 'Monthly') return 'type-monthly';
+  if (type === 'Invoice') return 'type-invoice';
+  if (type === 'Party-Credit') return 'type-party-credit';
+  return 'type-cash';
+}
+
+export function CustomerBalancesTable({ showFilters = true, dateRange }: CustomerBalancesTableProps) {
   const { getActiveCustomers, jobs, payments } = useDataStore();
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<CustomerTypeFilter>('All');
   const [customerFilter, setCustomerFilter] = useState('');
+  const [sortState, setSortState] = useState<{ key: BalanceSortKey; order: 'asc' | 'desc' }>({
+    key: 'balance',
+    order: 'desc',
+  });
 
-  const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
+  const customers = useMemo(
+    () => getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name)),
+    [getActiveCustomers]
+  );
+  const customerRankMap = useMemo(() => {
+    const entries = rankCustomers(jobs, payments, customers);
+    return new Map(entries.map((entry) => [entry.customerId, entry]));
+  }, [jobs, payments, customers]);
 
-  // Calculate balances for all customers
-  const customersWithBalances: CustomerBalance[] = useMemo(() => {
-    return customers.map((customer) => {
-      const customerJobs = jobs.filter((j) => j.customerId === customer.id);
-      const customerPayments = payments.filter((p) => p.customerId === customer.id);
+  const scopedJobs = useMemo(
+    () =>
+      dateRange ? jobs.filter((job) => job.date >= dateRange.from && job.date <= dateRange.to) : jobs,
+    [jobs, dateRange]
+  );
 
-      const totalNet = customerJobs.reduce((sum, j) => sum + getJobNetValue(j), 0);
-      const totalCommission = customerJobs.reduce(
-        (sum, j) => sum + (Number(j.commissionAmount) || 0),
-        0
-      );
-      const paidFromJobs = customerJobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
-      const paidFromPayments = customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-      const balance = calculateCustomerBalance(jobs, payments, customer.id);
+  const balances = useMemo<CustomerBalance[]>(() => {
+    return customers
+      .map((customer) => {
+        const customerJobs = scopedJobs.filter((job) => job.customerId === customer.id);
+        const ourIncome = customerJobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
+        const commission = customerJobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
+        const finalBill = ourIncome + commission;
+        const paidAmount = customerJobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
+        const balance = finalBill - paidAmount;
+        const advance = customer.advanceBalance || 0;
 
-      return {
-        ...customer,
-        ourIncome: totalNet,
-        commission: totalCommission,
-        finalBill: totalNet + totalCommission,
-        paidAmount: paidFromJobs + paidFromPayments,
-        balance,
-        advance: customer.advanceBalance || 0,
-      };
+        return {
+          ...customer,
+          ourIncome,
+          commission,
+          finalBill,
+          paidAmount,
+          balance,
+          advance,
+        };
+      })
+      .filter((customer) => customer.balance !== 0 || customer.advance > 0);
+  }, [customers, scopedJobs]);
+
+  const filtered = useMemo(() => {
+    const q = customerFilter.trim().toLowerCase();
+    return balances
+      .filter((customer) => (typeFilter === 'All' ? true : customer.type === typeFilter))
+      .filter((customer) => {
+        if (!q) return true;
+        return (
+          customer.name.toLowerCase().includes(q) ||
+          customer.shortCode.toLowerCase().includes(q)
+        );
+      });
+  }, [balances, customerFilter, typeFilter]);
+  const sorted = useMemo(() => {
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
+    const direction = sortState.order === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sortState.key === 'customer') return collator.compare(a.name, b.name) * direction;
+      if (sortState.key === 'finalBill') return (a.finalBill - b.finalBill) * direction;
+      return (a.balance - b.balance) * direction;
     });
-  }, [customers, jobs, payments]);
+  }, [filtered, sortState]);
+  const toggleSort = (key: BalanceSortKey) => {
+    setSortState((prev) =>
+      prev.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'customer' ? 'asc' : 'desc' }
+    );
+  };
+  const sortMark = (key: BalanceSortKey) => {
+    if (sortState.key !== key) return '↕';
+    return sortState.order === 'asc' ? '↑' : '↓';
+  };
 
-  // Filter by type if selected, and show only customers with non-zero balance or advance
-  const filteredByType = typeFilter
-    ? customersWithBalances.filter((c) => c.type === typeFilter && (c.balance !== 0 || c.advance > 0))
-    : customersWithBalances.filter((c) => c.balance !== 0 || c.advance > 0);
-
-  const filtered = customerFilter.trim()
-    ? filteredByType.filter((c) =>
-        c.name.toLowerCase().includes(customerFilter.trim().toLowerCase())
-      )
-    : filteredByType;
-
-  // Sort by balance (highest first)
-  const sorted = [...filtered].sort((a, b) => b.balance - a.balance);
-
-  const columns: Column<CustomerBalance>[] = [
-    {
-      key: 'name',
-      label: 'Customer Name',
-      sortable: true,
-    },
-    {
-      key: 'shortCode',
-      label: 'Code',
-      sortable: true,
-    },
-    {
-      key: 'type',
-      label: 'Type',
-      render: (value) => <TypeBadge type={value as string} />,
-    },
-    {
-      key: 'ourIncome',
-      label: 'Our Income',
-      render: (value) => formatCurrency(value as number),
-    },
-    {
-      key: 'commission',
-      label: 'Commission',
-      render: (value) => formatCurrency(value as number),
-    },
-    {
-      key: 'finalBill',
-      label: 'Final Bill',
-      render: (value) => formatCurrency(value as number),
-    },
-    {
-      key: 'paidAmount',
-      label: 'Paid Amount',
-      render: (value) => formatCurrency(value as number),
-    },
-    {
-      key: 'advance',
-      label: 'Advance',
-      render: (value) => {
-        const advance = value as number;
-        return advance > 0 ? <span className="balance-negative">{formatCurrency(advance)}</span> : <span>-</span>;
-      },
-    },
-    {
-      key: 'balance',
-      label: 'Balance',
-      render: (value) => {
-        const balance = value as number;
-        const className = balance > 0 ? 'balance-positive' : balance < 0 ? 'balance-negative' : '';
-        return <span className={className}>{formatCurrency(balance)}</span>;
-      },
-    },
-  ];
-
-
-  // Calculate summary
-  const summary = useMemo(() => {
+  const totals = useMemo(() => {
     return {
-      totalCustomers: sorted.length,
-      ourIncome: sorted.reduce((sum, c) => sum + c.ourIncome, 0),
-      commission: sorted.reduce((sum, c) => sum + c.commission, 0),
-      finalBill: sorted.reduce((sum, c) => sum + c.finalBill, 0),
-      totalPaid: sorted.reduce((sum, c) => sum + c.paidAmount, 0),
-      totalBalance: sorted.reduce((sum, c) => sum + c.balance, 0),
+      customers: sorted.length,
+      ourIncome: sorted.reduce((sum, customer) => sum + customer.ourIncome, 0),
+      commission: sorted.reduce((sum, customer) => sum + customer.commission, 0),
+      finalBill: sorted.reduce((sum, customer) => sum + customer.finalBill, 0),
+      paidAmount: sorted.reduce((sum, customer) => sum + customer.paidAmount, 0),
+      advance: sorted.reduce((sum, customer) => sum + customer.advance, 0),
+      balance: sorted.reduce((sum, customer) => sum + customer.balance, 0),
     };
   }, [sorted]);
 
   return (
-    <div className="customer-balances">
-      <div className="balances-header">
-        <div className="balances-title-wrap">
-          <h3 className="balances-title">Open Customer Positions</h3>
-          <p className="balances-subtitle">Showing customers with non-zero balance or advance.</p>
-        </div>
-        <div className="type-filters">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Filter customer name..."
-            value={customerFilter}
-            onChange={(e) => setCustomerFilter(e.target.value)}
-          />
-          <div className="type-filter-buttons">
-            <button
-              className={`filter-btn ${!typeFilter ? 'active' : ''}`}
-              onClick={() => setTypeFilter(null)}
-              type="button"
+    <section className="customer-balances">
+      {showFilters ? (
+        <div className="customer-balances-head">
+          <h2 className="customer-balances-title">Customer balances</h2>
+
+          <div className="customer-balances-toolbar">
+            <label className="customer-search" aria-label="Search customer">
+              <Icon name="search" width={14} height={14} className="search-icon" />
+              <input
+                type="text"
+                className="customer-search-input"
+                placeholder="Search customer..."
+                value={customerFilter}
+                onChange={(event) => setCustomerFilter(event.target.value)}
+              />
+            </label>
+
+            <select
+              className="customer-type-select"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value as CustomerTypeFilter)}
+              aria-label="Filter customer type"
             >
-              All Types
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Monthly' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Monthly')}
-              type="button"
-            >
-              Monthly
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Invoice' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Invoice')}
-              type="button"
-            >
-              Invoice
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Party-Credit' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Party-Credit')}
-              type="button"
-            >
-              Party-Credit
-            </button>
-            <button
-              className={`filter-btn ${typeFilter === 'Cash' ? 'active' : ''}`}
-              onClick={() => setTypeFilter('Cash')}
-              type="button"
-            >
-              Cash
-            </button>
+              <option value="All">All</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Invoice">Invoice</option>
+              <option value="Party-Credit">Party-Credit</option>
+              <option value="Cash">Cash</option>
+            </select>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="balances-summary">
-        <div className="summary-stat">
-          <span className="stat-label">Customers:</span>
-          <span className="stat-value">{summary.totalCustomers}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="stat-label">Our Income:</span>
-          <span className="stat-value">{formatCurrency(summary.ourIncome)}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="stat-label">Commission:</span>
-          <span className="stat-value">{formatCurrency(summary.commission)}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="stat-label">Final Bill:</span>
-          <span className="stat-value">{formatCurrency(summary.finalBill)}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="stat-label">Total Paid:</span>
-          <span className="stat-value">{formatCurrency(summary.totalPaid)}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="stat-label">Total Balance:</span>
-          <span className={`stat-value ${summary.totalBalance > 0 ? 'positive' : summary.totalBalance < 0 ? 'negative' : ''}`}>
-            {formatCurrency(summary.totalBalance)}
-          </span>
-        </div>
-      </div>
+      <div className="customer-table-wrap">
+        <table className="customer-table">
+          <thead>
+            <tr>
+              <th
+                className={`slw-sortable-th${sortState.key === 'customer' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('customer')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('customer');
+                  }
+                }}
+              >
+                Customer {sortMark('customer')}
+              </th>
+              <th>Type</th>
+              <th className="numeric">Our Income</th>
+              <th className="numeric">Commission</th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'finalBill' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('finalBill')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('finalBill');
+                  }
+                }}
+              >
+                Final Bill {sortMark('finalBill')}
+              </th>
+              <th className="numeric">Paid</th>
+              <th className="numeric">Advance</th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'balance' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('balance')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('balance');
+                  }
+                }}
+              >
+                Balance {sortMark('balance')}
+              </th>
+            </tr>
+          </thead>
 
-      <div className="balances-table">
-        <DataTable<CustomerBalance>
-          columns={columns}
-          data={sorted}
-          keyFn={(item) => item.id}
-          sortBy="balance"
-          sortOrder="desc"
-          emptyMessage={customers.length === 0 ? 'No customers yet — add customers to track balances' : 'All customers are fully settled'}
-        />
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr className="table-empty-row">
+                <td colSpan={8}>No customers found for this filter.</td>
+              </tr>
+            ) : (
+              sorted.map((customer) => {
+                const balanceClass =
+                  customer.balance > 0 ? 'amount-balance' : customer.balance < 0 ? 'amount-paid' : '';
+                return (
+                  <tr key={customer.id}>
+                    <td>
+                      <div className="customer-name">
+                        {customerRankMap.get(customer.id) ? (
+                          <span
+                            className={`customer-health-dot ${
+                              customerRankMap.get(customer.id)!.healthLabel === 'Excellent'
+                                ? 'excellent'
+                                : customerRankMap.get(customer.id)!.healthLabel === 'Good'
+                                  ? 'good'
+                                  : customerRankMap.get(customer.id)!.healthLabel === 'Attention'
+                                    ? 'attention'
+                                    : 'risk'
+                            }`}
+                            title={`Health: ${customerRankMap.get(customer.id)!.healthScore}/100 - ${
+                              customerRankMap.get(customer.id)!.healthLabel
+                            }`}
+                          />
+                        ) : null}
+                        <span>{customer.name}</span>
+                      </div>
+                      <div className="customer-code">{customer.shortCode || '-'}</div>
+                    </td>
+                    <td>
+                      <span className={`customer-type-badge ${getTypeBadgeClass(customer.type)}`}>
+                        {customer.type}
+                      </span>
+                    </td>
+                    <td className="numeric">{formatCurrency(customer.ourIncome)}</td>
+                    <td className="numeric">{formatCurrency(customer.commission)}</td>
+                    <td className="numeric">{formatCurrency(customer.finalBill)}</td>
+                    <td className="numeric amount-paid">{formatCurrency(customer.paidAmount)}</td>
+                    <td className="numeric">
+                      {customer.advance > 0 ? (
+                        <span className="amount-advance">{formatCurrency(customer.advance)}</span>
+                      ) : (
+                        <span className="muted-dash">-</span>
+                      )}
+                    </td>
+                    <td className={`numeric ${balanceClass}`}>{formatCurrency(customer.balance)}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+
+          {sorted.length > 0 ? (
+            <tfoot>
+              <tr>
+                <td>{totals.customers} customers</td>
+                <td />
+                <td className="numeric">{formatCurrency(totals.ourIncome)}</td>
+                <td className="numeric">{formatCurrency(totals.commission)}</td>
+                <td className="numeric">{formatCurrency(totals.finalBill)}</td>
+                <td className="numeric">{formatCurrency(totals.paidAmount)}</td>
+                <td className="numeric">{formatCurrency(totals.advance)}</td>
+                <td className="numeric">{formatCurrency(totals.balance)}</td>
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
       </div>
-    </div>
+    </section>
   );
 }

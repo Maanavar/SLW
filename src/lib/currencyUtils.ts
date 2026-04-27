@@ -9,5 +9,11 @@
  * @returns Formatted currency string
  */
 export function formatCurrency(amount: number | string): string {
-  return '₹' + Number(amount).toLocaleString('en-IN');
+  const value = Number(amount) || 0;
+  const hasFraction = Math.abs(value % 1) > 0.0001;
+  const formatter = new Intl.NumberFormat('en-IN', {
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: hasFraction ? 2 : 0,
+  });
+  return `₹${formatter.format(value)}`;
 }

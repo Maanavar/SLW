@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
 import { PAYMENT_MODES } from '../domain/constants';
@@ -38,6 +39,18 @@ const createPaymentSchema = z.object({
 });
 
 const updatePaymentSchema = createPaymentSchema.partial();
+
+function normalizeBreakdown(
+  breakdown: z.infer<typeof breakdownSchema>
+): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
+  if (breakdown === undefined) {
+    return undefined;
+  }
+  if (breakdown === null) {
+    return Prisma.JsonNull;
+  }
+  return breakdown as Prisma.InputJsonValue;
+}
 
 const router = Router();
 
@@ -95,9 +108,21 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createPaymentSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    const data: Prisma.PaymentUncheckedCreateInput = {
+      customerId: payload.customerId,
+      amount: payload.amount,
+      date: payload.date,
+      paymentMode: payload.paymentMode,
+      breakdown: normalizeBreakdown(payload.breakdown),
+      referenceNumber: payload.referenceNumber ?? null,
+      paymentForMonth: payload.paymentForMonth ?? null,
+      paymentForDate: payload.paymentForDate ?? null,
+      paymentForFromDate: payload.paymentForFromDate ?? null,
+      notes: payload.notes ?? null,
+    };
 
     const created = await prisma.payment.create({
-      data: payload,
+      data,
     });
 
     await createActivityLog({
@@ -128,9 +153,24 @@ router.put(
       throw new HttpError(404, 'Payment not found');
     }
 
+    const data: Prisma.PaymentUncheckedUpdateInput = {};
+
+    if (payload.customerId !== undefined) data.customerId = payload.customerId;
+    if (payload.amount !== undefined) data.amount = payload.amount;
+    if (payload.date !== undefined) data.date = payload.date;
+    if (payload.paymentMode !== undefined) data.paymentMode = payload.paymentMode;
+    if (payload.breakdown !== undefined) data.breakdown = normalizeBreakdown(payload.breakdown);
+    if (payload.referenceNumber !== undefined) data.referenceNumber = payload.referenceNumber;
+    if (payload.paymentForMonth !== undefined) data.paymentForMonth = payload.paymentForMonth;
+    if (payload.paymentForDate !== undefined) data.paymentForDate = payload.paymentForDate;
+    if (payload.paymentForFromDate !== undefined) {
+      data.paymentForFromDate = payload.paymentForFromDate;
+    }
+    if (payload.notes !== undefined) data.notes = payload.notes;
+
     const updated = await prisma.payment.update({
       where: { id: paymentId },
-      data: payload,
+      data,
     });
 
     await createActivityLog({

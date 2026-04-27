@@ -43,33 +43,73 @@ function isWagenAutosCustomer(customer?: Customer | null) {
   if (!customer) return false;
   const name = normalizeCustomerValue(customer.name);
   const shortCode = normalizeCustomerValue(customer.shortCode);
-  return shortCode === 'wp' || name === 'wagen autos';
+  return shortCode === 'wgn' || name === 'wagen autos';
 }
 
-function isMahalingamCustomer(customer?: Customer | null) {
+function isRmpCustomer(customer?: Customer | null) {
   if (!customer) return false;
-  const name = normalizeCustomerValue(customer.name).replace(/[^a-z]/g, '');
   const shortCode = normalizeCustomerValue(customer.shortCode);
-  return (
-    shortCode === 'nm' ||
-    name.includes('mahaling') ||
-    name.includes('mahalinham')
-  );
+  const name = normalizeCustomerValue(customer.name);
+  return shortCode === 'rmp' || name.includes('ramani motors');
+}
+
+function isRamaniCarsCustomer(customer?: Customer | null) {
+  if (!customer) return false;
+  const shortCode = normalizeCustomerValue(customer.shortCode);
+  const name = normalizeCustomerValue(customer.name);
+  return shortCode === 'ww' || name.includes('ramani cars');
+}
+
+function isAgentFlowCustomer(customer?: Customer | null) {
+  return isRmpCustomer(customer) || isRamaniCarsCustomer(customer);
 }
 
 function shouldShowDcFields(customer?: Customer | null) {
   if (!customer) return false;
-  return isDcApplicableCustomer(customer) || isMahalingamCustomer(customer);
+  return isDcApplicableCustomer(customer);
 }
 
 function formatCustomerLabel(customer: Customer) {
-  const code = String(customer.shortCode || '').trim();
-  const safeCode = code !== '0' ? code : '';
-  return safeCode ? `${customer.name} (${safeCode})` : customer.name;
+  return customer.name;
+}
+
+type SubmittedSortKey = 'customer' | 'lines' | 'finalBill' | 'status';
+
+const paymentStatusOrder: Record<'Paid' | 'Pending' | 'Partially Paid', number> = {
+  Pending: 0,
+  'Partially Paid': 1,
+  Paid: 2,
+};
+
+function createEmptyJobLine(): JobLineState {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    workType: null,
+    quantity: 1,
+    amount: '',
+    commission: '',
+    commissionWorker: null,
+  };
+}
+
+function isJobLineComplete(line: JobLineState) {
+  return Boolean(line.workType) && line.quantity > 0 && (parseFloat(line.amount) || 0) > 0;
+}
+
+function isPristineJobLine(line: JobLineState) {
+  const commissionRaw = (line.commission || '').trim();
+  const commissionValue = commissionRaw === '' ? 0 : parseFloat(commissionRaw) || 0;
+  return (
+    !line.workType &&
+    line.quantity === 1 &&
+    (line.amount || '').trim() === '' &&
+    commissionValue === 0 &&
+    !line.commissionWorker
+  );
 }
 
 export function JobForm() {
-  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer } = useDataStore();
+  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer, addCustomer, addWorkType, workTypes } = useDataStore();
   const toast = useToast();
 
   const customers = useMemo(() => {
@@ -86,24 +126,22 @@ export function JobForm() {
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [jobDate, setJobDate] = useState(getLocalDateString(new Date()));
-  const [jobLines, setJobLines] = useState<JobLineState[]>([
-    {
-      id: Date.now().toString(),
-      workType: null,
-      quantity: 1,
-      amount: '',
-      commission: '',
-      commissionWorker: null,
-    },
-  ]);
+  const [jobLines, setJobLines] = useState<JobLineState[]>([createEmptyJobLine()]);
   const [workMode, setWorkMode] = useState<'Workshop' | 'Spot'>('Workshop');
-  const [paymentMode, setPaymentMode] = useState('');
+  const [paymentMode, setPaymentMode] = useState('Cash');
   const [dcNo, setDcNo] = useState('');
+  const [billNo, setBillNo] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [dcDate, setDcDate] = useState('');
   const [dcApproval, setDcApproval] = useState(false);
+  const [rmpHandler, setRmpHandler] = useState<'Bhai' | 'Raja' | null>(null);
+  const [jobFlowType, setJobFlowType] = useState<'slw_work' | 'agent_work'>('slw_work');
+  const [externalDc, setExternalDc] = useState(false);
+  const [agentName, setAgentName] = useState('');
+  const [agentCommissionAmount, setAgentCommissionAmount] = useState('');
+  const [agentTdsAmount, setAgentTdsAmount] = useState('');
+  const [paymentIntent, setPaymentIntent] = useState<'now' | 'later'>('later');
   const [paidAmount, setPaidAmount] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Pending');
   const [notes, setNotes] = useState('');
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,11 +152,36 @@ export function JobForm() {
   const [editingJobIds, setEditingJobIds] = useState<number[]>([]);
   const [cardCommissionWorker, setCardCommissionWorker] = useState<CommissionWorker | null>(null);
   const [cardTotalCommission, setCardTotalCommission] = useState('');
+  const [submittedSort, setSubmittedSort] = useState<{ key: SubmittedSortKey; order: 'asc' | 'desc' }>(
+    { key: 'finalBill', order: 'desc' }
+  );
+
+  // Quick-add state
+  const [quickAddMode, setQuickAddMode] = useState<null | 'customer' | 'worktype'>(null);
+  const [quickAddPendingLineId, setQuickAddPendingLineId] = useState<string | null>(null);
+  const [qaSubmitting, setQaSubmitting] = useState(false);
+  // Customer form
+  const [qaCustomerName, setQaCustomerName] = useState('');
+  const [qaCustomerCode, setQaCustomerCode] = useState('');
+  const [qaCustomerType, setQaCustomerType] = useState<Customer['type']>('Monthly');
+  const [qaCustomerHasComm, setQaCustomerHasComm] = useState(false);
+  const [qaCustomerRequiresDc, setQaCustomerRequiresDc] = useState(false);
+  const [qaCustomerHasBillNo, setQaCustomerHasBillNo] = useState(false);
+  // Work type form
+  const [qaWorkTypeName, setQaWorkTypeName] = useState('');
+  const [qaWorkTypeCode, setQaWorkTypeCode] = useState('');
+  const [qaWorkTypeCategory, setQaWorkTypeCategory] = useState('');
+  const [qaWorkTypeRate, setQaWorkTypeRate] = useState('');
 
   const showDcFields = shouldShowDcFields(selectedCustomer);
+  const showBillNoField = selectedCustomer?.hasBillNo === true;
   const showVehicleNoField = showDcFields && !isWagenAutosCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
-  const commissionWorkersForCustomer = showCommissionFields && selectedCustomer
+  const showRmpHandlerField = isRmpCustomer(selectedCustomer);
+  const showAgentFlowFields = isAgentFlowCustomer(selectedCustomer);
+  const useWorkerCommission = showCommissionFields && jobFlowType === 'slw_work';
+  const useAgentCommission = showAgentFlowFields && jobFlowType === 'agent_work';
+  const commissionWorkersForCustomer = useWorkerCommission && selectedCustomer
     ? getCommissionWorkersForCustomer(selectedCustomer.id)
     : [];
   const sortedCommissionWorkers = useMemo(
@@ -127,7 +190,7 @@ export function JobForm() {
   );
 
   useEffect(() => {
-    if (!showCommissionFields) {
+    if (!useWorkerCommission) {
       return;
     }
 
@@ -145,19 +208,48 @@ export function JobForm() {
     ) {
       setCardCommissionWorker(null);
     }
-  }, [showCommissionFields, sortedCommissionWorkers, cardCommissionWorker]);
+  }, [useWorkerCommission, sortedCommissionWorkers, cardCommissionWorker]);
+
+  useEffect(() => {
+    if (!showRmpHandlerField || !rmpHandler || !useWorkerCommission) return;
+    const matched = sortedCommissionWorkers.find(
+      (w) => w.name.trim().toLowerCase() === rmpHandler.toLowerCase()
+    );
+    if (matched) setCardCommissionWorker(matched);
+  }, [rmpHandler, showRmpHandlerField, sortedCommissionWorkers, useWorkerCommission]);
+
+  useEffect(() => {
+    if (!showRmpHandlerField) setRmpHandler(null);
+  }, [showRmpHandlerField]);
+
+  useEffect(() => {
+    if (!showAgentFlowFields) {
+      setJobFlowType('slw_work');
+      setExternalDc(false);
+      setAgentName('');
+      setAgentCommissionAmount('');
+      setAgentTdsAmount('');
+    }
+  }, [showAgentFlowFields]);
 
   const totalAmount = jobLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
-  const totalCommission = parseFloat(cardTotalCommission) || 0;
+  const totalCommission = useWorkerCommission ? (parseFloat(cardTotalCommission) || 0) : 0;
+  const agentCommission = useAgentCommission ? (parseFloat(agentCommissionAmount) || 0) : 0;
+  const agentTds = useAgentCommission ? (parseFloat(agentTdsAmount) || 0) : 0;
+  const agentNetPayable = useAgentCommission ? Math.max(0, totalAmount - agentCommission - agentTds) : 0;
   const summary = {
     totalAmount,
     totalCommission,
     netValue: totalAmount,
     finalValue: totalAmount + totalCommission,
+    agentCommission,
+    agentTds,
+    agentNetPayable,
   };
+  const nextCardId = useMemo(() => generateJobCardId(jobDate, jobs), [jobDate, jobs]);
 
   useEffect(() => {
-    if (!showCommissionFields) {
+    if (!useWorkerCommission) {
       setJobLines((prev) =>
         prev.map((line) => ({
           ...line,
@@ -168,13 +260,38 @@ export function JobForm() {
       setCardCommissionWorker(null);
       setCardTotalCommission('');
     }
-  }, [showCommissionFields]);
+  }, [useWorkerCommission]);
+
+  useEffect(() => {
+    if (dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate) {
+      setDcApproval(false);
+    }
+  }, [dcNo, vehicleNo, dcDate, showVehicleNoField]);
+
+  useEffect(() => {
+    if (!showBillNoField && billNo) {
+      setBillNo('');
+    }
+  }, [showBillNoField, billNo]);
 
   useEffect(() => {
     if (!showVehicleNoField && vehicleNo) {
       setVehicleNo('');
     }
   }, [showVehicleNoField, vehicleNo]);
+
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    const deferredTypes = ['Monthly', 'Invoice', 'Party-Credit'];
+    setPaymentIntent(deferredTypes.includes(selectedCustomer.type) ? 'later' : 'now');
+    setPaidAmount('');
+  }, [selectedCustomer?.id]);
+
+  useEffect(() => {
+    if (paymentIntent === 'later') {
+      setPaidAmount('');
+    }
+  }, [paymentIntent]);
 
   const todayJobCards = useMemo(() => {
     let filteredJobs = jobs;
@@ -202,8 +319,42 @@ export function JobForm() {
     () => todayJobCards.find((group) => group.key === selectedCardKey) || null,
     [todayJobCards, selectedCardKey]
   );
-  const [showReceivedBreakdown, setShowReceivedBreakdown] = useState(false);
+  const sortedTodayJobCards = useMemo(() => {
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
+    const direction = submittedSort.order === 'asc' ? 1 : -1;
+    return [...todayJobCards].sort((a, b) => {
+      if (submittedSort.key === 'customer') {
+        const aName = getCustomer(a.primary.customerId)?.name || 'Unknown';
+        const bName = getCustomer(b.primary.customerId)?.name || 'Unknown';
+        return collator.compare(aName, bName) * direction;
+      }
 
+      if (submittedSort.key === 'lines') {
+        return (a.jobs.length - b.jobs.length) * direction;
+      }
+
+      if (submittedSort.key === 'finalBill') {
+        const aBill = getJobCardPaymentSummary(a.jobs).finalBill;
+        const bBill = getJobCardPaymentSummary(b.jobs).finalBill;
+        return (aBill - bBill) * direction;
+      }
+
+      const aStatus = getJobCardPaymentSummary(a.jobs).status;
+      const bStatus = getJobCardPaymentSummary(b.jobs).status;
+      return (paymentStatusOrder[aStatus] - paymentStatusOrder[bStatus]) * direction;
+    });
+  }, [todayJobCards, submittedSort, getCustomer]);
+  const toggleSubmittedSort = (key: SubmittedSortKey) => {
+    setSubmittedSort((prev) =>
+      prev.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'finalBill' ? 'desc' : 'asc' }
+    );
+  };
+  const submittedSortMark = (key: SubmittedSortKey) => {
+    if (submittedSort.key !== key) return '↕';
+    return submittedSort.order === 'asc' ? '↑' : '↓';
+  };
   const jobCardsMetrics = useMemo(() => {
     let totalFinal = 0;
     let totalPaid = 0;
@@ -247,17 +398,7 @@ export function JobForm() {
       : 'No JobCards found for the selected date range.';
 
   const handleAddLine = () => {
-    setJobLines([
-      ...jobLines,
-      {
-        id: Date.now().toString(),
-        workType: null,
-        quantity: 1,
-        amount: '',
-        commission: '',
-        commissionWorker: null,
-      },
-    ]);
+    setJobLines((prev) => [...prev, createEmptyJobLine()]);
   };
 
   const handleRemoveLine = (id: string) => {
@@ -270,23 +411,39 @@ export function JobForm() {
   };
 
   const handleLineChange = (updatedLine: JobLineState) => {
-    // If commission is not applicable, set it to 0
-    const finalLine = showCommissionFields ? updatedLine : { ...updatedLine, commission: '0' };
-    setJobLines(jobLines.map((line) => (line.id === updatedLine.id ? finalLine : line)));
-  };
+    setJobLines((prev) => {
+      const updatedIndex = prev.findIndex((line) => line.id === updatedLine.id);
+      if (updatedIndex === -1) {
+        return prev;
+      }
 
-  const handleCommissionWorkerChange = (lineId: string, worker: CommissionWorker | null) => {
-    setJobLines((prev) =>
-      prev.map((line) => (line.id === lineId ? { ...line, commissionWorker: worker } : line))
-    );
-  };
+      // If commission is not applicable, keep it at 0.
+      const finalLine = useWorkerCommission ? updatedLine : { ...updatedLine, commission: '0' };
+      const nextLines = prev.map((line) => (line.id === updatedLine.id ? finalLine : line));
 
-  const handleCommissionValueChange = (lineId: string, value: string) => {
-    setJobLines((prev) => prev.map((line) => (line.id === lineId ? { ...line, commission: value } : line)));
+      const isLastLine = updatedIndex === nextLines.length - 1;
+      if (!isLastLine || !isJobLineComplete(finalLine)) {
+        return nextLines;
+      }
+
+      const hasIncompleteLine = nextLines.some((line) => !isJobLineComplete(line));
+      if (hasIncompleteLine) {
+        return nextLines;
+      }
+
+      return [...nextLines, createEmptyJobLine()];
+    });
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const linesForSubmit = [...jobLines];
+    while (
+      linesForSubmit.length > 1 &&
+      isPristineJobLine(linesForSubmit[linesForSubmit.length - 1])
+    ) {
+      linesForSubmit.pop();
+    }
 
     if (!selectedCustomer) {
       toast.error('Error', 'Please select a customer');
@@ -303,93 +460,170 @@ export function JobForm() {
       return;
     }
 
-    if (jobLines.some((line) => !line.workType)) {
+    if (linesForSubmit.some((line) => !line.workType)) {
       toast.error('Error', 'All job lines must have a work type selected');
       return;
     }
 
-    if (jobLines.some((line) => !line.quantity || line.quantity <= 0)) {
+    if (linesForSubmit.some((line) => !line.quantity || line.quantity <= 0)) {
       toast.error('Error', 'All job lines must include quantity greater than 0');
       return;
     }
 
-    if (jobLines.some((line) => !line.amount || parseFloat(line.amount) <= 0)) {
+    if (linesForSubmit.some((line) => !line.amount || parseFloat(line.amount) <= 0)) {
       toast.error('Error', 'All job lines must include amount');
       return;
     }
 
-    if (showCommissionFields && (cardTotalCommission === '' || parseFloat(cardTotalCommission) < 0)) {
+    if (useWorkerCommission && (cardTotalCommission === '' || parseFloat(cardTotalCommission) < 0)) {
       toast.error('Error', 'Please enter commission amount');
       return;
     }
 
-    if (showCommissionFields && sortedCommissionWorkers.length === 0) {
+    if (useWorkerCommission && sortedCommissionWorkers.length === 0) {
       toast.error('Error', 'Add at least one commission worker for this customer');
       return;
     }
 
-    if (showCommissionFields && !cardCommissionWorker) {
+    if (useWorkerCommission && !cardCommissionWorker) {
       toast.error('Error', 'Select one commission worker for this job card');
       return;
     }
 
-    if (paymentStatus === 'Paid' && (!paidAmount || parseFloat(paidAmount) <= 0)) {
-      toast.error('Error', 'Paid amount is mandatory when status is Paid');
+    if (useAgentCommission && !agentName.trim()) {
+      toast.error('Error', 'Enter agent name');
       return;
     }
 
-    if (paymentStatus === 'Paid' && !paymentMode) {
-      toast.error('Error', 'Payment mode is mandatory when status is Paid');
+    if (useAgentCommission && (agentCommissionAmount === '' || Number(agentCommissionAmount) < 0)) {
+      toast.error('Error', 'Enter valid agent commission amount');
+      return;
+    }
+
+    if (useAgentCommission && (agentTdsAmount === '' || Number(agentTdsAmount) < 0)) {
+      toast.error('Error', 'Enter valid TDS amount');
+      return;
+    }
+
+    if (paymentIntent === 'now' && (!paidAmount || parseFloat(paidAmount) <= 0)) {
+      toast.error('Error', 'Enter paid amount, or switch to "Pay later"');
+      return;
+    }
+
+    if (paymentIntent === 'now' && !paymentMode) {
+      toast.error('Error', 'Payment mode is mandatory when paying now');
       return;
     }
 
     if (showDcFields && !dcNo.trim() && !dcApproval) {
-      toast.error('Error', 'For DC customers, enter DC Number or mark Approved');
+      toast.error('Error', 'For DC customers, enter DC Number or mark DC waived');
+      return;
+    }
+
+    if (showBillNoField && !billNo.trim()) {
+      toast.error('Error', 'Bill number is required for this customer');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const enteredPaidAmount = paymentStatus === 'Paid' ? parseFloat(paidAmount) || 0 : 0;
-      const resolvedPaymentStatus =
-        paymentStatus === 'Paid'
-          ? getPaymentStatusFromAmounts(enteredPaidAmount, summary.finalValue)
-          : 'Pending';
+      const enteredPaidAmount = paymentIntent === 'now' ? parseFloat(paidAmount) || 0 : 0;
+
+      const allocateAcrossLines = (lineFinalBills: number[], totalPaid: number) => {
+        let remaining = Math.max(0, totalPaid);
+        return lineFinalBills.map((due) => {
+          const alloc = Math.min(Math.max(0, due), remaining);
+          remaining -= alloc;
+          return alloc;
+        });
+      };
+
+      const lineFinalBills = linesForSubmit.map((line, index) => {
+        const lineAmount = parseFloat(line.amount) || 0;
+        const lineCommission = useWorkerCommission && index === 0 ? parseFloat(cardTotalCommission) || 0 : 0;
+        return lineAmount + lineCommission;
+      });
+
+      const paidAllocations =
+        paymentIntent === 'now' && enteredPaidAmount > 0
+          ? allocateAcrossLines(lineFinalBills, enteredPaidAmount)
+          : linesForSubmit.map(() => 0);
 
       if (isEditMode && editingJobIds.length > 0) {
-        // EDIT MODE: Update existing jobs
+        // EDIT MODE: sync lines (update existing, create added lines, delete removed lines)
+        const existingJobs = editingJobIds
+          .map((id) => jobs.find((j) => j.id === id))
+          .filter((j): j is Job => Boolean(j));
+        const baseCardId = existingJobs[0]?.jobCardId;
+
+        const buildLinePayload = (line: JobLineState, index: number) => ({
+          date: jobDate,
+          workTypeName: line.workType!.name,
+          workName: line.workType!.shortCode,
+          quantity: line.quantity,
+          amount: parseFloat(line.amount),
+          commissionAmount: useWorkerCommission && index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+          commissionWorkerId:
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+          commissionWorkerName:
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.name : undefined,
+          netAmount: parseFloat(line.amount),
+          paymentStatus:
+            paymentIntent === 'now' && enteredPaidAmount > 0
+              ? getPaymentStatusFromAmounts(paidAllocations[index] || 0, lineFinalBills[index] || 0)
+              : 'Pending',
+          paymentMode:
+            paymentIntent === 'now' && (paidAllocations[index] || 0) > 0 ? paymentMode : undefined,
+          paidAmount: paymentIntent === 'now' ? (paidAllocations[index] || 0) : 0,
+          workMode,
+          isSpotWork: workMode === 'Spot',
+          notes: notes.trim() || undefined,
+          jobCardId: baseCardId || undefined,
+          jobCardLine: index + 1,
+          billNo: showBillNoField ? billNo.trim() : undefined,
+          ...(showDcFields && {
+            dcNo: dcNo || undefined,
+            vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
+            dcDate: dcDate || undefined,
+            dcApproval: dcApproval || undefined,
+          }),
+          rmpHandler: showRmpHandlerField ? rmpHandler : null,
+          jobFlowType,
+          externalDc: useAgentCommission ? externalDc : false,
+          agentName: useAgentCommission ? agentName.trim() : undefined,
+          agentCommissionAmount: useAgentCommission && index === 0 ? Number(agentCommissionAmount) || 0 : 0,
+          agentTdsAmount: useAgentCommission && index === 0 ? Number(agentTdsAmount) || 0 : 0,
+          agentSettlementPaidAmount:
+            index === 0
+              ? (existingJobs[0]?.agentSettlementPaidAmount || 0)
+              : 0,
+        });
+
+        const commonLength = Math.min(existingJobs.length, linesForSubmit.length);
         await Promise.all(
-          jobLines.map((line, index) =>
-            updateJob(editingJobIds[index], {
-              date: jobDate,
-              workTypeName: line.workType!.name,
-              workName: line.workType!.shortCode,
-              quantity: line.quantity,
-              amount: parseFloat(line.amount),
-              commissionAmount: index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
-              commissionWorkerId:
-                showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
-              commissionWorkerName:
-                showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
-              netAmount: parseFloat(line.amount),
-              paymentStatus: resolvedPaymentStatus,
-              paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
-              paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
-              workMode,
-              isSpotWork: workMode === 'Spot',
-              notes: notes.trim() ? notes.trim() : null,
-              ...(showDcFields && {
-                dcNo: dcNo || undefined,
-                vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
-                dcDate: dcDate || undefined,
-                dcApproval: dcApproval || undefined,
-              }),
-            })
-          )
+          linesForSubmit.slice(0, commonLength).map((line, index) => updateJob(existingJobs[index].id, buildLinePayload(line, index)))
         );
 
+        if (linesForSubmit.length > existingJobs.length) {
+          const extraLines = linesForSubmit.slice(existingJobs.length);
+          await addJobsBulk(
+            extraLines.map((line, extraIndex) => {
+              const index = existingJobs.length + extraIndex;
+              return {
+                customerId: selectedCustomer.id,
+                ...buildLinePayload(line, index),
+              };
+            })
+          );
+        }
+
+        if (existingJobs.length > linesForSubmit.length) {
+          const removedJobs = existingJobs.slice(linesForSubmit.length);
+          await Promise.all(removedJobs.map((job) => deleteJob(job.id)));
+        }
+
         // Create advance if payment > finalBill (edit mode)
-        if (selectedCustomer && paymentStatus === 'Paid') {
+        if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
           if (overpayment > 0) {
@@ -402,7 +636,7 @@ export function JobForm() {
         }
 
         // Deduct advance if it was applied during edit
-        if (selectedCustomer && paymentStatus === 'Paid') {
+        if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const currentAdvance = selectedCustomer.advanceBalance || 0;
           const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
@@ -420,41 +654,53 @@ export function JobForm() {
       } else {
         // CREATE MODE: Create new jobs
         const jobCardId = generateJobCardId(jobDate, jobs);
-        const newJobs: Job[] = jobLines.map((line, index) => ({
+        const newJobs: Job[] = linesForSubmit.map((line, index) => ({
           id: Date.now() + Math.random(),
           customerId: selectedCustomer.id,
           workTypeName: line.workType!.name,
           workName: line.workType!.shortCode,
           quantity: line.quantity,
           amount: parseFloat(line.amount),
-          commissionAmount: index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
+          commissionAmount: useWorkerCommission && index === 0 ? parseFloat(cardTotalCommission) || 0 : 0,
           commissionWorkerId:
-            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.id : undefined,
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.id : undefined,
           commissionWorkerName:
-            showCommissionFields && cardCommissionWorker ? cardCommissionWorker.name : undefined,
+            useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.name : undefined,
           netAmount: parseFloat(line.amount),
           date: jobDate,
-          paymentStatus: resolvedPaymentStatus,
-          paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
-          paidAmount: index === 0 && enteredPaidAmount > 0 ? enteredPaidAmount : 0,
+          paymentStatus:
+            paymentIntent === 'now' && enteredPaidAmount > 0
+              ? getPaymentStatusFromAmounts(paidAllocations[index] || 0, lineFinalBills[index] || 0)
+              : 'Pending',
+          paymentMode:
+            paymentIntent === 'now' && (paidAllocations[index] || 0) > 0 ? paymentMode : undefined,
+          paidAmount: paymentIntent === 'now' ? (paidAllocations[index] || 0) : 0,
           workMode,
           isSpotWork: workMode === 'Spot',
           jobCardId,
           jobCardLine: index + 1,
-          notes: notes.trim() ? notes.trim() : null,
+          billNo: showBillNoField ? billNo.trim() : undefined,
+          notes: notes.trim() || undefined,
           ...(showDcFields && {
             dcNo: dcNo || undefined,
             vehicleNo: showVehicleNoField ? vehicleNo || undefined : undefined,
             dcDate: dcDate || undefined,
             dcApproval: dcApproval || undefined,
           }),
+          rmpHandler: showRmpHandlerField ? rmpHandler : null,
+          jobFlowType,
+          externalDc: useAgentCommission ? externalDc : false,
+          agentName: useAgentCommission ? agentName.trim() : undefined,
+          agentCommissionAmount: useAgentCommission && index === 0 ? Number(agentCommissionAmount) || 0 : 0,
+          agentTdsAmount: useAgentCommission && index === 0 ? Number(agentTdsAmount) || 0 : 0,
+          agentSettlementPaidAmount: 0,
         }));
 
         await addJobsBulk(newJobs);
         toast.success('Success', `JobCard ${jobCardId} created with ${newJobs.length} line(s)`);
 
         // Create advance if payment > finalBill
-        if (selectedCustomer && paymentStatus === 'Paid') {
+        if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
           if (overpayment > 0) {
@@ -468,7 +714,7 @@ export function JobForm() {
       }
 
       // Deduct advance if it was applied during creation (edit mode)
-      if (selectedCustomer && paymentStatus === 'Paid') {
+      if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
         const enteredPaidAmount = parseFloat(paidAmount) || 0;
         const currentAdvance = selectedCustomer.advanceBalance || 0;
         const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
@@ -479,27 +725,24 @@ export function JobForm() {
         }
       }
 
-      // Reset form
-      setJobDate(getLocalDateString(new Date()));
+      // Reset form (keep current date per design spec)
       setSelectedCustomer(null);
-      setJobLines([
-        {
-          id: Date.now().toString(),
-          workType: null,
-          quantity: 1,
-          amount: '',
-          commission: '',
-          commissionWorker: null,
-        },
-      ]);
+      setJobLines([createEmptyJobLine()]);
       setWorkMode('Workshop');
-      setPaymentMode('');
+      setPaymentIntent('later');
+      setPaymentMode('Cash');
       setPaidAmount('');
-      setPaymentStatus('Pending');
       setDcNo('');
+      setBillNo('');
       setVehicleNo('');
       setDcDate('');
       setDcApproval(false);
+      setRmpHandler(null);
+      setJobFlowType('slw_work');
+      setExternalDc(false);
+      setAgentName('');
+      setAgentCommissionAmount('');
+      setAgentTdsAmount('');
       setNotes('');
       setCardCommissionWorker(null);
       setCardTotalCommission('');
@@ -521,6 +764,11 @@ export function JobForm() {
     setSelectedCustomer(editCustomer);
     setJobDate(cardToEdit.primary.date);
     setWorkMode(cardToEdit.primary.workMode as 'Workshop' | 'Spot');
+    setJobFlowType(cardToEdit.primary.jobFlowType || 'slw_work');
+    setExternalDc(Boolean(cardToEdit.primary.externalDc));
+    setAgentName(cardToEdit.primary.agentName || '');
+    setAgentCommissionAmount(String(cardToEdit.primary.agentCommissionAmount || 0));
+    setAgentTdsAmount(String(cardToEdit.primary.agentTdsAmount || 0));
 
     const lines: JobLineState[] = cardToEdit.jobs.map((job) => {
       const legacyDistribution = (job as Job & { commissionDistribution?: Array<{ workerId?: number }> })
@@ -555,6 +803,7 @@ export function JobForm() {
 
     setJobLines(lines);
     setNotes(cardToEdit.primary.notes || '');
+    setBillNo(cardToEdit.primary.billNo || '');
 
     // Set card-level commission from first job
     const firstJob = cardToEdit.primary;
@@ -571,16 +820,25 @@ export function JobForm() {
       setDcApproval(cardToEdit.primary.dcApproval || false);
     }
 
+    if (cardToEdit.primary.rmpHandler) {
+      setRmpHandler(cardToEdit.primary.rmpHandler as 'Bhai' | 'Raja');
+    } else {
+      setRmpHandler(null);
+    }
+
     if (cardToEdit.primary.paymentStatus === 'Paid' && cardToEdit.primary.paidAmount) {
-      setPaymentStatus('Paid');
+      setPaymentIntent('now');
       setPaidAmount(String(cardToEdit.primary.paidAmount));
-      setPaymentMode(cardToEdit.primary.paymentMode || '');
+      setPaymentMode(cardToEdit.primary.paymentMode || 'Cash');
+    } else {
+      setPaymentIntent('later');
+      setPaidAmount('');
     }
 
     setEditingJobIds(cardToEdit.jobs.map((j) => j.id));
     setIsEditMode(true);
     setSelectedCardKey(null);
-    toast.success('Info', 'Edit mode activated. Modify and click "Update Job" to save changes.');
+    toast.success('Info', 'Edit mode activated. Modify and click "Update job card" to save changes.');
   };
 
   const handleDeleteCard = async (card?: typeof selectedTodayCard) => {
@@ -606,622 +864,768 @@ export function JobForm() {
     }
   };
 
+  const openQuickAddCustomer = (searchText: string) => {
+    setQaCustomerName(searchText);
+    setQaCustomerCode('');
+    setQaCustomerType('Monthly');
+    setQaCustomerHasComm(false);
+    setQaCustomerRequiresDc(false);
+    setQaCustomerHasBillNo(false);
+    setQuickAddMode('customer');
+  };
+
+  const openQuickAddWorkType = (lineId: string, searchText: string) => {
+    const cats = [...new Set(workTypes.map((wt) => wt.category).filter(Boolean))].sort() as string[];
+    setQaWorkTypeName(searchText);
+    setQaWorkTypeCode('');
+    setQaWorkTypeCategory(cats[0] || '');
+    setQaWorkTypeRate('');
+    setQuickAddPendingLineId(lineId);
+    setQuickAddMode('worktype');
+  };
+
+  const handleQuickAddCustomerSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!qaCustomerName.trim()) return;
+    setQaSubmitting(true);
+    try {
+      const newCustomer = await addCustomer({
+        name: qaCustomerName.trim(),
+        shortCode: qaCustomerCode.trim(),
+        type: qaCustomerType,
+        hasCommission: qaCustomerHasComm,
+        requiresDc: qaCustomerRequiresDc,
+        hasBillNo: qaCustomerHasBillNo,
+        advanceBalance: 0,
+        notes: '',
+        isActive: true,
+      });
+      setSelectedCustomer(newCustomer);
+      setQuickAddMode(null);
+      toast.success('Customer added', `"${newCustomer.name}" created and selected`);
+    } catch {
+      toast.error('Error', 'Failed to create customer');
+    } finally {
+      setQaSubmitting(false);
+    }
+  };
+
+  const handleQuickAddWorkTypeSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!qaWorkTypeName.trim()) return;
+    setQaSubmitting(true);
+    try {
+      const newWorkType = await addWorkType({
+        name: qaWorkTypeName.trim(),
+        shortCode: qaWorkTypeCode.trim(),
+        category: qaWorkTypeCategory.trim() || 'General',
+        defaultUnit: 'nos',
+        defaultRate: parseFloat(qaWorkTypeRate) || 0,
+        isActive: true,
+      });
+      if (quickAddPendingLineId) {
+        setJobLines((prev) =>
+          prev.map((line) =>
+            line.id === quickAddPendingLineId ? { ...line, workType: newWorkType } : line
+          )
+        );
+      }
+      setQuickAddMode(null);
+      setQuickAddPendingLineId(null);
+      toast.success('Work type added', `"${newWorkType.name}" created and selected`);
+    } catch {
+      toast.error('Error', 'Failed to create work type');
+    } finally {
+      setQaSubmitting(false);
+    }
+  };
+
+  const handleReset = () => {
+    setSelectedCustomer(null);
+    setJobLines([createEmptyJobLine()]);
+    setWorkMode('Workshop');
+    setPaymentIntent('later');
+    setPaymentMode('Cash');
+    setPaidAmount('');
+    setDcNo('');
+    setBillNo('');
+    setVehicleNo('');
+    setDcDate('');
+    setDcApproval(false);
+    setRmpHandler(null);
+    setJobFlowType('slw_work');
+    setAgentName('');
+    setAgentCommissionAmount('');
+    setAgentTdsAmount('');
+    setNotes('');
+    setCardCommissionWorker(null);
+    setCardTotalCommission('');
+    if (isEditMode) {
+      setIsEditMode(false);
+      setEditingJobIds([]);
+    }
+    setSelectedCardKey(null);
+  };
+
+  const typeVariant: Record<string, string> = {
+    Monthly: 'flag-monthly',
+    Invoice: 'flag-invoice',
+    'Party-Credit': 'flag-party-credit',
+    Cash: 'flag-cash',
+  };
+
+  const todayLabel = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+
   return (
-    <div className="job-form-container">
-      <div className="jobs-page-header">
-        <div className="jobs-title-block">
-          <h2 className="form-title">{isEditMode ? 'Update JobCard' : 'Create Job'}</h2>
-          <p className="jobs-subtitle">
-            Capture job details quickly and track recent cards in one place.
-          </p>
+    <div className="jobs-screen">
+
+      {/* Page header */}
+      <div className="jobs-pg-header">
+        <div>
+          <h1 className="jobs-pg-title">Jobs <span className="jobs-pg-title-ta tamil">வேலைகள்</span></h1>
+          <p className="jobs-pg-desc">Create daily job cards and review today's work</p>
         </div>
-        <span className="jobs-header-pill">{jobCardsMetrics.count} cards in view</span>
+        <span className="jobs-cardid-badge">
+          Card ID <strong className="mono">{nextCardId}</strong>
+        </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="job-form">
-        <div className="form-section">
-          <h3 className="section-title job-info-title">Job Information</h3>
+      {/* 2-column top grid */}
+      <div className="jobs-top-grid">
 
-          <div className="header-fields">
-            <div className="form-group">
-              <label className="form-label">Customer</label>
-              <SearchableSelect
-                items={customers}
-                value={selectedCustomer}
-                onChange={setSelectedCustomer}
-                getLabel={formatCustomerLabel}
-                getKey={(c) => String(c.id)}
-                placeholder="Select customer..."
-                disabled={isEditMode}
-              />
-              {isEditMode && (
-                <p className="form-hint-text">Customer cannot be changed when editing a job card.</p>
-              )}
-              {selectedCustomer && (
-                <>
-                  {(selectedCustomer.advanceBalance || 0) > 0 && (
-                    <div className="customer-info-banner advance">
-                      ✓ {selectedCustomer.name} has {formatCurrency(selectedCustomer.advanceBalance)} advance. Apply it in the Payment section below.
-                    </div>
-                  )}
-                  {(() => {
-                    const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer.id);
-                    const outstanding = customerJobs.reduce((sum, job) => {
-                      const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                      const jobPaid = job.paidAmount || 0;
-                      return sum + Math.max(0, jobDue - jobPaid);
-                    }, 0);
-
-                    if (outstanding > 0) {
-                      return (
-                        <div className="customer-info-banner backlog">
-                          ⚠️ {selectedCustomer.name} has {formatCurrency(outstanding)} backlog (unpaid previous jobs).
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                </>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="job-date">
-                Date
-              </label>
-              <input
-                id="job-date"
-                type="date"
-                className="form-input"
-                value={jobDate}
-                onChange={(e) => setJobDate(e.target.value)}
-                max={today}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Work Mode</label>
-              <div className="mode-buttons">
-                <button
-                  type="button"
-                  className={`mode-btn ${workMode === 'Workshop' ? 'active' : ''}`}
-                  onClick={() => setWorkMode('Workshop')}
-                >
-                  Workshop
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${workMode === 'Spot' ? 'active' : ''}`}
-                  onClick={() => setWorkMode('Spot')}
-                >
-                  Spot
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="form-section">
-          <div className="section-header">
-            <h3 className="section-title">Job Details</h3>
-            <button type="button" className="btn btn-secondary btn-add-line" onClick={handleAddLine}>
-              Add Line
-            </button>
+        {/* Left: New job card */}
+        <div className="njc-panel">
+          <div className="njc-head">
+            <span className="njc-heading">{isEditMode ? 'Update job card' : 'New job card'}</span>
+            <span className="njc-auto-id">Auto ID · <strong className="mono">{nextCardId}</strong></span>
           </div>
 
-          <div className="job-lines">
-            {jobLines.map((line, index) => (
-              <JobLine
-                key={line.id}
-                line={line}
-                onChange={handleLineChange}
-                onRemove={() => handleRemoveLine(line.id)}
-                lineNumber={index + 1}
-                showCommission={showCommissionFields}
-                showInlineWorker={false}
-                showInlineCommission={false}
-              />
-            ))}
-          </div>
+          <form onSubmit={handleSubmit} className="njc-body">
 
-          <div className="job-summary">
-            <div className="summary-item">
-              <span className="summary-label">Total Amount</span>
-              <span className="summary-value">{formatCurrency(summary.totalAmount)}</span>
-            </div>
-            {showCommissionFields && (
-              <>
-                <div className="summary-item">
-                  <span className="summary-label">Commission (Extra)</span>
-                  <span className="summary-value">{formatCurrency(summary.totalCommission)}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Final Bill (Amt + Comm)</span>
-                  <span className="summary-value">{formatCurrency(summary.finalValue)}</span>
-                </div>
-              </>
-            )}
-            <div className="summary-item">
-              <span className="summary-label">{showCommissionFields ? 'Our Net Income' : 'Total Value'}</span>
-              <span className="summary-value highlight">{formatCurrency(summary.netValue)}</span>
-            </div>
-          </div>
-        </div>
-
-        {showCommissionFields && (
-          <div className="form-section commission-assignment-section">
-            <div className="section-header">
-              <h3 className="section-title">Commission Assignment</h3>
-              <span className="commission-assignment-note">
-                One job card can be tagged to only one commission worker.
-              </span>
-            </div>
-
-            {sortedCommissionWorkers.length === 0 ? (
-              <p className="dc-validation-note">
-                No commission workers found for this customer. Add workers in Customer settings.
-              </p>
-            ) : (
-              <div className="commission-assignment-simple">
-                <div className="form-group">
-                  <label className="form-label">Commission Worker</label>
-                  <SearchableSelect
-                    items={sortedCommissionWorkers}
-                    value={cardCommissionWorker}
-                    onChange={setCardCommissionWorker}
-                    getLabel={(w) => w.name}
-                    getKey={(w) => String(w.id)}
-                    placeholder="Select worker..."
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Total Commission (INR)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={cardTotalCommission}
-                    onChange={(e) => setCardTotalCommission(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {showDcFields ? (
-          <div className="form-section dc-section">
-            <h3 className="section-title">Delivery Challan</h3>
-
-            <div className="dc-fields">
+            {/* Customer + Date */}
+            <div className="njc-row-2">
               <div className="form-group">
-                <label className="form-label" htmlFor="dc-no">
-                  DC Number
+                <label className="form-label">
+                  Customer <span className="req-star">*</span> <span className="label-ta tamil">வாடிக்கையாளர்</span>
                 </label>
-                <input
-                  id="dc-no"
-                  type="text"
-                  className="form-input"
-                  value={dcNo}
-                  onChange={(e) => setDcNo(e.target.value)}
-                  placeholder="DC number..."
+                <SearchableSelect
+                  items={customers}
+                  value={selectedCustomer}
+                  onChange={setSelectedCustomer}
+                  getLabel={formatCustomerLabel}
+                  getSearchText={(c) => `${c.name} ${String(c.shortCode || '').trim()}`}
+                  getKey={(c) => String(c.id)}
+                  placeholder="Search customer..."
+                  disabled={isEditMode}
+                  onAddNew={isEditMode ? undefined : openQuickAddCustomer}
                 />
+                {isEditMode && <p className="form-hint">Customer cannot be changed when editing.</p>}
               </div>
-
-              {showVehicleNoField ? (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="vehicle-no">
-                    Vehicle Number
-                  </label>
-                  <input
-                    id="vehicle-no"
-                    type="text"
-                    className="form-input"
-                    value={vehicleNo}
-                    onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-                    placeholder="Vehicle registration..."
-                  />
-                </div>
-              ) : null}
-
               <div className="form-group">
-                <label className="form-label" htmlFor="dc-date">
-                  DC Date
+                <label className="form-label" htmlFor="job-date">
+                  Job date <span className="label-ta tamil">தேதி</span>
                 </label>
                 <input
-                  id="dc-date"
+                  id="job-date"
                   type="date"
                   className="form-input"
-                  value={dcDate}
-                  onChange={(e) => setDcDate(e.target.value)}
+                  value={jobDate}
+                  onChange={(e) => setJobDate(e.target.value)}
                   max={today}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Mark as DC-Exempt</label>
-                <ToggleSwitch
-                  checked={dcApproval}
-                  onChange={setDcApproval}
-                  id="dc-approval"
-                  disabled={!!(dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate)}
+                  required
                 />
               </div>
             </div>
-            <p className="dc-validation-note">
-              Enter a DC Number, or toggle Mark as DC-Exempt if approved without one.
-            </p>
-          </div>
-        ) : null}
 
-        <div className="form-section">
-          <h3 className="section-title">Notes</h3>
+            {/* Customer flags */}
+            {selectedCustomer && (
+              <div className="customer-flags-row">
+                <span className={`cust-flag ${typeVariant[selectedCustomer.type] || 'flag-invoice'}`}>
+                  {selectedCustomer.type}
+                </span>
+                {showCommissionFields && <span className="cust-flag flag-commission">Commission</span>}
+                {showDcFields && <span className="cust-flag flag-dc">DC required</span>}
+                {showBillNoField && <span className="cust-flag">Bill No required</span>}
+                {showRmpHandlerField && <span className="cust-flag flag-rmp">RMP</span>}
+                {(selectedCustomer.advanceBalance || 0) > 0 && (
+                  <span className="cust-flag flag-advance">
+                    Advance {formatCurrency(selectedCustomer.advanceBalance || 0)}
+                  </span>
+                )}
+                {(() => {
+                  const outstanding = jobs
+                    .filter((j) => j.customerId === selectedCustomer.id)
+                    .reduce((sum, job) => {
+                      const due = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                      return sum + Math.max(0, due - (job.paidAmount || 0));
+                    }, 0);
+                  return outstanding > 0 ? (
+                    <span className="cust-flag flag-backlog">⚠ Backlog {formatCurrency(outstanding)}</span>
+                  ) : null;
+                })()}
+              </div>
+            )}
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="notes">
-              Notes
-            </label>
-            <textarea
-              id="notes"
-              className="form-textarea"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special instructions or remarks about this job card..."
-              rows={3}
-            />
-          </div>
-        </div>
-
-        <div className="form-section">
-          <h3 className="section-title">Payment</h3>
-
-          <div className="payment-fields">
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <div className="status-buttons">
-                <button
-                  type="button"
-                  className={`status-btn ${paymentStatus === 'Pending' ? 'active' : ''}`}
-                  onClick={() => {
-                    setPaymentStatus('Pending');
-                    setPaymentMode('');
-                    setPaidAmount('');
-                  }}
-                >
-                  Pending
+            <div className="work-lines-section">
+              <div className="work-lines-head">
+                <span className="work-lines-title">
+                  Work lines <span className="tamil work-lines-ta">வேலை வரிகள்</span>
+                </span>
+                {showBillNoField && (
+                  <div className="bill-no-inline">
+                    <label className="bill-no-label">Bill No <span className="req-star">*</span></label>
+                    <input
+                      type="text"
+                      className="bill-no-input mono"
+                      value={billNo}
+                      onChange={(e) => setBillNo(e.target.value)}
+                      placeholder="Bill number"
+                      maxLength={40}
+                      required={showBillNoField}
+                    />
+                  </div>
+                )}
+                <button type="button" className="btn-add-line" onClick={handleAddLine}>
+                  + Add line
                 </button>
-                <button
-                  type="button"
-                  className={`status-btn ${paymentStatus === 'Paid' ? 'active' : ''}`}
-                  onClick={() => setPaymentStatus('Paid')}
-                >
-                  Paid
-                </button>
+              </div>
+
+              <div className="work-lines-table">
+                <div className="wl-col-header">
+                  <span>WORK TYPE</span>
+                  <span>QTY</span>
+                  <span>AMOUNT ₹</span>
+                  <span />
+                </div>
+                {jobLines.map((line) => (
+                  <JobLine
+                    key={line.id}
+                    line={line}
+                    onChange={handleLineChange}
+                    onRemove={() => handleRemoveLine(line.id)}
+                    showCommission={false}
+                    showInlineWorker={false}
+                    showInlineCommission={false}
+                    onAddNewWorkType={(searchText) => openQuickAddWorkType(line.id, searchText)}
+                  />
+                ))}
               </div>
             </div>
 
-            {paymentStatus === 'Paid' ? (
+            {/* Flow type for Ramani customers */}
+            {showAgentFlowFields && (
               <div className="form-group">
-                <label className="form-label" htmlFor="paid-amount">
-                  Paid Amount (INR)
-                </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <label className="form-label">Flow Type</label>
+                <div className="seg-control">
+                  <button
+                    type="button"
+                    className={`seg-btn${jobFlowType === 'slw_work' ? ' active' : ''}`}
+                    onClick={() => setJobFlowType('slw_work')}
+                  >
+                    SLW Work (Pay Worker)
+                  </button>
+                  <button
+                    type="button"
+                    className={`seg-btn${jobFlowType === 'agent_work' ? ' active' : ''}`}
+                    onClick={() => setJobFlowType('agent_work')}
+                  >
+                    Agent Work (Receive Commission)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* RMP Handler (shown before commission block) */}
+            {showRmpHandlerField && (
+              <div className="form-group">
+                <label className="form-label">RMP Handler</label>
+                <div className="seg-control rmp-seg">
+                  {(['Bhai', 'Raja'] as const).map((handler) => (
+                    <button
+                      key={handler}
+                      type="button"
+                      className={`seg-btn${rmpHandler === handler ? ' active' : ''}`}
+                      onClick={() => setRmpHandler(rmpHandler === handler ? null : handler)}
+                    >
+                      {handler}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Agent commission flow */}
+            {useAgentCommission && (
+              <div className="commission-section">
+                <div className="form-group">
+                  <label className="dc-waived-toggle-label">
+                    <ToggleSwitch
+                      checked={externalDc}
+                      onChange={setExternalDc}
+                      id="agent-external-dc"
+                    />
+                    <span>External DC (not worked by SLW)</span>
+                  </label>
+                </div>
+                <div className="njc-row-2">
+                  <div className="form-group">
+                    <label className="form-label">Agent Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
+                      placeholder={isRmpCustomer(selectedCustomer) ? 'Sudha / Bhai / Raja' : 'Palanisamy'}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Our Commission (INR)</label>
+                    <input
+                      type="number"
+                      className="form-input mono"
+                      value={agentCommissionAmount}
+                      onChange={(e) => setAgentCommissionAmount(e.target.value)}
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                </div>
+                <div className="njc-row-2">
+                  <div className="form-group">
+                    <label className="form-label">TDS (INR)</label>
+                    <input
+                      type="number"
+                      className="form-input mono"
+                      value={agentTdsAmount}
+                      onChange={(e) => setAgentTdsAmount(e.target.value)}
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Net Payable To Agent</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      value={formatCurrency(summary.agentNetPayable)}
+                      disabled
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Worker commission assignment */}
+            {useWorkerCommission && (
+              <div className="commission-section">
+                {sortedCommissionWorkers.length === 0 ? (
+                  <p className="note-text">No commission workers for this customer. Add in Customer settings.</p>
+                ) : (
+                  <div className="njc-row-2">
+                    <div className="form-group">
+                      <label className="form-label">Commission Worker</label>
+                      <SearchableSelect
+                        items={sortedCommissionWorkers}
+                        value={cardCommissionWorker}
+                        onChange={setCardCommissionWorker}
+                        getLabel={(w) => w.name}
+                        getKey={(w) => String(w.id)}
+                        placeholder="Select worker..."
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Total Commission (INR)</label>
+                      <input
+                        type="number"
+                        className="form-input mono"
+                        value={cardTotalCommission}
+                        onChange={(e) => setCardTotalCommission(e.target.value)}
+                        placeholder="0"
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DC Panel */}
+            {showDcFields && (
+              <div className="dc-panel">
+                <div className="dc-panel-head">
+                  <span className="dc-panel-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                    Delivery Challan
+                  </span>
+                  <label className="dc-waived-toggle-label">
+                    <ToggleSwitch
+                      checked={dcApproval}
+                      onChange={setDcApproval}
+                      id="dc-approval"
+                      disabled={!!(dcNo.trim() || (showVehicleNoField && vehicleNo.trim()) || dcDate)}
+                    />
+                    <span>DC waived</span>
+                  </label>
+                </div>
+                <div className={`dc-fields-row${showVehicleNoField ? ' dc-fields-3' : ' dc-fields-2'}`}>
+                  <div className="form-group">
+                    <label className="form-label">DC No.</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      value={dcNo}
+                      onChange={(e) => setDcNo(e.target.value)}
+                      placeholder="DC1234"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="dc-date">DC Date</label>
+                    <input
+                      id="dc-date"
+                      type="date"
+                      className="form-input"
+                      value={dcDate}
+                      onChange={(e) => setDcDate(e.target.value)}
+                      max={today}
+                      title="DC Date"
+                    />
+                  </div>
+                  {showVehicleNoField && (
+                    <div className="form-group">
+                      <label className="form-label">Vehicle No.</label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        value={vehicleNo}
+                        onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
+                        placeholder="TN22AB1234"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Work mode + Payment intent */}
+            <div className="njc-row-2">
+              <div className="form-group">
+                <label className="form-label">Work mode</label>
+                <div className="seg-control">
+                  <button type="button" className={`seg-btn${workMode === 'Workshop' ? ' active' : ''}`} onClick={() => setWorkMode('Workshop')}>Workshop</button>
+                  <button type="button" className={`seg-btn${workMode === 'Spot' ? ' active' : ''}`} onClick={() => setWorkMode('Spot')}>Spot</button>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Payment</label>
+                <div className="seg-control">
+                  <button type="button" className={`seg-btn seg-btn--paid-now${paymentIntent === 'now' ? ' active' : ''}`} onClick={() => setPaymentIntent('now')}>Paid now</button>
+                  <button type="button" className={`seg-btn seg-btn--later${paymentIntent === 'later' ? ' active' : ''}`} onClick={() => setPaymentIntent('later')}>Pay later</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment mode + Paid amount — shown only when paying now */}
+            {paymentIntent === 'now' && (
+              <div className="njc-row-2">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="payment-mode">Payment mode</label>
+                  <select
+                    id="payment-mode"
+                    className="form-input"
+                    value={paymentMode}
+                    onChange={(e) => setPaymentMode(e.target.value)}
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Bank">Bank</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="paid-amount">
+                    Paid amount ₹
+                    {summary.finalValue > 0 && (
+                      <button
+                        type="button"
+                        className="fill-chip"
+                        onClick={() => {
+                          const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
+                          const backlog = customerJobs.reduce((sum, job) => {
+                            const due = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
+                            return sum + Math.max(0, due - (job.paidAmount || 0));
+                          }, 0);
+                          const advance = selectedCustomer?.advanceBalance || 0;
+                          setPaidAmount(String(Math.max(0, backlog + summary.finalValue - advance)));
+                        }}
+                      >
+                        Fill
+                      </button>
+                    )}
+                  </label>
                   <input
                     id="paid-amount"
                     type="number"
-                    className="form-input"
+                    className="form-input mono"
                     value={paidAmount}
                     onChange={(e) => setPaidAmount(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
+                    placeholder="0"
                     min="0"
-                    required={paymentStatus === 'Paid'}
-                    style={{ flex: 1 }}
                   />
-                  {summary.finalValue > 0 && (
-                    <button
-                      type="button"
-                      className="suggestion-chip suggestion-chip-action"
-                      onClick={() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          const jobPaid = job.paidAmount || 0;
-                          return sum + Math.max(0, jobDue - jobPaid);
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        const totalNeeded = backlog + summary.finalValue - advance;
-                        setPaidAmount(String(Math.max(0, totalNeeded)));
-                      }}
-                      title={(() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          const jobPaid = job.paidAmount || 0;
-                          return sum + Math.max(0, jobDue - jobPaid);
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        if (backlog > 0 && advance > 0) {
-                          return `Backlog (${formatCurrency(backlog)}) + Current (${formatCurrency(summary.finalValue)}) - Advance (${formatCurrency(advance)})`;
-                        } else if (backlog > 0) {
-                          return `Backlog (${formatCurrency(backlog)}) + Current (${formatCurrency(summary.finalValue)})`;
-                        } else if (advance > 0) {
-                          return `Current (${formatCurrency(summary.finalValue)}) - Advance (${formatCurrency(advance)})`;
-                        }
-                        return "Fill with total amount due";
-                      })()}
-                    >
-                      Fill: {(() => {
-                        const customerJobs = jobs.filter((j) => j.customerId === selectedCustomer?.id);
-                        const backlog = customerJobs.reduce((sum, job) => {
-                          const jobDue = (Number(job.amount) || 0) + (Number(job.commissionAmount) || 0);
-                          const jobPaid = job.paidAmount || 0;
-                          return sum + Math.max(0, jobDue - jobPaid);
-                        }, 0);
-                        const advance = selectedCustomer?.advanceBalance || 0;
-                        return formatCurrency(Math.max(0, backlog + summary.finalValue - advance));
-                      })()}
-                    </button>
-                  )}
                 </div>
               </div>
-            ) : null}
-
-            {paymentStatus === 'Paid' ? (
-              <div className="form-group">
-                <label className="form-label" htmlFor="payment-mode">
-                  Mode
-                </label>
-                <select
-                  id="payment-mode"
-                  className="form-input"
-                  value={paymentMode}
-                  onChange={(e) => setPaymentMode(e.target.value)}
-                  required={paymentStatus === 'Paid'}
-                >
-                  <option value="">Select mode...</option>
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank">Bank</option>
-                  <option value="Cheque">Cheque</option>
-                </select>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="form-actions">
-          <button
-            type="submit"
-            className="btn btn-primary btn-submit"
-            disabled={
-              !selectedCustomer ||
-              isSubmitting ||
-              (showCommissionFields && sortedCommissionWorkers.length === 0)
-            }
-          >
-            {isSubmitting ? (
-              <>
-                <span className="loading-spinner-inline" aria-hidden="true">⏳</span>
-                {isEditMode ? 'Updating...' : 'Creating...'}
-              </>
-            ) : (
-              isEditMode ? 'Update Job' : 'Create Job'
             )}
-          </button>
-          {isEditMode && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-submit"
-              onClick={() => {
-                setIsEditMode(false);
-                setEditingJobIds([]);
-                setJobDate(getLocalDateString(new Date()));
-                setSelectedCustomer(null);
-                setJobLines([
-                  {
-                    id: Date.now().toString(),
-                    workType: null,
-                    quantity: 1,
-                    amount: '',
-                    commission: '',
-                    commissionWorker: null,
-                  },
-                ]);
-                setWorkMode('Workshop');
-                setPaymentMode('');
-                setPaidAmount('');
-                setPaymentStatus('Pending');
-                setDcNo('');
-                setVehicleNo('');
-                setDcDate('');
-                setDcApproval(false);
-                setNotes('');
-                setCardCommissionWorker(null);
-                setCardTotalCommission('');
-                setSelectedCardKey(null);
-                toast.info('Info', 'Edit cancelled');
-              }}
-              disabled={isSubmitting}
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-      </form>
 
-      <div className="form-section today-cards-section">
-        <div className="jobs-cards-header">
-          <div className="jobs-cards-title-wrap">
-            <h3 className="section-title">JobCards</h3>
-            <p className="jobs-cards-subtitle">Click any card to view, edit, or delete.</p>
-          </div>
-          <div className="jobs-cards-toolbar">
-            <div className="jobs-cards-control-group">
-              <span className="jobs-control-label">Scope</span>
-              <div className="view-mode-buttons">
-                <button
-                  type="button"
-                  className={`mode-btn ${cardViewMode === 'today' ? 'active' : ''}`}
-                  onClick={() => {
-                    setCardViewMode('today');
-                    setSelectedCardKey(null);
-                  }}
-                  title="Show today's job cards only"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${cardViewMode === 'range' ? 'active' : ''}`}
-                  onClick={() => {
-                    setCardViewMode('range');
-                    setFilterStartDate(today);
-                    setFilterEndDate(today);
-                    setSelectedCardKey(null);
-                  }}
-                  title="Show job cards from a date range"
-                >
-                  Range
-                </button>
+            {/* Notes */}
+            <textarea
+              className="form-input form-textarea"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes..."
+              rows={3}
+            />
+
+            {/* Footer */}
+            <div className="njc-footer">
+              <button type="button" className="btn btn-secondary" onClick={handleReset} disabled={isSubmitting}>
+                Reset
+              </button>
+              <button
+                type="submit"
+                className="btn btn-accent"
+                disabled={!selectedCustomer || isSubmitting || (useWorkerCommission && sortedCommissionWorkers.length === 0)}
+              >
+                {isSubmitting ? (isEditMode ? 'Updating...' : 'Saving...') : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    {isEditMode ? 'Update job card' : 'Save job card'}
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Right: Card summary + Today's metrics */}
+        <div className="jobs-right-col">
+
+          {/* Card summary */}
+          <div className="njc-summary-card">
+            <div className="njc-summary-head">Card summary</div>
+            <div className="njc-summary-body">
+              <div className="summary-row">
+                <span className="summary-row-label">Total amount</span>
+                <span className="summary-row-val mono">{formatCurrency(summary.totalAmount)}</span>
+              </div>
+              <div className="summary-row">
+                <span className="summary-row-label">Commission</span>
+                <span className="summary-row-val mono is-amber">{formatCurrency(summary.totalCommission)}</span>
+              </div>
+              <div className="summary-sep" />
+              <div className="summary-row summary-row--final">
+                <span className="summary-row-label">Final bill</span>
+                <span className="summary-row-val mono summary-final-val">{formatCurrency(summary.finalValue)}</span>
+              </div>
+              <div className="summary-row">
+                <span className="summary-row-label">Net income</span>
+                <span className="summary-row-val mono is-green">{formatCurrency(summary.netValue)}</span>
               </div>
             </div>
+          </div>
 
-            {cardViewMode === 'range' && (
-              <div className="jobs-cards-control-group">
-                <span className="jobs-control-label">Range</span>
-                <div className="date-range-wrapper">
-                  <input
-                    type="date"
-                    className="filter-date-input"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    max={today}
-                    title="Start date"
-                    aria-label="From date"
-                  />
-                  <span className="date-range-separator">to</span>
-                  <input
-                    type="date"
-                    className="filter-date-input"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    max={today}
-                    title="End date"
-                    aria-label="To date"
-                  />
+          {/* Today's metrics */}
+          <div className="njc-metrics-card">
+            <div className="njc-metrics-head">
+              <span>Today's metrics</span>
+              <span className="metrics-date mono">{todayLabel}</span>
+            </div>
+            <div className="njc-metrics-body">
+              <div className="metrics-grid">
+                <div className="metrics-cell">
+                  <span className="metrics-label">Cards</span>
+                  <span className="metrics-val">{jobCardsMetrics.count}</span>
+                </div>
+                <div className="metrics-cell">
+                  <span className="metrics-label">Total bill</span>
+                  <span className="metrics-val mono">{formatCurrency(jobCardsMetrics.totalFinal)}</span>
+                </div>
+                <div className="metrics-cell">
+                  <span className="metrics-label">Paid</span>
+                  <span className="metrics-val mono is-green">{formatCurrency(jobCardsMetrics.totalPaid)}</span>
+                </div>
+                <div className="metrics-cell">
+                  <span className="metrics-label">Pending</span>
+                  <span className="metrics-val mono is-red">{formatCurrency(jobCardsMetrics.totalPending)}</span>
                 </div>
               </div>
-            )}
-
-            <span className="jobs-results-pill">{jobCardsMetrics.count} cards</span>
-          </div>
-        </div>
-
-        <div className="jobs-cards-summary">
-          <div className="jobs-card-stat">
-            <span className="jobs-card-stat-label">Final Bill</span>
-            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalFinal)}</span>
-          </div>
-          <div
-            className={`jobs-card-stat jobs-card-stat--positive${jobCardsMetrics.totalPaid > 0 ? ' jobs-card-stat--hoverable' : ''}`}
-            onMouseEnter={() => jobCardsMetrics.totalPaid > 0 && setShowReceivedBreakdown(true)}
-            onMouseLeave={() => setShowReceivedBreakdown(false)}
-          >
-            <span className="jobs-card-stat-label">Received</span>
-            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPaid)}</span>
-            {showReceivedBreakdown && (
-              <div className="jobs-stat-breakdown">
-                {jobCardsMetrics.byCash > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>Cash</span><span>{formatCurrency(jobCardsMetrics.byCash)}</span></div>
-                )}
-                {jobCardsMetrics.byBank > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>Bank</span><span>{formatCurrency(jobCardsMetrics.byBank)}</span></div>
-                )}
-                {jobCardsMetrics.byUPI > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>UPI</span><span>{formatCurrency(jobCardsMetrics.byUPI)}</span></div>
-                )}
-                {jobCardsMetrics.byCheque > 0 && (
-                  <div className="jobs-stat-breakdown-row"><span>Cheque</span><span>{formatCurrency(jobCardsMetrics.byCheque)}</span></div>
-                )}
+              <div className="metrics-sep" />
+              <div className="metrics-modes">
+                <span className="metrics-modes-title">Payment modes</span>
+                {[
+                  { label: 'Cash', value: jobCardsMetrics.byCash },
+                  { label: 'UPI', value: jobCardsMetrics.byUPI },
+                  { label: 'Bank', value: jobCardsMetrics.byBank },
+                  { label: 'Cheque', value: jobCardsMetrics.byCheque },
+                ].map(({ label, value }) => (
+                  <div key={label} className="metrics-mode-row">
+                    <span className="metrics-mode-label">{label}</span>
+                    <span className="metrics-mode-val mono">{formatCurrency(value)}</span>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
-          <div className="jobs-card-stat jobs-card-stat--warning">
-            <span className="jobs-card-stat-label">Pending</span>
-            <span className="jobs-card-stat-value">{formatCurrency(jobCardsMetrics.totalPending)}</span>
+        </div>
+      </div>
+
+      {/* Submitted today */}
+      <div className="submitted-section">
+        <div className="submitted-head">
+          <div className="submitted-head-left">
+            <span className="submitted-title">Submitted today</span>
+            <span className="submitted-count">{todayJobCards.length} cards</span>
+          </div>
+          <div className="seg-control">
+            <button type="button" className={`seg-btn${cardViewMode === 'today' ? ' active' : ''}`}
+              onClick={() => { setCardViewMode('today'); setSelectedCardKey(null); }}>Today</button>
+            <button type="button" className={`seg-btn${cardViewMode === 'range' ? ' active' : ''}`}
+              onClick={() => { setCardViewMode('range'); setFilterStartDate(today); setFilterEndDate(today); setSelectedCardKey(null); }}>Date Range</button>
           </div>
         </div>
 
-        {todayJobCards.length === 0 ? (
-          <p className="empty-today-cards">{emptyCardsMessage}</p>
-        ) : (
-          <div className="today-cards-list">
-            {todayJobCards.map((group) => {
-              const cardNo = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-              const customerName = getCustomer(group.primary.customerId)?.name || 'Unknown';
-              const payment = getJobCardPaymentSummary(group.jobs);
+        {cardViewMode === 'range' && (
+          <div className="date-range-row">
+            <input type="date" className="form-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} max={today} title="Start date" aria-label="Start date" />
+            <span className="date-range-sep">to</span>
+            <input type="date" className="form-input" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} max={today} title="End date" aria-label="End date" />
+          </div>
+        )}
 
-              return (
-                <div
-                  key={group.key}
-                  className="today-card-item today-card-item-clickable"
-                  onClick={() => setSelectedCardKey(group.key)}
+        <div className="submitted-table-wrap">
+          <table className="submitted-table">
+            <thead>
+              <tr>
+                <th>CARD</th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'customer' ? ' is-active' : ''}`}
                   role="button"
                   tabIndex={0}
+                  onClick={() => toggleSubmittedSort('customer')}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedCardKey(group.key);
+                      toggleSubmittedSort('customer');
                     }
                   }}
                 >
-                  <div className="today-card-main">
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
-                      <span className="today-card-id">{cardNo}</span>
-                      <span className="today-card-customer">{customerName}</span>
-                      <StatusBadge status={payment.status} />
-                    </div>
-                    <div className="today-card-actions">
-                      <button
-                        type="button"
-                        className="icon-btn icon-edit"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditCard(group);
-                        }}
-                        title="Edit this job card"
-                        aria-label="Edit"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCard(group);
-                        }}
-                        title="Delete this job card"
-                        aria-label="Delete"
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  </div>
-                  <div className="today-card-stats">
-                    <span>Final: {formatCurrency(payment.finalBill)}</span>
-                    <span>Paid: {formatCurrency(payment.paid)}</span>
-                    <span>Pending: {formatCurrency(payment.pending)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  CUSTOMER {submittedSortMark('customer')}
+                </th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'lines' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('lines')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('lines');
+                    }
+                  }}
+                >
+                  LINES {submittedSortMark('lines')}
+                </th>
+                <th
+                  className={`numeric slw-sortable-th${submittedSort.key === 'finalBill' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('finalBill')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('finalBill');
+                    }
+                  }}
+                >
+                  FINAL BILL {submittedSortMark('finalBill')}
+                </th>
+                <th className="numeric">COMMISSION</th>
+                <th className="numeric">PAID</th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'status' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('status')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('status');
+                    }
+                  }}
+                >
+                  STATUS {submittedSortMark('status')}
+                </th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {todayJobCards.length === 0 ? (
+                <tr><td colSpan={8} className="table-empty-cell">{emptyCardsMessage}</td></tr>
+              ) : (
+                sortedTodayJobCards.map((group) => {
+                  const cardNo = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+                  const cardBillNo = group.primary.billNo || '';
+                  const customer = getCustomer(group.primary.customerId);
+                  const customerName = customer?.name || 'Unknown';
+                  const customerCode = customer?.shortCode || '';
+                  const payment = getJobCardPaymentSummary(group.jobs);
+                  const firstLine = group.jobs[0];
+                  const extra = group.jobs.length - 1;
+                  const linesDesc = extra > 0 ? `${firstLine.workTypeName} +${extra}` : firstLine.workTypeName;
+                  const totalComm = group.jobs.reduce((s, j) => s + (j.commissionAmount || 0), 0);
+
+                  return (
+                    <tr
+                      key={group.key}
+                      className="submitted-row"
+                      onClick={() => setSelectedCardKey(group.key)}
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(group.key); } }}
+                    >
+                      <td className="mono card-no-cell">
+                        <div>{cardNo}</div>
+                        {cardBillNo && <div className="cust-cell-code">Bill: {cardBillNo}</div>}
+                      </td>
+                      <td>
+                        <div className="cust-cell-name">{customerName}</div>
+                        {customerCode && <div className="cust-cell-code">{customerCode}</div>}
+                      </td>
+                      <td>
+                        <div className="lines-cell-count">{group.jobs.length} {group.jobs.length === 1 ? 'line' : 'lines'}</div>
+                        <div className="lines-cell-desc">{linesDesc}</div>
+                      </td>
+                      <td className="numeric">{formatCurrency(payment.finalBill)}</td>
+                      <td className="numeric">{formatCurrency(totalComm)}</td>
+                      <td className={`numeric ${payment.status === 'Paid' ? 'cell-val-green' : payment.status === 'Partially Paid' ? 'cell-val-amber' : 'cell-val-muted'}`}>{formatCurrency(payment.paid)}</td>
+                      <td><StatusBadge status={payment.status} /></td>
+                      <td>
+                        <div className="row-actions">
+                          <button type="button" className="row-act-btn" onClick={(e) => { e.stopPropagation(); handleEditCard(group); }} title="Edit">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                          <button type="button" className="row-act-btn row-act-btn--del" onClick={(e) => { e.stopPropagation(); handleDeleteCard(group); }} title="Delete">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <JobCardDetailsModal
@@ -1232,6 +1636,174 @@ export function JobForm() {
         onEdit={handleEditCard}
         onDelete={handleDeleteCard}
       />
+
+      {/* Quick-add Customer Modal */}
+      {quickAddMode === 'customer' && (
+        <div className="modal-overlay" onClick={() => setQuickAddMode(null)}>
+          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <span className="modal-title">Add new customer</span>
+                <p className="modal-subtitle">Will be selected automatically after creation</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setQuickAddMode(null)} aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form className="modal-body qa-form" onSubmit={handleQuickAddCustomerSubmit}>
+              <div className="qa-row-2">
+                <div className="form-group">
+                  <label className="form-label">Name <span className="req-star">*</span></label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={qaCustomerName}
+                    onChange={(e) => setQaCustomerName(e.target.value)}
+                    placeholder="Customer name"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Short code</label>
+                  <input
+                    className="form-input mono"
+                    type="text"
+                    value={qaCustomerCode}
+                    onChange={(e) => setQaCustomerCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. ABC"
+                    maxLength={6}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Type</label>
+                <select
+                  className="form-input"
+                  value={qaCustomerType}
+                  onChange={(e) => setQaCustomerType(e.target.value as Customer['type'])}
+                  aria-label="Customer type"
+                >
+                  <option value="Monthly">Monthly</option>
+                  <option value="Invoice">Invoice</option>
+                  <option value="Party-Credit">Party-Credit</option>
+                  <option value="Cash">Cash</option>
+                </select>
+              </div>
+              <div className="qa-checks">
+                <label className="qa-check-label">
+                  <input type="checkbox" checked={qaCustomerHasComm} onChange={(e) => setQaCustomerHasComm(e.target.checked)} />
+                  Has commission
+                </label>
+                <label className="qa-check-label">
+                  <input type="checkbox" checked={qaCustomerRequiresDc} onChange={(e) => setQaCustomerRequiresDc(e.target.checked)} />
+                  Requires DC
+                </label>
+                <label className="qa-check-label">
+                  <input type="checkbox" checked={qaCustomerHasBillNo} onChange={(e) => setQaCustomerHasBillNo(e.target.checked)} />
+                  Has bill no
+                </label>
+              </div>
+              <div className="qa-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setQuickAddMode(null)}>Cancel</button>
+                <button type="submit" className="btn btn-accent" disabled={qaSubmitting || !qaCustomerName.trim()}>
+                  {qaSubmitting ? 'Creating...' : 'Create customer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick-add Work Type Modal */}
+      {quickAddMode === 'worktype' && (
+        <div className="modal-overlay" onClick={() => setQuickAddMode(null)}>
+          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <span className="modal-title">Add new work type</span>
+                <p className="modal-subtitle">Will be selected in the job line automatically</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setQuickAddMode(null)} aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form className="modal-body qa-form" onSubmit={handleQuickAddWorkTypeSubmit}>
+              <div className="qa-row-2">
+                <div className="form-group">
+                  <label className="form-label">Name <span className="req-star">*</span></label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={qaWorkTypeName}
+                    onChange={(e) => setQaWorkTypeName(e.target.value)}
+                    placeholder="Work type name"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Short code</label>
+                  <input
+                    className="form-input mono"
+                    type="text"
+                    value={qaWorkTypeCode}
+                    onChange={(e) => setQaWorkTypeCode(e.target.value)}
+                    placeholder="e.g. TURN"
+                    maxLength={8}
+                  />
+                </div>
+              </div>
+              <div className="qa-row-2">
+                <div className="form-group">
+                  <label className="form-label">Category</label>
+                  {(() => {
+                    const cats = [...new Set(workTypes.map((wt) => wt.category).filter(Boolean))].sort() as string[];
+                    return cats.length > 0 ? (
+                      <select
+                        className="form-input"
+                        value={qaWorkTypeCategory}
+                        onChange={(e) => setQaWorkTypeCategory(e.target.value)}
+                        aria-label="Category"
+                      >
+                        {cats.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="form-input"
+                        type="text"
+                        value={qaWorkTypeCategory}
+                        onChange={(e) => setQaWorkTypeCategory(e.target.value)}
+                        placeholder="e.g. Turning"
+                      />
+                    );
+                  })()}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Default rate ₹</label>
+                  <input
+                    className="form-input mono"
+                    type="number"
+                    value={qaWorkTypeRate}
+                    onChange={(e) => setQaWorkTypeRate(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+              <div className="qa-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setQuickAddMode(null)}>Cancel</button>
+                <button type="submit" className="btn btn-accent" disabled={qaSubmitting || !qaWorkTypeName.trim()}>
+                  {qaSubmitting ? 'Creating...' : 'Create work type'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

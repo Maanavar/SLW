@@ -1,168 +1,155 @@
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
-import { formatCurrency } from '@/lib/currencyUtils';
-import { getLocalDateString } from '@/lib/dateUtils';
-import { getJobNetValue, getJobPaidAmount } from '@/lib/jobUtils';
-import { groupJobsByCard } from '@/lib/reportUtils';
+import { Icon } from '@/components/ui/Icon';
+import { UniversalSearch } from '@/components/ui/UniversalSearch';
+import { NotificationBell } from './NotificationBell';
 import { apiClient } from '@/lib/apiClient';
 import './TopHeader.css';
 
-interface PageInfo {
+interface PageMeta {
   title: string;
-  description?: string;
+  subtitle: string;
 }
 
-const pageMap: Record<string, PageInfo> = {
-  '/': { title: '', description: 'Create and manage job entries' },
-  '/dashboard': { title: '', description: '' },
-  '/customers': { title: '', description: 'Customer accounts and settings' },
-  '/work-types': { title: ' ', description: 'Rate cards and work catalog' },
-  '/jobs': { title: '', description: 'Create and manage job entries' },
-  '/payments': { title: '', description: 'Record incoming payments' },
-  '/history': { title: '', description: 'Track completed and pending work' },
-  '/logger': { title: '', description: 'Audit trail and controlled data operations' },
+const pageMap: Record<string, PageMeta> = {
+  '/': { title: 'Jobs', subtitle: 'New job card' },
+  '/dashboard': { title: 'Dashboard', subtitle: 'Executive snapshot' },
+  '/records': { title: 'Records', subtitle: 'Cards and table view' },
+  '/history': { title: 'History', subtitle: 'Day-wise card history' },
+  '/payments': { title: 'Payments', subtitle: 'Record and track payments' },
+  '/finance': { title: 'Finance', subtitle: 'Revenue and analysis' },
+  '/commission': { title: 'Commission', subtitle: 'Workers and history' },
+  '/expenses': { title: 'Expenses', subtitle: 'Overview and break-even' },
+  '/customers': { title: 'Customers', subtitle: 'Customer accounts' },
+  '/work-types': { title: 'Work Types', subtitle: 'Rates and categories' },
+  '/logger': { title: 'Logger', subtitle: 'Activity and danger zone' },
 };
-
-const iconProps = {
-  width: 18,
-  height: 18,
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.8,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-};
-
-function SidebarIcon({ collapsed }: { collapsed: boolean }) {
-  if (collapsed) {
-    return (
-      <svg {...iconProps}>
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M9 4v16" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...iconProps}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M15 4v16" />
-    </svg>
-  );
-}
-
-function SunIcon() {
-  return (
-    <svg {...iconProps}>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2.2M12 19.8V22M4.8 4.8l1.5 1.5M17.7 17.7l1.5 1.5M2 12h2.2M19.8 12H22M4.8 19.2l1.5-1.5M17.7 6.3l1.5-1.5" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7.3 7.3 0 0 0 20 14.5z" />
-    </svg>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
-      <path d="M10 16l4-4-4-4" />
-      <path d="M14 12H3" />
-    </svg>
-  );
-}
 
 export function TopHeader() {
-  const navigate = useNavigate();
   const location = useLocation();
-  const { jobs, payments } = useDataStore();
-  const { theme, toggleTheme, sidebarCollapsed, toggleSidebar } = useUIStore();
+  const navigate = useNavigate();
+  const { theme, toggleTheme, sidebarCollapsed, toggleSidebar, openMobileDrawer } = useUIStore();
 
-  const pageInfo = pageMap[location.pathname] || {
-    title: 'Workspace',
-    description: undefined,
-  };
-
-  const today = getLocalDateString(new Date());
-  const todayJobs = jobs.filter((job) => job.date === today);
-  const todayJobCards = groupJobsByCard(todayJobs);
-  const todayPayments = payments.filter((payment) => payment.date === today);
-  const todayJobsNet = todayJobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
-  const todayPaymentsAmountFromPayments = todayPayments.reduce(
-    (sum, p) => sum + (p.amount || 0),
-    0
-  );
-  const todayPaymentsAmountFromJobs = todayJobs.reduce(
-    (sum, job) => sum + getJobPaidAmount(job),
-    0
-  );
-  const todayPaymentsAmount =
-    todayPaymentsAmountFromPayments > 0
-      ? todayPaymentsAmountFromPayments
-      : todayPaymentsAmountFromJobs;
-  const todayPaymentsCountFromJobs = groupJobsByCard(
-    todayJobs.filter((job) => getJobPaidAmount(job) > 0)
-  ).length;
-  const todayPaymentsCount =
-    todayPayments.length > 0 ? todayPayments.length : todayPaymentsCountFromJobs;
-
-  const handleLogout = async () => {
-    try {
-      await apiClient.logout();
-    } finally {
-      navigate('/login', { replace: true });
+  // Desktop: collapse/expand the sidebar. Mobile/tablet: open the slide-in drawer.
+  const handleNavToggle = () => {
+    if (window.innerWidth <= 1024) {
+      openMobileDrawer();
+    } else {
+      toggleSidebar();
     }
   };
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const page = pageMap[location.pathname] ?? {
+    title: 'Siva Lathe Works',
+    subtitle: 'Workshop operations',
+  };
+
+  const handleLogout = async () => {
+    await apiClient.logout();
+    window.dispatchEvent(new Event('slw-auth-changed'));
+    navigate('/login', { replace: true });
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [userMenuOpen]);
+
+  // Close dropdown on Escape
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setUserMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [userMenuOpen]);
 
   return (
-    <header className="top-header">
-      <div className="header-top">
-        <div className="header-title">
-          <p className="page-eyebrow">Siva Lathe Works</p>
-          <h1 className="page-title">{pageInfo.title}</h1>
-          {pageInfo.description ? (
-            <p className="page-description">{pageInfo.description}</p>
-          ) : null}
-        </div>
+    <header className="top-header" role="banner">
+      {/* Left: nav toggle + breadcrumb */}
+      <div className="top-header-left">
+        <button
+          type="button"
+          className="top-icon-btn"
+          onClick={handleNavToggle}
+          title="Toggle navigation"
+          aria-label="Toggle navigation"
+        >
+          <Icon name="menu" width={16} height={16} />
+        </button>
 
-        <div className="header-actions">
-          <button
-            className="header-icon-button"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            type="button"
-          >
-            <SidebarIcon collapsed={sidebarCollapsed} />
-          </button>
-
-          <button
-            className="header-icon-button"
-            onClick={toggleTheme}
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-            type="button"
-          >
-            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-          </button>
-          <button
-            className="header-icon-button"
-            onClick={() => void handleLogout()}
-            title="Sign out"
-            type="button"
-          >
-            <LogoutIcon />
-          </button>
+        <div className="top-header-title">
+          <span className="top-header-main">{page.title}</span>
+          <span className="top-header-sep" aria-hidden="true">/</span>
+          <span className="top-header-sub">{page.subtitle}</span>
         </div>
       </div>
 
-     
+      {/* Right: Search → Theme → User (Atlassian order) */}
+      <div className="top-header-actions" aria-label="Global actions">
+        <UniversalSearch />
+
+        <button
+          type="button"
+          className="top-icon-btn"
+          onClick={toggleTheme}
+          title={theme === 'light' ? 'Dark mode' : 'Light mode'}
+          aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        >
+          <Icon name={theme === 'light' ? 'moon' : 'sun'} width={16} height={16} />
+        </button>
+
+        <NotificationBell />
+
+        {/* User avatar — opens account dropdown */}
+        <div className="top-user-menu" ref={menuRef}>
+          <button
+            type="button"
+            className="top-avatar-btn"
+            onClick={() => setUserMenuOpen((v) => !v)}
+            aria-label="Account menu"
+            aria-haspopup="true"
+          >
+            <span className="top-avatar-label" aria-hidden="true">SA</span>
+          </button>
+
+          {userMenuOpen && (
+            <div className="top-user-dropdown" role="menu" aria-label="Account options">
+              <div className="top-user-identity">
+                <span className="top-user-avatar-lg" aria-hidden="true">SA</span>
+                <div className="top-user-meta">
+                  <span className="top-user-name">SLW Admin</span>
+                  <span className="top-user-role">Owner · Siva Lathe Works</span>
+                </div>
+              </div>
+              <hr className="top-user-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="top-user-action top-user-action--danger"
+                onClick={() => { setUserMenuOpen(false); void handleLogout(); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </header>
   );
 }

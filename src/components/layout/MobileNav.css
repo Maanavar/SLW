@@ -1,8 +1,14 @@
+/* Adaptive mobile/tablet nav
+   - Portrait <=1024: bottom floating bar
+   - Landscape <=1024: left rail
+   - Uses .expanded / .compact state from store toggle
+*/
+
 .mobile-nav {
   display: none;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1024px) and (orientation: portrait) {
   .mobile-nav {
     display: block;
     position: fixed;
@@ -10,29 +16,51 @@
     right: 10px;
     bottom: 10px;
     z-index: 120;
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    background: var(--surface-glass);
-    -webkit-backdrop-filter: blur(12px);
-    backdrop-filter: blur(12px);
-    box-shadow: var(--shadow-md);
+    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    border-radius: 22px;
+    background: rgba(251, 251, 250, 0.82);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.04),
+      0 4px 16px rgba(17, 17, 14, 0.08),
+      0 1px 4px rgba(17, 17, 14, 0.06);
   }
 
   html[data-theme='dark'] .mobile-nav {
-    box-shadow: var(--shadow-lg);
+    background: rgba(24, 24, 22, 0.88);
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow:
+      0 0 0 0.5px rgba(255, 255, 255, 0.05),
+      0 4px 24px rgba(0, 0, 0, 0.32),
+      0 1px 6px rgba(0, 0, 0, 0.2);
   }
 
   .mobile-nav-list {
     list-style: none;
     margin: 0;
-    padding: 8px 6px;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 4px;
+    padding: 7px;
+    height: var(--mobile-nav-height);
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .mobile-nav-list::-webkit-scrollbar {
+    display: none;
   }
 
   .mobile-nav-item {
-    margin: 0;
+    flex-shrink: 0;
+    scroll-snap-align: start;
   }
 
   .mobile-nav-link {
@@ -40,32 +68,86 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    min-height: 50px;
+    gap: 3px;
+    width: 68px;
+    height: 100%;
+    padding: 0 4px;
     text-decoration: none;
     color: var(--text-muted);
-    border-radius: 10px;
-    transition:
-      background-color var(--transition-fast),
-      color var(--transition-fast);
+    border-radius: 16px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background-color 0.16s ease, color 0.16s ease;
+  }
+
+  .mobile-nav-link:active {
+    transform: scale(0.93);
+    transition: transform 0.08s ease;
   }
 
   .mobile-nav-link.active {
-    color: var(--accent-primary);
+    color: var(--accent);
     background: var(--accent-soft);
+  }
+
+  .mobile-nav-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 
   .mobile-nav-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
 
   .mobile-nav-label {
-    font-size: var(--text-caption2);
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  .mobile-nav::before,
+  .mobile-nav::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 28px;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  .mobile-nav::before {
+    left: 0;
+    background: linear-gradient(to right, rgba(251, 251, 250, 0.7), transparent);
+    border-radius: 22px 0 0 22px;
+  }
+
+  .mobile-nav::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(251, 251, 250, 0.7), transparent);
+    border-radius: 0 22px 22px 0;
+  }
+
+  html[data-theme='dark'] .mobile-nav::before {
+    background: linear-gradient(to right, rgba(24, 24, 22, 0.7), transparent);
+  }
+
+  html[data-theme='dark'] .mobile-nav::after {
+    background: linear-gradient(to left, rgba(24, 24, 22, 0.7), transparent);
+  }
+}
+
+/* Landscape on mobile/tablet: MobileNav is hidden.
+   Navigation is via the hamburger → sidebar drawer in TopHeader. */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .mobile-nav {
+    display: none;
   }
 }

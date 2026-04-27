@@ -25,10 +25,15 @@ interface UIStore {
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
 
-  // Sidebar
+  // Sidebar (desktop only)
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // Mobile drawer (tablet/phone overlay nav — not persisted)
+  mobileDrawerOpen: boolean;
+  openMobileDrawer: () => void;
+  closeMobileDrawer: () => void;
 
   // Modal
   modal: Modal;
@@ -73,6 +78,17 @@ export const useUIStore = create<UIStore>()(
 
       setSidebarCollapsed: (collapsed) => {
         set({ sidebarCollapsed: collapsed });
+      },
+
+      // Mobile drawer state (not persisted — always starts closed)
+      mobileDrawerOpen: false,
+
+      openMobileDrawer: () => {
+        set({ mobileDrawerOpen: true });
+      },
+
+      closeMobileDrawer: () => {
+        set({ mobileDrawerOpen: false });
       },
 
       // Modal state
@@ -122,9 +138,10 @@ export const useUIStore = create<UIStore>()(
       },
     }),
     {
-      name: 'siva_ui',
+      name: 'slw_ui_v1',
       partialize: (state) => ({
         theme: state.theme,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
     }
   )
@@ -142,6 +159,7 @@ function applyThemeToDOM(theme: 'light' | 'dark') {
 // Subscribe to theme changes and sync to localStorage
 useUIStore.subscribe((state) => {
   try {
+    localStorage.setItem('slw_ui_v1.theme', state.theme);
     localStorage.setItem('siva_theme', state.theme);
     applyThemeToDOM(state.theme);
   } catch (error) {
@@ -152,7 +170,8 @@ useUIStore.subscribe((state) => {
 // Initialize theme from localStorage on mount (HTML script handles initial DOM setup)
 if (typeof document !== 'undefined') {
   try {
-    const savedTheme = localStorage.getItem('siva_theme');
+    const savedTheme =
+      localStorage.getItem('slw_ui_v1.theme') || localStorage.getItem('siva_theme');
     if (savedTheme === 'light' || savedTheme === 'dark') {
       useUIStore.setState({ theme: savedTheme });
     }

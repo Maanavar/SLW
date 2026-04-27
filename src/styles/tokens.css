@@ -1,0 +1,184 @@
+:root {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-tamil: "Noto Sans Tamil", "Geist", sans-serif;
+
+  /* New-age cool slate — page tinted, cards crisp white, clear hierarchy */
+  --bg: #eef0f8;
+  --bg-elev: #ffffff;
+  --bg-sunk: #e2e5f0;
+  --bg-hover: #d8dcea;
+  --bg-active: #cdd2e3;
+  --border: #c8cde2;
+  --border-strong: #b6bdd4;
+  --text: #181a2c;
+  --text-muted: #535870;
+  --text-faint: #8489a6;
+
+  --accent: oklch(0.50 0.19 265);
+  --accent-hover: oklch(0.44 0.21 265);
+  --accent-soft: oklch(0.93 0.04 265);
+  --accent-border: oklch(0.82 0.09 265);
+  --accent-text: oklch(0.36 0.19 265);
+  --selection-bg: color-mix(in oklab, var(--accent) 72%, white 28%);
+  --selection-text: #ffffff;
+
+  --green: oklch(0.55 0.14 150);
+  --green-soft: oklch(0.93 0.05 150);
+  --green-border: oklch(0.82 0.09 150);
+  --amber: oklch(0.67 0.15 75);
+  --amber-soft: oklch(0.94 0.06 75);
+  --amber-border: oklch(0.83 0.10 75);
+  --red: oklch(0.55 0.20 25);
+  --red-soft: oklch(0.94 0.04 25);
+  --red-border: oklch(0.84 0.08 25);
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-xl: 12px;
+
+  --shadow-sm: 0 1px 3px rgba(16, 18, 42, 0.07), 0 0 0 1px rgba(16, 18, 42, 0.03);
+  --shadow-md: 0 4px 14px rgba(16, 18, 42, 0.10), 0 1px 4px rgba(16, 18, 42, 0.06);
+  --shadow-lg: 0 12px 32px rgba(16, 18, 42, 0.14), 0 2px 8px rgba(16, 18, 42, 0.08);
+  --shadow-xl: 0 16px 44px rgba(16, 18, 42, 0.18), 0 4px 14px rgba(16, 18, 42, 0.10);
+
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
+
+  --text-h1: 22px;
+  --text-h2: 15px;
+  --text-card-title: 13.5px;
+  --text-body: 14px;
+  --text-small: 12px;
+  --text-xs: 11px;
+
+  --text-caption2: 11px;
+  --text-caption1: 12px;
+  --text-footnote: 13px;
+  --text-subhead: 15px;
+  --text-callout: 16px;
+  --text-headline: 17px;
+  --text-title3: 20px;
+  --text-title2: 22px;
+  --text-title1: 28px;
+  --text-large-title: 34px;
+
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 36px;
+
+  --focus-ring: 0 0 0 3px var(--accent-soft);
+
+  --sidebar-width: 232px;
+  --sidebar-collapsed-width: 74px;
+  --mobile-nav-height: 84px;
+
+  --transition-fast: 140ms ease;
+  --transition-normal: 180ms ease;
+
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--bg-elev);
+  --bg-tertiary: var(--bg-sunk);
+  --bg-card: var(--bg-elev);
+  --bg-input: var(--bg-elev);
+  --bg-elevated: var(--bg-elev);
+  --surface-1: var(--bg-elev);
+  --surface-glass: var(--bg-elev);
+
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+
+  --accent-primary: var(--accent);
+  --accent-primary-strong: var(--accent-hover);
+  --accent-secondary: var(--accent);
+  --accent-green: var(--green);
+  --accent-red: var(--red);
+  --accent-blue: var(--accent);
+  --accent-yellow: var(--amber);
+  --accent-ring: color-mix(in oklab, var(--accent) 28%, transparent);
+
+  --border-color: var(--border);
+  --border-light: var(--border);
+
+  --radius-sm: var(--r-md);
+  --radius-md: var(--r-lg);
+  --radius-lg: var(--r-xl);
+  --radius-xl: 14px;
+  --radius-full: 999px;
+
+  --font-main: var(--font-sans);
+}
+
+html[data-theme='dark'] {
+  --bg: #0e0e0d;
+  --bg-elev: #181816;
+  --bg-sunk: #121210;
+  --bg-hover: #222220;
+  --bg-active: #2a2a27;
+  --border: #2a2a27;
+  --border-strong: #3a3a36;
+  --text: #ededea;
+  --text-muted: #9a9a93;
+  --text-faint: #6b6b66;
+  --accent: oklch(0.72 0.14 265);
+  --accent-soft: oklch(0.22 0.06 265);
+  --accent-border: oklch(0.38 0.1 265);
+  --accent-text: oklch(0.82 0.1 265);
+  --selection-bg: color-mix(in oklab, var(--accent) 56%, black 44%);
+  --selection-text: #ffffff;
+
+  --green: oklch(0.74 0.12 150);
+  --green-soft: oklch(0.26 0.05 150);
+  --green-border: oklch(0.42 0.09 150);
+  --amber: oklch(0.8 0.12 75);
+  --amber-soft: oklch(0.25 0.04 75);
+  --amber-border: oklch(0.42 0.08 75);
+  --red: oklch(0.73 0.15 25);
+  --red-soft: oklch(0.24 0.04 25);
+  --red-border: oklch(0.44 0.08 25);
+
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--bg-elev);
+  --bg-tertiary: var(--bg-sunk);
+  --bg-card: var(--bg-elev);
+  --bg-input: var(--bg-elev);
+  --surface-1: var(--bg-elev);
+  --surface-glass: var(--bg-elev);
+
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+
+  --accent-primary: var(--accent);
+  --accent-primary-strong: var(--accent);
+  --accent-secondary: var(--accent);
+  --accent-green: var(--green);
+  --accent-red: var(--red);
+  --accent-blue: var(--accent);
+  --accent-yellow: var(--amber);
+  --accent-ring: color-mix(in oklab, var(--accent) 38%, transparent);
+
+  --border-color: var(--border);
+  --border-light: var(--border);
+}

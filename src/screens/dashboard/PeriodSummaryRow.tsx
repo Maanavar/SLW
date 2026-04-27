@@ -1,25 +1,35 @@
-import { useMemo, useState } from 'react';
-import { StatCard, PaymentBreakdown } from '@/components/ui/StatCard';
+import React, { useMemo, useState } from 'react';
+import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobsInRange, getPaymentsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
-import { getLocalDateString, getWeekStartDate } from '@/lib/dateUtils';
+import { getJobsInRange, getPaymentEventsInRange, groupJobsByCard } from '@/lib/reportUtils';
+import { getJobFinalBillValue, getJobCardPaymentSummary, getJobNetValue, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
+import { getLocalDateString, getTenDayRange, getWeekStartDate } from '@/lib/dateUtils';
 
-interface PeriodStats {
-  jobsCount: number;
-  totalRevenue: number;     // Total amount quoted/invoiced (sum of job.amount)
-  commissionExpense: number; // Total commission to managers (sum of job.commissionAmount)
-  grossProfit: number;       // Our actual income (Revenue - Commission)
-  received: number;          // Cash received from customers
-  outstanding: number;       // Amount still to be collected (Revenue - Received)
-  receivedBreakdown: PaymentBreakdown;
-}
+type ActivePeriod = 'today' | 'week' | 'tenday' | 'month' | 'quarter' | 'year';
 
 interface DateRange {
   from: string;
   to: string;
-  label: string;
+}
+
+interface PaymentBreakdown {
+  cash: number;
+  upi: number;
+  bank: number;
+  cheque: number;
+}
+
+interface PeriodStats {
+  jobCards: number;
+  lineItems: number;
+  totalRevenue: number;
+  commissionExpense: number;
+  grossProfit: number;
+  received: number;
+  outstanding: number;
+  paidCards: number;
+  receivedBreakdown: PaymentBreakdown;
 }
 
 function toDateString(date: Date): string {
@@ -42,27 +52,79 @@ function getLastDayOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0);
 }
 
+function formatDateLabel(dateText: string): string {
+  return new Date(`${dateText}T00:00:00`).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatRangeLabel(range: DateRange): string {
+  if (range.from === range.to) return formatDateLabel(range.from);
+
+  const fromDate = new Date(`${range.from}T00:00:00`);
+  const toDate = new Date(`${range.to}T00:00:00`);
+  const sameYear = fromDate.getFullYear() === toDate.getFullYear();
+
+  const fromLabel = fromDate.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+  const toLabel = toDate.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  return `${fromLabel} - ${toLabel}`;
+}
+
+function getTrend(
+  current: number,
+  prev: number,
+  higherIsBetter: boolean
+): { arrow: string; pct: string; cls: string } | null {
+  if (prev === 0 && current === 0) return null;
+  if (prev === 0) return { arrow: '↑', pct: 'new', cls: higherIsBetter ? 'trend-pos' : 'trend-neg' };
+  const pct = ((current - prev) / prev) * 100;
+  if (Math.abs(pct) < 3) return { arrow: '→', pct: `${Math.abs(pct).toFixed(0)}%`, cls: 'trend-neu' };
+  const isUp = pct > 0;
+  return {
+    arrow: isUp ? '↑' : '↓',
+    pct: `${Math.abs(pct).toFixed(0)}%`,
+    cls: isUp === higherIsBetter ? 'trend-pos' : 'trend-neg',
+  };
+}
+
+function TrendBadge({ current, prev, higher }: { current: number; prev: number; higher: boolean }) {
+  const t = getTrend(current, prev, higher);
+  if (!t) return null;
+  return <span className={`period-trend ${t.cls}`}>{t.arrow} {t.pct}</span>;
+}
+
 function getPeriodStats(
   jobsInPeriod: ReturnType<typeof getJobsInRange>,
-  paymentsInPeriod: ReturnType<typeof getPaymentsInRange>
+  paymentEventsInPeriod: ReturnType<typeof getPaymentEventsInRange>
 ): PeriodStats {
-  const jobsCount = groupJobsByCard(jobsInPeriod).length;
+  const jobCards = groupJobsByCard(jobsInPeriod).length;
+  const lineItems = jobsInPeriod.length;
 
-  // Revenue & Expense Calculations
   const totalRevenue = jobsInPeriod.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
-  const commissionExpense = jobsInPeriod.reduce(
-    (sum, job) => sum + (Number(job.commissionAmount) || 0),
-    0
-  );
-  const grossProfit = totalRevenue - commissionExpense;
+  const commissionExpense = jobsInPeriod.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
+  const grossProfit = jobsInPeriod.reduce((sum, job) => sum + getJobNetValue(job), 0);
 
-  // Payment Calculations
-  const receivedFromPayments = paymentsInPeriod.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const receivedFromJobs = jobsInPeriod.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-  const received = receivedFromPayments > 0 ? receivedFromPayments : receivedFromJobs;
-  const outstanding = totalRevenue - received;
+  const received = paymentEventsInPeriod.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const outstanding = Math.max(0, totalRevenue - received);
 
-  // Calculate payment mode breakdown
+  // Count paid job cards (cards with at least partial payment)
+  const grouped = groupJobsByCard(jobsInPeriod);
+  const paidCards = grouped.filter(group => {
+    const payment = getJobCardPaymentSummary(group.jobs);
+    return payment.status === 'Paid' || payment.status === 'Partially Paid';
+  }).length;
+
   const receivedBreakdown: PaymentBreakdown = {
     cash: 0,
     upi: 0,
@@ -70,223 +132,372 @@ function getPeriodStats(
     cheque: 0,
   };
 
-  if (receivedFromPayments > 0) {
-    // Breakdown from payment vouchers
-    paymentsInPeriod.forEach((payment) => {
-      const amount = payment.amount || 0;
-      if (payment.paymentMode === 'Cash') {
-        receivedBreakdown.cash = (receivedBreakdown.cash || 0) + amount;
-      } else if (payment.paymentMode === 'UPI') {
-        receivedBreakdown.upi = (receivedBreakdown.upi || 0) + amount;
-      } else if (payment.paymentMode === 'Bank') {
-        receivedBreakdown.bank = (receivedBreakdown.bank || 0) + amount;
-      } else if (payment.paymentMode === 'Cheque') {
-        receivedBreakdown.cheque = (receivedBreakdown.cheque || 0) + amount;
-      } else if (payment.paymentMode === 'Mixed' && payment.breakdown) {
-        // Handle mixed payments with breakdown
-        receivedBreakdown.cash = (receivedBreakdown.cash || 0) + (payment.breakdown.cash || 0);
-        receivedBreakdown.upi = (receivedBreakdown.upi || 0) + (payment.breakdown.upi || 0);
-        receivedBreakdown.bank = (receivedBreakdown.bank || 0) + (payment.breakdown.bank || 0);
-        receivedBreakdown.cheque = (receivedBreakdown.cheque || 0) + (payment.breakdown.cheque || 0);
-      }
-    });
-  } else if (receivedFromJobs > 0) {
-    // Breakdown from job paid amounts
-    jobsInPeriod.forEach((job) => {
-      const paidAmount = getJobPaidAmount(job);
-      if (paidAmount > 0 && job.paymentMode) {
-        if (job.paymentMode === 'Cash') {
-          receivedBreakdown.cash = (receivedBreakdown.cash || 0) + paidAmount;
-        } else if (job.paymentMode === 'UPI') {
-          receivedBreakdown.upi = (receivedBreakdown.upi || 0) + paidAmount;
-        } else if (job.paymentMode === 'Bank') {
-          receivedBreakdown.bank = (receivedBreakdown.bank || 0) + paidAmount;
-        } else if (job.paymentMode === 'Cheque') {
-          receivedBreakdown.cheque = (receivedBreakdown.cheque || 0) + paidAmount;
-        }
-      }
-    });
-  }
+  paymentEventsInPeriod.forEach((entry) => {
+    const amount = entry.amount || 0;
+    if (amount <= 0) return;
+
+    if (entry.paymentMode === 'Cash') {
+      receivedBreakdown.cash += amount;
+    } else if (entry.paymentMode === 'UPI') {
+      receivedBreakdown.upi += amount;
+    } else if (entry.paymentMode === 'Bank') {
+      receivedBreakdown.bank += amount;
+    } else if (entry.paymentMode === 'Cheque') {
+      receivedBreakdown.cheque += amount;
+    } else if (entry.paymentMode === 'Mixed' && entry.breakdown) {
+      receivedBreakdown.cash += entry.breakdown.cash || 0;
+      receivedBreakdown.upi += entry.breakdown.upi || 0;
+      receivedBreakdown.bank += entry.breakdown.bank || 0;
+      receivedBreakdown.cheque += entry.breakdown.cheque || 0;
+    }
+  });
 
   return {
-    jobsCount,
+    jobCards,
+    lineItems,
     totalRevenue,
     commissionExpense,
     grossProfit,
     received,
     outstanding,
+    paidCards,
     receivedBreakdown,
   };
 }
 
-function formatRangeLabel(from: string, to: string): string {
-  const fromDate = new Date(`${from}T00:00:00`);
-  const toDate = new Date(`${to}T00:00:00`);
-  const fromText = fromDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  const toText = toDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  return from === to ? fromText : `${fromText} - ${toText}`;
-}
-
 export function PeriodSummaryRow() {
   const { jobs, payments } = useDataStore();
-  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month'>('today');
+  const [activePeriod, setActivePeriod] = useState<ActivePeriod>('today');
   const [dayOffset, setDayOffset] = useState(0);
+  const [tenDayOffset, setTenDayOffset] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
-
-  const today = new Date();
+  const [quarterOffset, setQuarterOffset] = useState(0);
+  const [yearOffset, setYearOffset] = useState(0);
+  const baseToday = useMemo(() => new Date(), []);
 
   const dayRange: DateRange = useMemo(() => {
-    const targetDay = shiftDays(today, -dayOffset);
+    const targetDay = shiftDays(baseToday, -dayOffset);
     const value = toDateString(targetDay);
-    return {
-      from: value,
-      to: value,
-      label: formatRangeLabel(value, value),
-    };
-  }, [dayOffset, today]);
+    return { from: value, to: value };
+  }, [dayOffset, baseToday]);
 
   const weekRange: DateRange = useMemo(() => {
-    const base = shiftDays(today, -weekOffset * 7);
+    const base = shiftDays(baseToday, -weekOffset * 7);
     const from = getWeekStartDate(base);
     const fromDate = new Date(`${from}T00:00:00`);
     const weekEnd = shiftDays(fromDate, 6);
-    const to = weekOffset === 0 ? toDateString(today) : toDateString(weekEnd);
-    return {
-      from,
-      to,
-      label: formatRangeLabel(from, to),
-    };
-  }, [weekOffset, today]);
+    const to = weekOffset === 0 ? toDateString(baseToday) : toDateString(weekEnd);
+    return { from, to };
+  }, [weekOffset, baseToday]);
+
+  const tenDayRange: DateRange = useMemo(() => {
+    const range = getTenDayRange(baseToday, -tenDayOffset, true);
+    return { from: range.from, to: range.to };
+  }, [tenDayOffset, baseToday]);
 
   const monthRange: DateRange = useMemo(() => {
-    const monthBase = shiftMonths(today, -monthOffset);
+    const monthBase = shiftMonths(baseToday, -monthOffset);
     const fromDate = new Date(monthBase.getFullYear(), monthBase.getMonth(), 1);
-    const toDate = monthOffset === 0 ? today : getLastDayOfMonth(monthBase);
-    const from = toDateString(fromDate);
-    const to = toDateString(toDate);
+    const toDate = monthOffset === 0 ? baseToday : getLastDayOfMonth(monthBase);
     return {
-      from,
-      to,
-      label: monthBase.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+      from: toDateString(fromDate),
+      to: toDateString(toDate),
     };
-  }, [monthOffset, today]);
+  }, [monthOffset, baseToday]);
+
+  const quarterRange: DateRange = useMemo(() => {
+    const quarterBase = shiftMonths(baseToday, -(quarterOffset * 3));
+    const quarterStartMonth = Math.floor(quarterBase.getMonth() / 3) * 3;
+    const fromDate = new Date(quarterBase.getFullYear(), quarterStartMonth, 1);
+    const toDate =
+      quarterOffset === 0
+        ? baseToday
+        : new Date(quarterBase.getFullYear(), quarterStartMonth + 3, 0);
+    return {
+      from: toDateString(fromDate),
+      to: toDateString(toDate),
+    };
+  }, [quarterOffset, baseToday]);
+
+  const yearRange: DateRange = useMemo(() => {
+    const yearBase = new Date(baseToday.getFullYear() - yearOffset, 0, 1);
+    return {
+      from: toDateString(yearBase),
+      to: toDateString(
+        yearOffset === 0 ? baseToday : new Date(yearBase.getFullYear(), 11, 31)
+      ),
+    };
+  }, [yearOffset, baseToday]);
 
   const todayStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, dayRange.from, dayRange.to);
-    const filteredPayments = getPaymentsInRange(payments, dayRange.from, dayRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, dayRange.from, dayRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, dayRange]);
 
   const weekStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, weekRange.from, weekRange.to);
-    const filteredPayments = getPaymentsInRange(payments, weekRange.from, weekRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, weekRange.from, weekRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, weekRange]);
+
+  const tenDayStats = useMemo(() => {
+    const filteredJobs = getJobsInRange(jobs, tenDayRange.from, tenDayRange.to);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, tenDayRange.from, tenDayRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
+  }, [jobs, payments, tenDayRange]);
 
   const monthStats = useMemo(() => {
     const filteredJobs = getJobsInRange(jobs, monthRange.from, monthRange.to);
-    const filteredPayments = getPaymentsInRange(payments, monthRange.from, monthRange.to);
-    return getPeriodStats(filteredJobs, filteredPayments);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, monthRange.from, monthRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
   }, [jobs, payments, monthRange]);
 
-  const currentRange = activePeriod === 'today' ? dayRange : activePeriod === 'week' ? weekRange : monthRange;
-  const currentStats = activePeriod === 'today' ? todayStats : activePeriod === 'week' ? weekStats : monthStats;
+  const quarterStats = useMemo(() => {
+    const filteredJobs = getJobsInRange(jobs, quarterRange.from, quarterRange.to);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, quarterRange.from, quarterRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
+  }, [jobs, payments, quarterRange]);
+
+  const yearStats = useMemo(() => {
+    const filteredJobs = getJobsInRange(jobs, yearRange.from, yearRange.to);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, yearRange.from, yearRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
+  }, [jobs, payments, yearRange]);
+
+  const prevStats = useMemo(() => {
+    let prevRange: DateRange;
+    if (activePeriod === 'today') {
+      const d = shiftDays(baseToday, -(dayOffset + 1));
+      const val = toDateString(d);
+      prevRange = { from: val, to: val };
+    } else if (activePeriod === 'tenday') {
+      const previousSet = getTenDayRange(baseToday, -(tenDayOffset + 1), false);
+      prevRange = { from: previousSet.from, to: previousSet.to };
+    } else if (activePeriod === 'week') {
+      const base = shiftDays(baseToday, -(weekOffset + 1) * 7);
+      const from = getWeekStartDate(base);
+      const fromDate = new Date(`${from}T00:00:00`);
+      prevRange = { from, to: toDateString(shiftDays(fromDate, 6)) };
+    } else if (activePeriod === 'month') {
+      const monthBase = shiftMonths(baseToday, -(monthOffset + 1));
+      prevRange = {
+        from: toDateString(new Date(monthBase.getFullYear(), monthBase.getMonth(), 1)),
+        to: toDateString(getLastDayOfMonth(monthBase)),
+      };
+    } else if (activePeriod === 'quarter') {
+      const qBase = shiftMonths(baseToday, -((quarterOffset + 1) * 3));
+      const qStart = Math.floor(qBase.getMonth() / 3) * 3;
+      prevRange = {
+        from: toDateString(new Date(qBase.getFullYear(), qStart, 1)),
+        to: toDateString(new Date(qBase.getFullYear(), qStart + 3, 0)),
+      };
+    } else {
+      const yBase = new Date(baseToday.getFullYear() - (yearOffset + 1), 0, 1);
+      prevRange = {
+        from: toDateString(yBase),
+        to: toDateString(new Date(yBase.getFullYear(), 11, 31)),
+      };
+    }
+    const filteredJobs = getJobsInRange(jobs, prevRange.from, prevRange.to);
+    const paymentEvents = getPaymentEventsInRange(jobs, payments, prevRange.from, prevRange.to);
+    return getPeriodStats(filteredJobs, paymentEvents);
+  }, [activePeriod, dayOffset, tenDayOffset, weekOffset, monthOffset, quarterOffset, yearOffset, jobs, payments, baseToday]);
+
+  const currentRange =
+    activePeriod === 'today'
+      ? dayRange
+      : activePeriod === 'tenday'
+        ? tenDayRange
+      : activePeriod === 'week'
+        ? weekRange
+        : activePeriod === 'month'
+          ? monthRange
+          : activePeriod === 'quarter'
+            ? quarterRange
+            : yearRange;
+
+  const currentStats =
+    activePeriod === 'today'
+      ? todayStats
+      : activePeriod === 'tenday'
+        ? tenDayStats
+      : activePeriod === 'week'
+        ? weekStats
+        : activePeriod === 'month'
+          ? monthStats
+          : activePeriod === 'quarter'
+            ? quarterStats
+            : yearStats;
+
   const currentOffset =
-    activePeriod === 'today' ? dayOffset : activePeriod === 'week' ? weekOffset : monthOffset;
-  const currentTitle = activePeriod === 'today' ? 'Today' : activePeriod === 'week' ? 'This Week' : 'This Month';
+    activePeriod === 'today'
+      ? dayOffset
+      : activePeriod === 'tenday'
+        ? tenDayOffset
+      : activePeriod === 'week'
+        ? weekOffset
+        : activePeriod === 'month'
+          ? monthOffset
+          : activePeriod === 'quarter'
+            ? quarterOffset
+            : yearOffset;
+
   const canGoNext = currentOffset > 0;
-  const collectionRate =
-    currentStats.totalRevenue > 0 ? (currentStats.received / currentStats.totalRevenue) * 100 : 0;
-  const marginRate =
-    currentStats.totalRevenue > 0 ? (currentStats.grossProfit / currentStats.totalRevenue) * 100 : 0;
+
+  const paymentModes = useMemo(() => {
+    const breakdown = currentStats.receivedBreakdown;
+    const total = breakdown.cash + breakdown.upi + breakdown.bank + breakdown.cheque;
+    return [
+      { key: 'cash', label: 'Cash', value: breakdown.cash, className: 'mode-cash' },
+      { key: 'upi', label: 'UPI', value: breakdown.upi, className: 'mode-upi' },
+      { key: 'bank', label: 'Bank', value: breakdown.bank, className: 'mode-bank' },
+      { key: 'cheque', label: 'Cheque', value: breakdown.cheque, className: 'mode-cheque' },
+    ].map((entry) => ({
+      ...entry,
+      share: total > 0 ? (entry.value / total) * 100 : 0,
+    }));
+  }, [currentStats]);
 
   const handlePrev = () => {
     if (activePeriod === 'today') setDayOffset((value) => value + 1);
+    else if (activePeriod === 'tenday') setTenDayOffset((value) => value + 1);
     else if (activePeriod === 'week') setWeekOffset((value) => value + 1);
-    else setMonthOffset((value) => value + 1);
+    else if (activePeriod === 'month') setMonthOffset((value) => value + 1);
+    else if (activePeriod === 'quarter') setQuarterOffset((value) => value + 1);
+    else setYearOffset((value) => value + 1);
   };
 
   const handleNext = () => {
     if (!canGoNext) return;
     if (activePeriod === 'today') setDayOffset((value) => value - 1);
+    else if (activePeriod === 'tenday') setTenDayOffset((value) => value - 1);
     else if (activePeriod === 'week') setWeekOffset((value) => value - 1);
-    else setMonthOffset((value) => value - 1);
-  };
-
-  const handleReset = () => {
-    if (activePeriod === 'today') setDayOffset(0);
-    else if (activePeriod === 'week') setWeekOffset(0);
-    else setMonthOffset(0);
+    else if (activePeriod === 'month') setMonthOffset((value) => value - 1);
+    else if (activePeriod === 'quarter') setQuarterOffset((value) => value - 1);
+    else setYearOffset((value) => value - 1);
   };
 
   return (
-    <div className="period-summary">
-      <div className="summary-section summary-section--active">
-        <div className="summary-section-header">
-          <div className="summary-heading-block">
-            <h3 className="summary-section-title">{currentTitle}</h3>
-            <p className="summary-range-label">{currentRange.label}</p>
-          </div>
+    <section className="period-performance">
+      <div className="period-performance-head">
+        <h2 className="period-title">Period performance</h2>
 
+        <div className="period-controls">
           <div className="period-toggle">
-            <button
-              type="button"
-              className={`period-toggle-btn ${activePeriod === 'today' ? 'active' : ''}`}
-              onClick={() => setActivePeriod('today')}
-              aria-pressed={activePeriod === 'today'}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              className={`period-toggle-btn ${activePeriod === 'week' ? 'active' : ''}`}
-              onClick={() => setActivePeriod('week')}
-              aria-pressed={activePeriod === 'week'}
-            >
-              Week
-            </button>
-            <button
-              type="button"
-              className={`period-toggle-btn ${activePeriod === 'month' ? 'active' : ''}`}
-              onClick={() => setActivePeriod('month')}
-              aria-pressed={activePeriod === 'month'}
-            >
-              Month
-            </button>
+            {(['today', 'week', 'tenday', 'month', 'quarter', 'year'] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`period-toggle-btn ${activePeriod === p ? 'active' : ''}`}
+                onClick={() => setActivePeriod(p)}
+                aria-current={activePeriod === p ? 'true' : undefined}
+              >
+                {p === 'tenday' ? '10-Day' : p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
+            ))}
           </div>
 
-          <div className="summary-nav">
-            <button type="button" className="summary-nav-btn" onClick={handlePrev}>
-              Prev
+          <div className="period-date-nav" aria-label="Date navigation">
+            <button type="button" className="period-date-btn" onClick={handlePrev} title={`Previous ${activePeriod}`}>
+              <Icon name="chevronl" width={14} height={14} />
             </button>
-            <button type="button" className="summary-nav-btn" onClick={handleNext} disabled={!canGoNext}>
-              Next
-            </button>
+            <span className="period-date-label">{formatRangeLabel(currentRange)}</span>
             <button
               type="button"
-              className="summary-nav-btn summary-nav-btn--soft"
-              onClick={handleReset}
+              className="period-date-btn"
+              onClick={handleNext}
               disabled={!canGoNext}
+              title={`Next ${activePeriod}`}
             >
-              Current
+              <Icon name="chevronr" width={14} height={14} />
             </button>
           </div>
-        </div>
-        <div className="summary-cards">
-          <StatCard title="JobCards" value={currentStats.jobsCount} subtitle="Cards created" icon="J" />
-          <StatCard title="Revenue" value={formatCurrency(currentStats.totalRevenue)} subtitle="Total quoted amount" icon="R" />
-          <StatCard title="Commission" value={formatCurrency(currentStats.commissionExpense)} subtitle="Paid to managers" icon="C" />
-          <StatCard title="Gross Profit" value={formatCurrency(currentStats.grossProfit)} subtitle="Our actual income" icon="G" />
-          <StatCard title="Received" value={formatCurrency(currentStats.received)} subtitle="Cash collected" icon="P" breakdown={currentStats.receivedBreakdown} />
-          <StatCard title="Outstanding" value={formatCurrency(currentStats.outstanding)} subtitle="Still to collect" icon="O" />
-        </div>
-        <div className="summary-micro-metrics">
-          <span className="summary-micro-pill">Collection Rate: {collectionRate.toFixed(1)}%</span>
-          <span className="summary-micro-pill">Margin: {marginRate.toFixed(1)}%</span>
-          <span className="summary-micro-pill">Outstanding: {formatCurrency(currentStats.outstanding)}</span>
         </div>
       </div>
-    </div>
+
+      <div className="period-cards">
+        <article className="period-card">
+          <p className="period-card-label">Job cards</p>
+          <p className="period-card-value">{currentStats.jobCards}</p>
+          <p className="period-card-meta">
+            {currentStats.lineItems} line items
+            <TrendBadge current={currentStats.jobCards} prev={prevStats.jobCards} higher />
+          </p>
+        </article>
+
+        <article className="period-card">
+          <p className="period-card-label">Revenue</p>
+          <p className="period-card-value">{formatCurrency(currentStats.totalRevenue)}</p>
+          <p className="period-card-meta is-green">
+            Net income
+            <TrendBadge current={currentStats.totalRevenue} prev={prevStats.totalRevenue} higher />
+          </p>
+        </article>
+
+        <article className="period-card">
+          <p className="period-card-label">Commission</p>
+          <p className="period-card-value is-amber">{formatCurrency(currentStats.commissionExpense)}</p>
+          <p className="period-card-meta">
+            Payable to workers
+            <TrendBadge current={currentStats.commissionExpense} prev={prevStats.commissionExpense} higher={false} />
+          </p>
+        </article>
+
+        <article className="period-card">
+          <p className="period-card-label">Gross profit</p>
+          <p className="period-card-value">{formatCurrency(currentStats.grossProfit)}</p>
+          <p className="period-card-meta">
+            Net income after flow adjustments
+            <TrendBadge current={currentStats.grossProfit} prev={prevStats.grossProfit} higher />
+          </p>
+        </article>
+
+        <article className="period-card">
+          <p className="period-card-label">Received</p>
+          <p className="period-card-value is-green">{formatCurrency(currentStats.received)}</p>
+          <p className="period-card-meta">
+            {currentStats.paidCards}/{currentStats.jobCards} payments
+            <TrendBadge current={currentStats.received} prev={prevStats.received} higher />
+          </p>
+        </article>
+
+        <article className="period-card">
+          <p className="period-card-label">Outstanding</p>
+          <p className={`period-card-value ${currentStats.outstanding > 0 ? 'is-red' : ''}`}>
+            {formatCurrency(currentStats.outstanding)}
+          </p>
+          <p className="period-card-meta">
+            Final bill - received
+            <TrendBadge current={currentStats.outstanding} prev={prevStats.outstanding} higher={false} />
+          </p>
+        </article>
+      </div>
+
+      <section className="payment-breakdown-panel">
+        <div className="payment-breakdown-head">
+          <h3 className="payment-breakdown-title">Payment mode breakdown</h3>
+          <p className="payment-breakdown-subtitle">Received this {activePeriod}</p>
+        </div>
+
+        <div className="payment-breakdown-body">
+          {paymentModes.map((mode) => (
+            <div className="pb-row" key={mode.key}>
+              <span className={`pb-dot ${mode.className}`} />
+              <span className="pb-row-label">{mode.label}</span>
+              <div className="pb-track">
+                <div
+                  className={`pb-fill ${mode.className}`}
+                  style={{ '--pb-w': `${mode.share.toFixed(2)}%` } as React.CSSProperties}
+                />
+              </div>
+              <span className="pb-row-pct">{mode.share > 0 ? `${mode.share.toFixed(0)}%` : '—'}</span>
+              <span className="pb-row-val">{formatCurrency(mode.value)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </section>
   );
 }

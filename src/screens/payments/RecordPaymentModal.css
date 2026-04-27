@@ -1,0 +1,227 @@
+/* ===== RECORD PAYMENT MODAL ===== */
+
+.rpm-form {
+  display: grid;
+  gap: 16px;
+}
+
+/* ── Field ───────────────────────────────────────────────────── */
+.rpm-field {
+  display: grid;
+  gap: 6px;
+}
+
+.rpm-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.rpm-input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.rpm-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.rpm-input--lg {
+  height: 46px;
+  font-size: 16px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.rpm-textarea {
+  height: auto;
+  padding: 10px 12px;
+  resize: none;
+}
+
+/* ── Balance panel ───────────────────────────────────────────── */
+.rpm-balance {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.rpm-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.rpm-balance-row--divider {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.rpm-balance-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.rpm-balance-val {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.rpm-balance-val--red   { color: var(--red); }
+.rpm-balance-val--green { color: var(--green); }
+
+/* ── Settled checkbox ────────────────────────────────────────── */
+.rpm-check-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rpm-check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── Scope tabs ──────────────────────────────────────────────── */
+.rpm-scope-tabs {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.rpm-scope-btn {
+  flex: 1;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.5;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.rpm-scope-btn.active {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.rpm-scope-btn:not(.active):hover { color: var(--text); }
+
+/* ── Quick-fill banner ───────────────────────────────────────── */
+.rpm-quick-fill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-lg);
+}
+
+.rpm-quick-fill-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-text);
+}
+
+.rpm-quick-fill-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--r-md);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+
+.rpm-quick-fill-btn:hover { opacity: 0.88; }
+
+/* ── Fill chips (below amount field) ─────────────────────────── */
+.rpm-fill-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.rpm-fill-chip {
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-sunk);
+  color: var(--text);
+  border-radius: var(--r-md);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.rpm-fill-chip:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* ── 2-col grid ──────────────────────────────────────────────── */
+.rpm-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ── Submit button ───────────────────────────────────────────── */
+.rpm-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .rpm-grid-2 { grid-template-columns: 1fr; }
+  .rpm-scope-tabs { width: 100%; }
+  .rpm-scope-btn { padding: 5px 8px; }
+}

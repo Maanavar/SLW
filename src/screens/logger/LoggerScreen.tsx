@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ActivityLog } from '@/types';
 import { DataTable, Column } from '@/components/ui/DataTable';
@@ -7,7 +7,6 @@ import { apiClient } from '@/lib/apiClient';
 import { defaultCustomers, defaultWorkTypes } from '@/lib/seedData';
 import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
-import '../customers/CustomersScreen.css';
 import './LoggerScreen.css';
 
 type PurgeAction =
@@ -70,6 +69,7 @@ function ConfirmModal({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState('');
+  const inputId = useId();
 
   return (
     <div className="logger-overlay" onClick={onCancel}>
@@ -86,8 +86,11 @@ function ConfirmModal({
         <p className="logger-modal-desc">{state.description}</p>
         {state.inputLabel ? (
           <div className="logger-modal-field">
-            <label className="logger-modal-label">{state.inputLabel}</label>
+            <label className="logger-modal-label" htmlFor={inputId}>
+              {state.inputLabel}
+            </label>
             <input
+              id={inputId}
               autoFocus
               type="text"
               className="logger-modal-input"
@@ -553,7 +556,7 @@ export function LoggerScreen() {
   ];
 
   return (
-    <div className="customers-screen logger-screen">
+    <div className="lgr-screen">
       {confirmState ? (
         <ConfirmModal
           state={confirmState}
@@ -573,40 +576,16 @@ export function LoggerScreen() {
         />
       ) : null}
 
-      <div className="screen-header">
-        <h2 className="screen-title">Logger</h2>
-        <div className="screen-controls logger-controls">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search logs..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <select
-            className="logger-select"
-            value={entityFilter}
-            onChange={(e) => setEntityFilter(e.target.value)}
-          >
-            <option value="all">All Entities</option>
-            {entityOptions.map((entity) => (
-              <option key={entity} value={entity}>
-                {entity}
-              </option>
-            ))}
-          </select>
-          <select
-            className="logger-select"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-          >
-            <option value="all">All Actions</option>
-            {actionOptions.map((action) => (
-              <option key={action} value={action}>
-                {action}
-              </option>
-            ))}
-          </select>
+      <div className="lgr-pg-header">
+        <div>
+          <h1 className="lgr-pg-title">
+            Logger <span className="lgr-pg-title-ta tamil">பதிவேடு</span>
+          </h1>
+          <p className="lgr-pg-desc">
+            {filteredLogs.length} entr{filteredLogs.length !== 1 ? 'ies' : 'y'} · activity log and data management
+          </p>
+        </div>
+        <div className="lgr-header-actions">
           <button className="btn btn-secondary" onClick={() => void loadLogs()} type="button">
             Refresh
           </button>
@@ -617,12 +596,50 @@ export function LoggerScreen() {
             disabled={isDangerActionRunning}
             title="Delete all activity logs"
           >
-            {purging === 'jobs' ? 'Deleting...' : 'Delete All Logs'}
+            {purging === 'jobs' ? 'Clearing...' : 'Clear Logs'}
           </button>
         </div>
       </div>
 
-      <div className="screen-content">
+      <div className="lgr-toolbar">
+        <input
+          type="text"
+          className="lgr-search"
+          placeholder="Search logs..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search logs"
+        />
+        <select
+          className="lgr-select"
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
+          aria-label="Filter by entity"
+        >
+          <option value="all">All Entities</option>
+          {entityOptions.map((entity) => (
+            <option key={entity} value={entity}>
+              {entity}
+            </option>
+          ))}
+        </select>
+        <select
+          className="lgr-select"
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value)}
+          aria-label="Filter by action"
+        >
+          <option value="all">All Actions</option>
+          {actionOptions.map((action) => (
+            <option key={action} value={action}>
+              {action}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="lgr-content">
+        <div className="lgr-table-wrap">
         <DataTable<ActivityLog>
           columns={columns}
           data={filteredLogs}
@@ -633,6 +650,7 @@ export function LoggerScreen() {
           emptyMessage={apiClient.hasOfflineSession() ? 'Logs unavailable in offline mode' : 'No logs found'}
           onRowClick={(row) => setSelectedLog(row)}
         />
+        </div>
 
         <section className="danger-zone">
           <h3>Danger Zone</h3>
@@ -644,7 +662,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runPurge('jobs')}
             >
-              {purging === 'jobs' ? 'Deleting...' : 'Delete All Job Cards'}
+              {purging === 'jobs' ? 'Purging...' : 'Purge Jobs'}
             </button>
             <button
               type="button"
@@ -652,7 +670,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runPurge('payments')}
             >
-              {purging === 'payments' ? 'Deleting...' : 'Delete All Payments'}
+              {purging === 'payments' ? 'Purging...' : 'Purge Payments'}
             </button>
             <button
               type="button"
@@ -660,7 +678,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runPurge('expenses')}
             >
-              {purging === 'expenses' ? 'Deleting...' : 'Delete All Expenses'}
+              {purging === 'expenses' ? 'Purging...' : 'Purge Expenses'}
             </button>
             <button
               type="button"
@@ -668,7 +686,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runPurge('customers')}
             >
-              {purging === 'customers' ? 'Deleting...' : 'Delete All Customers'}
+              {purging === 'customers' ? 'Purging...' : 'Purge Customers'}
             </button>
             <button
               type="button"
@@ -676,7 +694,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runPurge('workTypes')}
             >
-              {purging === 'workTypes' ? 'Deleting...' : 'Delete All Work Types'}
+              {purging === 'workTypes' ? 'Purging...' : 'Purge Work Types'}
             </button>
             <button
               type="button"
@@ -684,7 +702,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runSeedImport()}
             >
-              {seeding ? 'Importing...' : 'Replace DB With Seed Data'}
+              {seeding ? 'Seeding...' : 'Seed Demo Data'}
             </button>
             <button
               type="button"
@@ -692,7 +710,7 @@ export function LoggerScreen() {
               disabled={isDangerActionRunning}
               onClick={() => runPurge('allData')}
             >
-              {purging === 'allData' ? 'Deleting...' : 'Delete ALL Data'}
+              {purging === 'allData' ? 'Purging...' : 'Purge All'}
             </button>
           </div>
         </section>

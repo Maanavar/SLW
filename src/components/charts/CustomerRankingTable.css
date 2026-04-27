@@ -1,0 +1,155 @@
+.rankings-tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.rankings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rankings-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rankings-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunk);
+  padding: 2px;
+}
+
+.rankings-sort-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rankings-sort-btn.active {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
+.rankings-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.rankings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.rankings-table thead tr {
+  background: var(--bg-sunk);
+}
+
+.rankings-table th {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.rankings-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.rankings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rankings-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.rankings-customer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.customer-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.customer-health-dot.excellent {
+  background: var(--green);
+}
+
+.customer-health-dot.good {
+  background: var(--accent);
+}
+
+.customer-health-dot.attention {
+  background: var(--amber);
+}
+
+.customer-health-dot.risk {
+  background: var(--red);
+}
+
+.customer-health-pill {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.customer-health-pill.excellent {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.customer-health-pill.good {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-text);
+}
+
+.customer-health-pill.attention {
+  background: color-mix(in srgb, var(--amber) 16%, transparent);
+  color: var(--amber);
+}
+
+.customer-health-pill.risk {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.rankings-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-faint);
+  text-align: center;
+  padding: 20px 0;
+}

@@ -8,6 +8,7 @@ interface QuantityStepperProps {
   max?: number;
   step?: number;
   disabled?: boolean;
+  inputLabel?: string;
 }
 
 export function QuantityStepper({
@@ -17,6 +18,7 @@ export function QuantityStepper({
   max = 9999,
   step = 1,
   disabled = false,
+  inputLabel = 'Quantity',
 }: QuantityStepperProps) {
   const handleDecrease = () => {
     onChange(Math.max(min, value - step));
@@ -40,6 +42,7 @@ export function QuantityStepper({
         onClick={handleDecrease}
         disabled={disabled || value <= min}
         title="Decrease quantity"
+        aria-label="Decrease quantity"
         type="button"
       >
         -
@@ -52,12 +55,14 @@ export function QuantityStepper({
         min={min}
         max={max}
         disabled={disabled}
+        aria-label={inputLabel}
       />
       <button
         className="stepper-btn stepper-plus"
         onClick={handleIncrease}
         disabled={disabled || value >= max}
         title="Increase quantity"
+        aria-label="Increase quantity"
         type="button"
       >
         +

@@ -68,6 +68,47 @@ export function getQuarterStartDate(date: Date = new Date()): string {
 }
 
 /**
+ * Get month-split 10-day range (1-10, 11-20, 21-end) for the given date.
+ * Offset is in 10-day sets: -1 = previous set, +1 = next set.
+ */
+export function getTenDayRange(
+  baseDate: Date = new Date(),
+  offset: number = 0,
+  clampCurrentToBaseDate: boolean = true
+): PeriodRange {
+  const baseYear = baseDate.getFullYear();
+  const baseMonth = baseDate.getMonth() + 1;
+  const baseDay = baseDate.getDate();
+  const baseSet = baseDay <= 10 ? 0 : baseDay <= 20 ? 1 : 2;
+
+  let setIndex = baseYear * 36 + (baseMonth - 1) * 3 + baseSet + offset;
+  let targetYear = Math.floor(setIndex / 36);
+  let rem = setIndex % 36;
+  if (rem < 0) {
+    rem += 36;
+    targetYear -= 1;
+  }
+  const targetMonth = Math.floor(rem / 3) + 1;
+  const targetSet = rem % 3;
+
+  const fromDay = targetSet === 0 ? 1 : targetSet === 1 ? 11 : 21;
+  const lastDayOfMonth = new Date(targetYear, targetMonth, 0).getDate();
+  const endDay = targetSet === 0 ? 10 : targetSet === 1 ? 20 : lastDayOfMonth;
+
+  const from = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(fromDay).padStart(2, '0')}`;
+  let to = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+
+  if (clampCurrentToBaseDate && offset === 0) {
+    const baseDateStr = getLocalDateString(baseDate);
+    if (to > baseDateStr) {
+      to = baseDateStr;
+    }
+  }
+
+  return { from, to };
+}
+
+/**
  * Format date for month input (YYYY-MM)
  */
 export function getMonthInputString(date: Date = new Date()): string {
@@ -104,6 +145,8 @@ export function getReportRange(period: string): PeriodRange {
       return { from: day, to: day };
     case 'week':
       return { from: getWeekStartDate(today), to: getLocalDateString(today) };
+    case 'tenday':
+      return getTenDayRange(today);
     case 'month':
       return { from: getMonthStartDate(today), to: getLocalDateString(today) };
     case 'quarter':

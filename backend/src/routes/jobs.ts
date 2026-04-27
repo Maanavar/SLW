@@ -38,10 +38,18 @@ const createJobSchema = z.object({
   isSpotWork: z.boolean().default(false),
   jobCardId: z.string().trim().max(30).nullable().optional(),
   jobCardLine: z.number().int().positive().nullable().optional(),
+  billNo: z.string().trim().max(40).nullable().optional(),
   dcNo: z.string().trim().max(40).nullable().optional(),
   vehicleNo: z.string().trim().max(40).nullable().optional(),
   dcDate: localDateSchema.nullable().optional(),
   dcApproval: z.boolean().nullable().optional(),
+  rmpHandler: z.enum(['Bhai', 'Raja']).nullable().optional(),
+  jobFlowType: z.enum(['slw_work', 'agent_work']).nullable().optional(),
+  externalDc: z.boolean().nullable().optional(),
+  agentName: z.string().trim().max(120).nullable().optional(),
+  agentCommissionAmount: z.number().min(0).nullable().optional(),
+  agentTdsAmount: z.number().min(0).nullable().optional(),
+  agentSettlementPaidAmount: z.number().min(0).nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
 });
 
@@ -52,6 +60,63 @@ const createBulkJobsSchema = z.object({
 });
 
 const router = Router();
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function assertBillNoConstraints(params: {
+  customerId: number;
+  billNo: string | null;
+  jobCardId: string | null;
+  excludeJobId?: number;
+}) {
+  const { customerId, billNo, jobCardId, excludeJobId } = params;
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, hasBillNo: true },
+  });
+
+  if (!customer) {
+    throw new HttpError(404, 'Customer not found');
+  }
+
+  if (customer.hasBillNo && !billNo) {
+    throw new HttpError(400, 'Bill number is required for this customer.');
+  }
+
+  if (!billNo) {
+    return;
+  }
+
+  const duplicate = await prisma.job.findFirst({
+    where: {
+      billNo,
+      ...(excludeJobId ? { id: { not: excludeJobId } } : {}),
+      ...(jobCardId
+        ? {
+            OR: [{ jobCardId: { not: jobCardId } }, { jobCardId: null }],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      jobCardId: true,
+    },
+  });
+
+  if (duplicate) {
+    throw new HttpError(
+      409,
+      `Bill number "${billNo}" is already used in job card ${duplicate.jobCardId ?? `LEGACY-${duplicate.id}`}.`
+    );
+  }
+}
 
 router.get(
   '/',
@@ -107,9 +172,21 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createJobSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    const billNo = normalizeOptionalText(payload.billNo);
+    const jobCardId = normalizeOptionalText(payload.jobCardId);
+
+    await assertBillNoConstraints({
+      customerId: payload.customerId,
+      billNo,
+      jobCardId,
+    });
 
     const created = await prisma.job.create({
-      data: payload,
+      data: {
+        ...payload,
+        billNo,
+        jobCardId,
+      },
     });
 
     await createActivityLog({
@@ -130,9 +207,61 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createBulkJobsSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    const preparedJobs = payload.jobs.map((job) => ({
+      ...job,
+      billNo: normalizeOptionalText(job.billNo),
+      jobCardId: normalizeOptionalText(job.jobCardId),
+    }));
+
+    const customerIds = [...new Set(preparedJobs.map((job) => job.customerId))];
+    const customers = await prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: { id: true, hasBillNo: true },
+    });
+    const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+
+    preparedJobs.forEach((job, index) => {
+      const customer = customerMap.get(job.customerId);
+      if (!customer) {
+        throw new HttpError(404, `Customer not found for line ${index + 1}.`);
+      }
+      if (customer.hasBillNo && !job.billNo) {
+        throw new HttpError(
+          400,
+          `Bill number is required for line ${index + 1} (customer with bill-number workflow).`
+        );
+      }
+    });
+
+    const uniqueBillNos = [...new Set(preparedJobs.map((job) => job.billNo).filter((value): value is string => Boolean(value)))];
+    for (const billNo of uniqueBillNos) {
+      const billRows = preparedJobs.filter((job) => job.billNo === billNo);
+      const cardIds = [...new Set(billRows.map((job) => job.jobCardId || ''))];
+      const customerIdsForBill = [...new Set(billRows.map((job) => job.customerId))];
+
+      if (cardIds.length > 1) {
+        throw new HttpError(
+          400,
+          `Bill number "${billNo}" is used for multiple job cards in this request.`
+        );
+      }
+      if (customerIdsForBill.length > 1) {
+        throw new HttpError(
+          400,
+          `Bill number "${billNo}" is used for multiple customers in this request.`
+        );
+      }
+
+      const cardId = cardIds[0] || null;
+      await assertBillNoConstraints({
+        customerId: billRows[0].customerId,
+        billNo,
+        jobCardId: cardId,
+      });
+    }
 
     const created = await prisma.$transaction(
-      payload.jobs.map((jobData) =>
+      preparedJobs.map((jobData) =>
         prisma.job.create({
           data: jobData,
         })
@@ -171,9 +300,30 @@ router.put(
       throw new HttpError(404, 'Job not found');
     }
 
+    const effectiveCustomerId = payload.customerId ?? existing.customerId;
+    const effectiveBillNo =
+      payload.billNo !== undefined
+        ? normalizeOptionalText(payload.billNo)
+        : normalizeOptionalText(existing.billNo);
+    const effectiveJobCardId =
+      payload.jobCardId !== undefined
+        ? normalizeOptionalText(payload.jobCardId)
+        : normalizeOptionalText(existing.jobCardId);
+
+    await assertBillNoConstraints({
+      customerId: effectiveCustomerId,
+      billNo: effectiveBillNo,
+      jobCardId: effectiveJobCardId,
+      excludeJobId: existing.id,
+    });
+
     const updated = await prisma.job.update({
       where: { id: jobId },
-      data: payload,
+      data: {
+        ...payload,
+        ...(payload.billNo !== undefined ? { billNo: effectiveBillNo } : {}),
+        ...(payload.jobCardId !== undefined ? { jobCardId: effectiveJobCardId } : {}),
+      },
     });
 
     await createActivityLog({

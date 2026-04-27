@@ -7,6 +7,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  subtitle?: string;
   children: ReactNode;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -16,6 +17,7 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  subtitle,
   children,
   className = '',
   size = 'md',
@@ -49,7 +51,10 @@ export function Modal({
       <div className={`modal modal-${size} ${className}`}>
         {title ? (
           <div className="modal-header">
-            <h2 className="modal-title">{title}</h2>
+            <div className="modal-title-wrap">
+              <h2 className="modal-title">{title}</h2>
+              {subtitle && <p className="modal-subtitle">{subtitle}</p>}
+            </div>
             <button
               className="modal-close"
               onClick={onClose}

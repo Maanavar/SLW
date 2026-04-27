@@ -1,11 +1,11 @@
 /**
  * PaymentModeGroup Component
- * Toggle buttons for selecting payment mode (Cash/UPI/Bank/Cheque)
+ * Segmented buttons for selecting payment mode
  */
 
 import './PaymentModeGroup.css';
 
-type PaymentMode = 'cash' | 'upi' | 'bank' | 'cheque';
+export type PaymentMode = 'cash' | 'upi' | 'bank' | 'cheque' | 'mixed';
 
 interface PaymentModeGroupProps {
   value: PaymentMode;
@@ -18,6 +18,7 @@ const modes: { id: PaymentMode; label: string }[] = [
   { id: 'upi', label: 'UPI' },
   { id: 'bank', label: 'Bank' },
   { id: 'cheque', label: 'Cheque' },
+  { id: 'mixed', label: 'Mixed' },
 ];
 
 export function PaymentModeGroup({
@@ -26,7 +27,7 @@ export function PaymentModeGroup({
   disabled = false,
 }: PaymentModeGroupProps) {
   return (
-    <div className="payment-mode-group">
+    <div className="payment-mode-group" role="radiogroup" aria-label="Payment mode">
       {modes.map((mode) => (
         <button
           key={mode.id}
@@ -35,6 +36,8 @@ export function PaymentModeGroup({
           disabled={disabled}
           type="button"
           title={`Select ${mode.label}`}
+          role="radio"
+          aria-checked={value === mode.id}
         >
           {mode.label}
         </button>

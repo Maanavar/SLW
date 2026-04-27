@@ -4,6 +4,7 @@
  */
 
 import type { Expense } from '@/types';
+import { getLocalDateString } from './dateUtils';
 
 // Standard expense categories with icons and descriptions
 export const EXPENSE_CATEGORIES = {
@@ -81,9 +82,12 @@ export function calculateExpenseMetrics(
 export function calculateProfitAnalysis(
   grossRevenue: number,
   commissionExpense: number,
-  totalExpenses: number
+  totalExpenses: number,
+  grossProfitOverride?: number
 ): ProfitAnalysis {
-  const grossProfit = grossRevenue - commissionExpense;
+  const grossProfit = Number.isFinite(grossProfitOverride as number)
+    ? (grossProfitOverride as number)
+    : grossRevenue - commissionExpense;
   const netProfit = grossProfit - totalExpenses;
   const profitMargin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
   const expenseRatio = grossRevenue > 0 ? (totalExpenses / grossRevenue) * 100 : 0;
@@ -121,8 +125,8 @@ export function getMonthlyExpenseProjection(expenses: Expense[]): number {
   const recurringTotal = recurringExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
   // Get variable expenses from this month
-  const monthStart = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
-  const monthEnd = today.toISOString().split('T')[0];
+  const monthStart = getLocalDateString(new Date(currentYear, currentMonth, 1));
+  const monthEnd = getLocalDateString(today);
 
   const variableThisMonth = expenses
     .filter(
