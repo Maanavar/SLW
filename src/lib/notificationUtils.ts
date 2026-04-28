@@ -337,7 +337,7 @@ function checkMissingDc(
 
     const displayCardId = primary.jobCardId || `LEGACY-${primary.id}`;
     const safeGroupKey = groupKey.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const isWaived = cardJobs.some((j) => j.dcApproval === false);
+    const isWaived = cardJobs.some((j) => j.dcApproval === true);
 
     out.push({
       id: `dc_missing_${safeGroupKey}`,

@@ -178,7 +178,7 @@ export function getJobDcStatus(job: Job, customer?: Customer): string {
   if (hasDcDetails) {
     return 'DC Received';
   }
-  if (job.dcApproval === false) {
+  if (job.dcApproval === true) {
     return 'DC Pending (Waived)';
   }
   return 'DC Missing';
