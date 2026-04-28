@@ -176,12 +176,12 @@ export function getJobDcStatus(job: Job, customer?: Customer): string {
 
   const hasDcDetails = job.dcNo || job.vehicleNo || job.dcDate;
   if (hasDcDetails) {
-    return 'Completed';
+    return 'DC Received';
   }
   if (job.dcApproval === false) {
-    return 'Approved without DC';
+    return 'DC Pending (Waived)';
   }
-  return 'Pending DC';
+  return 'DC Missing';
 }
 
 /**

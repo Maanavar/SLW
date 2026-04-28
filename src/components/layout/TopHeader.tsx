@@ -29,7 +29,7 @@ const pageMap: Record<string, PageMeta> = {
 export function TopHeader() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { theme, toggleTheme, sidebarCollapsed, toggleSidebar, openMobileDrawer } = useUIStore();
+  const { theme, toggleTheme, toggleSidebar, openMobileDrawer } = useUIStore();
 
   // Desktop: collapse/expand the sidebar. Mobile/tablet: open the slide-in drawer.
   const handleNavToggle = () => {

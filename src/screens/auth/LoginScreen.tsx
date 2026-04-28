@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
 import { Icon } from '@/components/ui/Icon';
@@ -101,7 +101,7 @@ export function LoginScreen() {
           </p>
         </div>
 
-        <p className="login-meta numeric">v1.0 � Apr 2026 � Works offline � INR ?</p>
+        <p className="login-meta numeric">v1.0 · Apr 2026 · Works offline · INR ₹</p>
       </section>
 
       <section className="login-right-panel" aria-label="Login form">

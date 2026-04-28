@@ -337,12 +337,15 @@ function checkMissingDc(
 
     const displayCardId = primary.jobCardId || `LEGACY-${primary.id}`;
     const safeGroupKey = groupKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const isWaived = cardJobs.some((j) => j.dcApproval === false);
 
     out.push({
       id: `dc_missing_${safeGroupKey}`,
       type: hoursAgo >= 48 ? 'urgent' : 'warning',
-      title: 'DC details missing',
-      body: `${customer.name} — Job card ${displayCardId} has no DC number (${hoursAgo}h ago)`,
+      title: isWaived ? 'DC number pending (waived)' : 'DC number missing',
+      body: isWaived
+        ? `${customer.name} — Job card ${displayCardId} DC waived but number still expected (${hoursAgo}h ago)`
+        : `${customer.name} — Job card ${displayCardId} has no DC number (${hoursAgo}h ago)`,
       link: `/records?card=${encodeURIComponent(groupKey)}`,
       dismissible: false,
     });

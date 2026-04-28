@@ -43,12 +43,12 @@ function getPaymentDisplayId(row: PaymentDisplay): string {
 
 function formatPaymentBreakdown(row: PaymentDisplay): string {
   if (row.paymentMode !== 'Mixed') return row.paymentMode;
-  const parts = [];
-  if ((row as any).cashAmount)   parts.push(`Cash: ₹${(row as any).cashAmount}`);
-  if ((row as any).upiAmount)    parts.push(`UPI: ₹${(row as any).upiAmount}`);
-  if ((row as any).bankAmount)   parts.push(`Bank: ₹${(row as any).bankAmount}`);
-  if ((row as any).chequeAmount) parts.push(`Cheque: ₹${(row as any).chequeAmount}`);
-  return parts.join(', ');
+  const parts: string[] = [];
+  if (row.breakdown?.cash)   parts.push(`Cash: ₹${row.breakdown.cash}`);
+  if (row.breakdown?.upi)    parts.push(`UPI: ₹${row.breakdown.upi}`);
+  if (row.breakdown?.bank)   parts.push(`Bank: ₹${row.breakdown.bank}`);
+  if (row.breakdown?.cheque) parts.push(`Cheque: ₹${row.breakdown.cheque}`);
+  return parts.length > 0 ? parts.join(', ') : 'Mixed';
 }
 
 export function PaymentForm() {
@@ -183,15 +183,31 @@ export function PaymentForm() {
   // ── Summary stats ─────────────────────────────────────────────────────────
 
   const summary = useMemo(() => {
-    const total     = reportPayments.reduce((s, p) => s + (p.amount || 0), 0);
-    const count     = reportPayments.length;
-    const avg       = count > 0 ? total / count : 0;
-    const byCash    = reportPayments.filter(p => p.paymentMode === 'Cash').reduce((s, p) => s + p.amount, 0);
-    const byUPI     = reportPayments.filter(p => p.paymentMode === 'UPI').reduce((s, p) => s + p.amount, 0);
-    const byBank    = reportPayments.filter(p => p.paymentMode === 'Bank').reduce((s, p) => s + p.amount, 0);
-    const byCheque  = reportPayments.filter(p => p.paymentMode === 'Cheque').reduce((s, p) => s + p.amount, 0);
+    const total    = filteredPayments.reduce((s, p) => s + (p.amount || 0), 0);
+    const count    = filteredPayments.length;
+    const avg      = count > 0 ? total / count : 0;
+    const byCash   = filteredPayments.reduce((s, p) => {
+      if (p.paymentMode === 'Cash')  return s + p.amount;
+      if (p.paymentMode === 'Mixed') return s + (p.breakdown?.cash || 0);
+      return s;
+    }, 0);
+    const byUPI    = filteredPayments.reduce((s, p) => {
+      if (p.paymentMode === 'UPI')   return s + p.amount;
+      if (p.paymentMode === 'Mixed') return s + (p.breakdown?.upi || 0);
+      return s;
+    }, 0);
+    const byBank   = filteredPayments.reduce((s, p) => {
+      if (p.paymentMode === 'Bank')  return s + p.amount;
+      if (p.paymentMode === 'Mixed') return s + (p.breakdown?.bank || 0);
+      return s;
+    }, 0);
+    const byCheque = filteredPayments.reduce((s, p) => {
+      if (p.paymentMode === 'Cheque') return s + p.amount;
+      if (p.paymentMode === 'Mixed')  return s + (p.breakdown?.cheque || 0);
+      return s;
+    }, 0);
     return { total, count, avg, byCash, byUPI, byBank, byCheque };
-  }, [reportPayments]);
+  }, [filteredPayments]);
 
   // ── Modal state helpers ───────────────────────────────────────────────────
 

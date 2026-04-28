@@ -347,11 +347,11 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           commissionWorkerName:
             useWorkerCommission && cardCommissionWorker ? cardCommissionWorker.name : undefined,
           quantity: line.quantity,
-          workTypeName: line.workType?.name,
+          workTypeName: line.workType?.name ?? '',
           workName: line.workType?.shortCode,
           paymentStatus,
           workMode,
-          notes: notes.trim() ? notes.trim() : null,
+          notes: notes.trim() ? notes.trim() : undefined,
           jobCardId: baseCardId || undefined,
           jobCardLine: index + 1,
           billNo: showBillNoField ? billNo.trim() : undefined,
@@ -377,7 +377,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
         payload.rmpHandler = showRmpHandlerField ? rmpHandler : null;
         payload.jobFlowType = jobFlowType;
         payload.externalDc = useAgentCommission ? externalDc : false;
-        payload.agentName = useAgentCommission ? agentName.trim() : null;
+        payload.agentName = useAgentCommission ? agentName.trim() : undefined;
         payload.agentCommissionAmount = useAgentCommission && index === 0 ? Number(agentCommissionAmount) || 0 : 0;
         payload.agentTdsAmount = useAgentCommission && index === 0 ? Number(agentTdsAmount) || 0 : 0;
         payload.agentSettlementPaidAmount = useAgentCommission && index === 0 ? Number(agentSettlementPaidAmount) || 0 : 0;
@@ -401,7 +401,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
             return {
               customerId: primary.customerId,
               ...buildLinePayload(line, index),
-            };
+            } as Omit<Job, 'id' | 'createdAt'>;
           })
         );
       }
@@ -425,7 +425,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   const typeVariant: Record<string, string> = {
     Monthly: 'flag-monthly',
     Invoice: 'flag-invoice',
-    'Party Credit': 'flag-party-credit',
+    'Party-Credit': 'flag-party-credit',
     Cash: 'flag-cash',
   };
 

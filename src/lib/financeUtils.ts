@@ -205,17 +205,29 @@ export function calculatePaymentMetrics(
   const totalReceived = events.reduce((sum, e) => sum + (e.amount || 0), 0);
   const totalOutstanding = Math.max(0, totalRevenue - totalReceived);
 
-  // Calculate average days to payment
+  // Calculate average days to payment (job date → actual payment date)
+  const cardPaymentDate = new Map<string, string>();
+  buildCollectionEvents(jobs, payments, filterByDate).forEach((e) => {
+    if (!e.jobCardId) return;
+    const existing = cardPaymentDate.get(e.jobCardId);
+    if (!existing || e.date < existing) cardPaymentDate.set(e.jobCardId, e.date);
+  });
+
   let totalDays = 0;
   let paidJobsCount = 0;
+  const processedCards = new Set<string>();
   filtered.forEach((job) => {
-    if (getJobPaidAmount(job) > 0) {
-      const jobDate = new Date(job.date);
-      const today = new Date();
-      const days = Math.floor((today.getTime() - jobDate.getTime()) / (1000 * 60 * 60 * 24));
-      totalDays += Math.max(0, days);
-      paidJobsCount++;
-    }
+    if (getJobPaidAmount(job) <= 0) return;
+    const cardId = job.jobCardId || `LEGACY-${job.id}`;
+    if (processedCards.has(cardId)) return;
+    processedCards.add(cardId);
+    const paymentDate = cardPaymentDate.get(cardId);
+    if (!paymentDate) return;
+    const days = Math.floor(
+      (new Date(paymentDate).getTime() - new Date(job.date).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    totalDays += Math.max(0, days);
+    paidJobsCount++;
   });
 
   return {
@@ -361,6 +373,7 @@ export function calculateCustomerFinancials(
     : jobs;
 
   const customerMap = new Map<number, CustomerFinancials>();
+  const customerCardSets = new Map<number, Set<string>>();
 
   // Process jobs
   filteredJobs.forEach((job) => {
@@ -383,7 +396,11 @@ export function calculateCustomerFinancials(
     existing.totalRevenue += finalBill;
     existing.commissionExpense += commission;
     existing.grossProfit += getJobNetValue(job);
-    existing.jobCount += 1;
+
+    const cardId = job.jobCardId || `LEGACY-${job.id}`;
+    const cardSet = customerCardSets.get(job.customerId) || new Set<string>();
+    cardSet.add(cardId);
+    customerCardSets.set(job.customerId, cardSet);
 
     customerMap.set(job.customerId, existing);
   });
@@ -400,6 +417,7 @@ export function calculateCustomerFinancials(
     customer.totalOutstanding = Math.max(0, customer.totalRevenue - customer.totalReceived);
     customer.paymentRate =
       customer.totalRevenue > 0 ? (customer.totalReceived / customer.totalRevenue) * 100 : 0;
+    customer.jobCount = customerCardSets.get(customer.customerId)?.size || 0;
     results.push(customer);
   });
 
