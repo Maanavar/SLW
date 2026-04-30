@@ -81,6 +81,61 @@
 
 .pay-period-tab:not(.active):hover { color: var(--text); }
 
+/* ── Period navigator ────────────────────────────────────────── */
+.pay-nav-shell {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunk);
+  overflow: hidden;
+}
+
+.pay-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pay-nav-btn:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
+.pay-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.pay-nav-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 0 12px;
+  min-width: 140px;
+  text-align: center;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  line-height: 28px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pay-today-btn {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pay-today-btn:hover { opacity: 0.85; }
+
 /* ── Customer select ─────────────────────────────────────────── */
 .pay-customer-select {
   width: 190px;

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
@@ -55,6 +55,7 @@ const ChevR = () => (
 
 export function HistoryScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { jobs, getCustomer, deleteJob } = useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
@@ -65,6 +66,11 @@ export function HistoryScreen() {
   const [viewMode, setViewMode] = useState<HistoryViewMode>('table');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [dcSearch, setDcSearch] = useState('');
+  const appliedDateParamRef = useRef<string | null>(null);
+  const openedCardParamRef = useRef<string | null>(null);
+
+  const deepLinkDate = (searchParams.get('date') || '').trim();
+  const deepLinkCardKey = (searchParams.get('cardKey') || '').trim();
 
   const isDcMode = dcSearch.trim().length > 0;
   const isToday = selectedDate === today;
@@ -72,6 +78,26 @@ export function HistoryScreen() {
   // When DC search is active, search across ALL jobs, not just the selected date
   const jobsInRange = isDcMode ? jobs : getJobsInRange(jobs, selectedDate, selectedDate);
   const groups = groupJobsByCard(jobsInRange);
+
+  useEffect(() => {
+    if (!deepLinkDate || appliedDateParamRef.current === deepLinkDate) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deepLinkDate)) return;
+    if (deepLinkDate > today) return;
+    setSelectedDate(deepLinkDate);
+    appliedDateParamRef.current = deepLinkDate;
+  }, [deepLinkDate, today]);
+
+  useEffect(() => {
+    if (!deepLinkCardKey) {
+      openedCardParamRef.current = null;
+      return;
+    }
+    if (openedCardParamRef.current === deepLinkCardKey) return;
+    const target = groups.find((g) => g.key === deepLinkCardKey);
+    if (!target) return;
+    setSelectedCardId(target.key);
+    openedCardParamRef.current = deepLinkCardKey;
+  }, [deepLinkCardKey, groups]);
 
   const filteredGroups = useMemo(
     () =>

@@ -5,7 +5,7 @@
 
 import type { Job, Payment, Customer, JobGroup, PeriodRange } from '@/types';
 import { getReportRange as getDateReportRange, isDateInRange, formatDate as formatDateUtil } from './dateUtils';
-import { getJobNetValue, groupJobsByCard, getJobPaidAmount } from './jobUtils';
+import { getJobFinalBillValue, groupJobsByCard, getJobPaidAmount } from './jobUtils';
 
 // Re-export for convenience
 export function getReportRange(period: string): PeriodRange {
@@ -181,7 +181,8 @@ export function calculateMonthlyBalances(
         jobs: [],
       };
     }
-    monthMap[monthKey].totalNet += getJobNetValue(job);
+    // `totalNet` is a legacy field name; value represents customer bill due for the month.
+    monthMap[monthKey].totalNet += getJobFinalBillValue(job);
     monthMap[monthKey].paidFromJobs += getJobPaidAmount(job);
     monthMap[monthKey].jobs.push(job);
   });
@@ -199,14 +200,26 @@ export function calculateMonthlyBalances(
       targetMonth = payment.date.substring(0, 7);
     }
 
-    if (targetMonth && monthMap[targetMonth]) {
+    if (targetMonth) {
+      if (!monthMap[targetMonth]) {
+        monthMap[targetMonth] = {
+          monthKey: targetMonth,
+          monthLabel: formatDateUtil(targetMonth + '-01').substring(0, 7),
+          totalNet: 0,
+          paidFromJobs: 0,
+          paidFromPayments: 0,
+          balance: 0,
+          jobs: [],
+        };
+      }
       monthMap[targetMonth].paidFromPayments += payment.amount;
     }
   });
 
   // Calculate balance for each month
   Object.values(monthMap).forEach((month) => {
-    month.balance = month.totalNet - month.paidFromJobs - month.paidFromPayments;
+    const effectivePaid = Math.max(month.paidFromJobs, month.paidFromPayments);
+    month.balance = Math.max(0, month.totalNet - effectivePaid);
   });
 
   // Sort descending by month

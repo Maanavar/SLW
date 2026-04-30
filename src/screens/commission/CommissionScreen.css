@@ -47,7 +47,7 @@
 /* ── Stat tiles ──────────────────────────────────────────────── */
 .comm-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -265,6 +265,7 @@
 .ta-c { text-align: center; }
 .fw-600 { font-weight: 600; }
 .comm-td-muted  { color: var(--text-muted); }
+.comm-td-ref    { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; }
 .comm-td-green  { color: var(--green); }
 .comm-td-red    { color: var(--red); }
 .comm-td-accent { color: var(--accent-text); font-family: var(--font-mono); font-size: 12px; }

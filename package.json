@@ -16,7 +16,10 @@
     "type-check:backend": "npm --prefix backend run type-check",
     "validate": "npm run type-check && npm run build",
     "db:up": "docker compose up -d postgres adminer",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "db:backup": "powershell -ExecutionPolicy Bypass -File scripts\\backup-db.ps1",
+    "db:restore": "powershell -ExecutionPolicy Bypass -File scripts\\restore-db.ps1",
+    "db:backup:schedule": "powershell -ExecutionPolicy Bypass -File scripts\\setup-scheduled-backup.ps1"
   },
   "keywords": [
     "business",
@@ -41,6 +44,7 @@
   },
   "dependencies": {
     "@prisma/client": "^7.7.0",
+    "html-to-image": "^1.11.13",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",

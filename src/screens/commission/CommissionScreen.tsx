@@ -22,6 +22,7 @@ interface WorkerRow {
   customerName: string;
   status: WorkerRowStatus;
 }
+type AgentSortKey = 'date' | 'card' | 'customer' | 'agent';
 interface AgentRow {
   key: string;
   jobId: number;
@@ -29,6 +30,8 @@ interface AgentRow {
   customerName: string;
   jobCardId: string;
   agentName: string;
+  dcNo: string;
+  billNo: string;
   externalDc: boolean;
   invoiceAmount: number;
   ourCommissionIncome: number;
@@ -74,6 +77,7 @@ export function CommissionScreen() {
     null
   );
   const [agentOnlyPending, setAgentOnlyPending] = useState(true);
+  const [agentSort, setAgentSort] = useState<{ key: AgentSortKey; order: 'asc' | 'desc' } | null>(null);
 
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
@@ -153,6 +157,8 @@ export function CommissionScreen() {
         customerName: getCustomer(primary.customerId)?.name || '-',
         jobCardId: cardId,
         agentName: primary.agentName || (primary.rmpHandler || 'Agent'),
+        dcNo: primary.dcNo || '',
+        billNo: primary.billNo || '',
         externalDc: Boolean(primary.externalDc),
         invoiceAmount,
         ourCommissionIncome,
@@ -163,10 +169,36 @@ export function CommissionScreen() {
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [jobs, getCustomer]);
 
-  const visibleAgentRows = useMemo(
+  const filteredAgentRows = useMemo(
     () => (agentOnlyPending ? agentRows.filter((row) => row.pending > 0) : agentRows),
     [agentRows, agentOnlyPending]
   );
+
+  const visibleAgentRows = useMemo(() => {
+    if (!agentSort) return filteredAgentRows;
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
+    const dir = agentSort.order === 'asc' ? 1 : -1;
+    return [...filteredAgentRows].sort((a, b) => {
+      if (agentSort.key === 'date')     return a.date.localeCompare(b.date) * dir;
+      if (agentSort.key === 'card')     return collator.compare(a.jobCardId, b.jobCardId) * dir;
+      if (agentSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * dir;
+      if (agentSort.key === 'agent')    return collator.compare(a.agentName, b.agentName) * dir;
+      return 0;
+    });
+  }, [filteredAgentRows, agentSort]);
+
+  function toggleAgentSort(key: AgentSortKey) {
+    setAgentSort(prev =>
+      prev && prev.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'date' ? 'desc' : 'asc' }
+    );
+  }
+
+  function agentSortMark(key: AgentSortKey) {
+    if (!agentSort || agentSort.key !== key) return ' ↕';
+    return agentSort.order === 'asc' ? ' ↑' : ' ↓';
+  }
 
   const agentTotals = useMemo(() => {
     return visibleAgentRows.reduce(
@@ -258,8 +290,33 @@ export function CommissionScreen() {
       return;
     }
     try {
-      await updateJob(row.jobId, { agentSettlementPaidAmount: value });
-      toast.success('Updated', `Settlement saved for ${row.agentName}`);
+      const cardJobs = jobs
+        .filter((job) => (job.jobCardId ? `card:${job.jobCardId}` : `legacy:${job.id}`) === row.key)
+        .filter((job) => isAgentWorkJob(job))
+        .sort((a, b) => (a.jobCardLine || a.id) - (b.jobCardLine || b.id));
+
+      if (cardJobs.length === 0) {
+        toast.error('Error', 'No agent jobs found for this card');
+        return;
+      }
+
+      const totalNetPayable = cardJobs.reduce((sum, job) => sum + getJobAgentNetPayable(job), 0);
+      let remaining = Math.min(value, totalNetPayable);
+
+      await Promise.all(
+        cardJobs.map((job) => {
+          const linePayable = getJobAgentNetPayable(job);
+          const allocated = Math.min(remaining, linePayable);
+          remaining -= allocated;
+          return updateJob(job.id, { agentSettlementPaidAmount: allocated });
+        })
+      );
+
+      if (value > totalNetPayable) {
+        toast.info('Capped', `Settlement capped to net payable ${formatCurrency(totalNetPayable)} for ${row.agentName}`);
+      } else {
+        toast.success('Updated', `Settlement saved for ${row.agentName}`);
+      }
     } catch {
       toast.error('Error', 'Failed to update settlement');
     }
@@ -268,6 +325,10 @@ export function CommissionScreen() {
   const totalDue = workerSummary.reduce((s, w) => s + w.totalDue, 0);
   const totalPaid = workerSummary.reduce((s, w) => s + w.totalPaid, 0);
   const totalOutstanding = workerSummary.reduce((s, w) => s + w.outstanding, 0);
+  const extDcPending = useMemo(
+    () => agentRows.filter(r => r.externalDc).reduce((s, r) => s + r.pending, 0),
+    [agentRows]
+  );
 
   return (
     <div className="comm-screen">
@@ -304,10 +365,10 @@ export function CommissionScreen() {
           <span className="comm-stat-value">{formatCurrency(totalOutstanding)}</span>
           <span className="comm-stat-sub">Still to pay</span>
         </div>
-        <div className="comm-stat">
-          <span className="comm-stat-label">Workers</span>
-          <span className="comm-stat-value">{workerSummary.length}</span>
-          <span className="comm-stat-sub">Configured</span>
+        <div className={`comm-stat${extDcPending > 0 ? ' comm-stat--red' : ' comm-stat--green'}`}>
+          <span className="comm-stat-label">Ext. DC Pending</span>
+          <span className="comm-stat-value">{formatCurrency(extDcPending)}</span>
+          <span className="comm-stat-sub">WW &amp; RMP agents</span>
         </div>
       </div>
 
@@ -554,11 +615,33 @@ export function CommissionScreen() {
               <table className="comm-table">
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Card</th>
-                    <th>Customer</th>
-                    <th>Agent</th>
-                    <th className="ta-c">External DC</th>
+                    <th
+                      className={`slw-sortable-th${agentSort?.key === 'date' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0}
+                      onClick={() => toggleAgentSort('date')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('date'); } }}
+                    >Date{agentSortMark('date')}</th>
+                    <th
+                      className={`slw-sortable-th${agentSort?.key === 'card' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0}
+                      onClick={() => toggleAgentSort('card')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('card'); } }}
+                    >Card{agentSortMark('card')}</th>
+                    <th
+                      className={`slw-sortable-th${agentSort?.key === 'customer' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0}
+                      onClick={() => toggleAgentSort('customer')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('customer'); } }}
+                    >Customer{agentSortMark('customer')}</th>
+                    <th
+                      className={`slw-sortable-th${agentSort?.key === 'agent' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0}
+                      onClick={() => toggleAgentSort('agent')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('agent'); } }}
+                    >Agent{agentSortMark('agent')}</th>
+                    <th className="ta-c">Ext DC</th>
+                    <th>DC No</th>
+                    <th>Bill No</th>
                     <th className="ta-r">Invoice</th>
                     <th className="ta-r">Our Income</th>
                     <th className="ta-r">Net Payable</th>
@@ -579,6 +662,8 @@ export function CommissionScreen() {
                           ? <span className="comm-badge comm-badge--pending">Yes</span>
                           : <span className="comm-badge comm-badge--settled">No</span>}
                       </td>
+                      <td className="comm-td-ref">{row.dcNo || '—'}</td>
+                      <td className="comm-td-ref">{row.billNo || '—'}</td>
                       <td className="ta-r">{formatCurrency(row.invoiceAmount)}</td>
                       <td className="ta-r comm-td-green">{formatCurrency(row.ourCommissionIncome)}</td>
                       <td className="ta-r">{formatCurrency(row.netPayable)}</td>

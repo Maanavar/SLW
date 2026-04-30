@@ -53,6 +53,11 @@ function isRmpCustomer(customer?: Customer | null) {
   return shortCode === 'rmp' || name.includes('ramani motors');
 }
 
+function isNmCustomer(customer?: Customer | null) {
+  if (!customer) return false;
+  return normalizeCustomerValue(customer.shortCode) === 'nm';
+}
+
 function isRamaniCarsCustomer(customer?: Customer | null) {
   if (!customer) return false;
   const shortCode = normalizeCustomerValue(customer.shortCode);
@@ -142,6 +147,7 @@ export function JobForm() {
   const [agentTdsAmount, setAgentTdsAmount] = useState('');
   const [paymentIntent, setPaymentIntent] = useState<'now' | 'later'>('later');
   const [paidAmount, setPaidAmount] = useState('');
+  const [autoGenerateCount, setAutoGenerateCount] = useState('9');
   const [notes, setNotes] = useState('');
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -174,7 +180,7 @@ export function JobForm() {
   const [qaWorkTypeRate, setQaWorkTypeRate] = useState('');
 
   const showDcFields = shouldShowDcFields(selectedCustomer);
-  const showBillNoField = selectedCustomer?.hasBillNo === true;
+  const showBillNoField = selectedCustomer?.hasBillNo === true || isRmpCustomer(selectedCustomer) || isNmCustomer(selectedCustomer);
   const showVehicleNoField = showDcFields && !isWagenAutosCustomer(selectedCustomer);
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
   const showRmpHandlerField = isRmpCustomer(selectedCustomer);
@@ -749,7 +755,8 @@ export function JobForm() {
       setSelectedCardKey(null);
     } catch (error) {
       console.error('Error saving job:', error);
-      toast.error('Error', `Failed to ${isEditMode ? 'update' : 'create'} job. Please try again.`);
+      const msg = error instanceof Error ? error.message : null;
+      toast.error('Error', msg || `Failed to ${isEditMode ? 'update' : 'create'} job. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -766,7 +773,17 @@ export function JobForm() {
     setWorkMode(cardToEdit.primary.workMode as 'Workshop' | 'Spot');
     setJobFlowType(cardToEdit.primary.jobFlowType || 'slw_work');
     setExternalDc(Boolean(cardToEdit.primary.externalDc));
-    setAgentName(cardToEdit.primary.agentName || '');
+    // Normalize legacy agent names created before standardisation
+    const rawAgent = cardToEdit.primary.agentName || '';
+    let normalizedAgent = rawAgent === 'Palanisamy External' ? 'Palanisamy'
+      : rawAgent === 'Bhai External' ? 'Bhai'
+      : rawAgent === 'Raja External' ? 'Raja'
+      : rawAgent;
+    // WW has exactly one agent — force it regardless of what was stored (handles partial/legacy values)
+    if (isRamaniCarsCustomer(editCustomer) && cardToEdit.primary.jobFlowType === 'agent_work') {
+      normalizedAgent = 'Palanisamy';
+    }
+    setAgentName(normalizedAgent);
     setAgentCommissionAmount(String(cardToEdit.primary.agentCommissionAmount || 0));
     setAgentTdsAmount(String(cardToEdit.primary.agentTdsAmount || 0));
 
@@ -967,6 +984,118 @@ export function JobForm() {
     setSelectedCardKey(null);
   };
 
+  const handleAutoGenerateRamaniCards = async () => {
+    if (!selectedCustomer) {
+      toast.error('Error', 'Please select a customer');
+      return;
+    }
+
+    if (!isRamaniCarsCustomer(selectedCustomer)) {
+      toast.error('Error', 'Auto generate is available only for WW Ramani Cars');
+      return;
+    }
+
+    if (!jobDate) {
+      toast.error('Error', 'Please select a job date');
+      return;
+    }
+
+    if (jobDate > today) {
+      toast.error('Error', 'Future date is not allowed');
+      return;
+    }
+
+    if (showBillNoField && !billNo.trim()) {
+      toast.error('Error', 'Bill number is required for this customer');
+      return;
+    }
+
+    const requestedCount = parseInt(autoGenerateCount, 10);
+    if (!Number.isInteger(requestedCount) || requestedCount <= 0) {
+      toast.error('Error', 'Enter a valid auto-generate count');
+      return;
+    }
+
+    const rotorWorkType = workTypes.find((workType) => {
+      const label = `${workType.name} ${workType.shortCode}`.toLowerCase();
+      return label.includes('rotor') && label.includes('skim') && label.includes('2') && label.includes('disc');
+    });
+
+    if (!rotorWorkType) {
+      toast.error('Error', 'Work type "Rotor Skimming - 2 Disc" not found. Add it in Work Type master first.');
+      return;
+    }
+
+    const lineAmount = Number(rotorWorkType.defaultRate) || 0;
+    if (lineAmount <= 0) {
+      toast.error('Error', `Set a default rate for "${rotorWorkType.name}" to auto generate cards`);
+      return;
+    }
+
+    const palanisamyWorker = getCommissionWorkersForCustomer(selectedCustomer.id).find(
+      (worker) => worker.name.trim().toLowerCase() === 'palanisamy'
+    );
+    if (!palanisamyWorker) {
+      toast.error('Error', 'Commission worker "Palanisamy" not found for this customer.');
+      return;
+    }
+
+    const jobsSnapshot = [...jobs];
+    const newJobs: Job[] = [];
+    for (let i = 0; i < requestedCount; i += 1) {
+      const generatedCardId = generateJobCardId(jobDate, jobsSnapshot);
+      newJobs.push({
+        id: Date.now() + Math.random() + i,
+        customerId: selectedCustomer.id,
+        workTypeName: rotorWorkType.name,
+        workName: rotorWorkType.shortCode,
+        quantity: 1,
+        amount: lineAmount,
+        commissionAmount: 0,
+        commissionWorkerId: palanisamyWorker.id,
+        commissionWorkerName: palanisamyWorker.name,
+        netAmount: lineAmount,
+        date: jobDate,
+        paymentStatus: 'Pending',
+        paymentMode: undefined,
+        paidAmount: 0,
+        workMode,
+        isSpotWork: workMode === 'Spot',
+        jobCardId: generatedCardId,
+        jobCardLine: 1,
+        billNo: showBillNoField ? billNo.trim() : undefined,
+        notes: (notes.trim() || `Auto-generated: ${requestedCount} x Rotor skimming set of 2. DC to be updated later.`),
+        ...(showDcFields && {
+          dcNo: undefined,
+          vehicleNo: undefined,
+          dcDate: undefined,
+          dcApproval: true,
+        }),
+        rmpHandler: null,
+        jobFlowType: 'slw_work',
+        externalDc: false,
+        agentName: undefined,
+        agentCommissionAmount: 0,
+        agentTdsAmount: 0,
+        agentSettlementPaidAmount: 0,
+      });
+      jobsSnapshot.push(newJobs[newJobs.length - 1]);
+    }
+
+    setIsSubmitting(true);
+    try {
+      await addJobsBulk(newJobs);
+      toast.success('Success', `Auto-generated ${newJobs.length} job cards for ${selectedCustomer.name}`);
+      handleReset();
+    } catch (error) {
+      console.error('Error auto-generating job cards:', error);
+      const msg = error instanceof Error ? error.message : null;
+      toast.error('Error', msg || 'Failed to auto-generate job cards');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const typeVariant: Record<string, string> = {
     Monthly: 'flag-monthly',
     Invoice: 'flag-invoice',
@@ -1161,22 +1290,44 @@ export function JobForm() {
                   <label className="dc-waived-toggle-label">
                     <ToggleSwitch
                       checked={externalDc}
-                      onChange={setExternalDc}
+                      onChange={(val) => {
+                        setExternalDc(val);
+                        if (isRmpCustomer(selectedCustomer)) setAgentName('');
+                      }}
                       id="agent-external-dc"
                     />
-                    <span>External DC (not worked by SLW)</span>
+                    <span>Commission DC (not worked by SLW)</span>
                   </label>
                 </div>
                 <div className="njc-row-2">
                   <div className="form-group">
                     <label className="form-label">Agent Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={agentName}
-                      onChange={(e) => setAgentName(e.target.value)}
-                      placeholder={isRmpCustomer(selectedCustomer) ? 'Sudha / Bhai / Raja' : 'Palanisamy'}
-                    />
+                    {isRmpCustomer(selectedCustomer) ? (
+                      <select className="form-input" value={agentName} onChange={(e) => setAgentName(e.target.value)}>
+                        <option value="">Select agent...</option>
+                        {externalDc ? (
+                          <option value="Leaf Bhai">Leaf Bhai</option>
+                        ) : (
+                          <>
+                            <option value="Bhai">Bhai</option>
+                            <option value="Raja">Raja</option>
+                          </>
+                        )}
+                      </select>
+                    ) : isRamaniCarsCustomer(selectedCustomer) ? (
+                      <select className="form-input" value={agentName} onChange={(e) => setAgentName(e.target.value)}>
+                        <option value="">Select agent...</option>
+                        <option value="Palanisamy">Palanisamy</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={agentName}
+                        onChange={(e) => setAgentName(e.target.value)}
+                        placeholder="Agent name"
+                      />
+                    )}
                   </div>
                   <div className="form-group">
                     <label className="form-label">Our Commission (INR)</label>
@@ -1389,6 +1540,29 @@ export function JobForm() {
 
             {/* Footer */}
             <div className="njc-footer">
+              {!isEditMode && isRamaniCarsCustomer(selectedCustomer) && (
+                <>
+                  <input
+                    type="number"
+                    className="form-input mono"
+                    value={autoGenerateCount}
+                    onChange={(e) => setAutoGenerateCount(e.target.value)}
+                    min="1"
+                    step="1"
+                    style={{ width: '94px' }}
+                    title="No. of cards"
+                    placeholder="Count"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleAutoGenerateRamaniCards}
+                    disabled={isSubmitting}
+                  >
+                    Auto-generate rotor cards
+                  </button>
+                </>
+              )}
               <button type="button" className="btn btn-secondary" onClick={handleReset} disabled={isSubmitting}>
                 Reset
               </button>

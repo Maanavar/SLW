@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/useToast';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobsInRange, getPaymentEventsInRange, groupJobsByCard } from '@/lib/reportUtils';
+import { getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
 import { getJobCardPaymentSummary, getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
 import type { PaymentBreakdown } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/Badge';
@@ -28,6 +28,8 @@ interface RecordRow {
   id: string;
   date: string;
   jobCardId: string;
+  billNo?: string;
+  dcNo?: string;
   customerName: string;
   customerType: string;
   lineCount: number;
@@ -40,7 +42,7 @@ interface RecordRow {
   paymentStatus: 'Paid' | 'Pending' | 'Partially Paid';
 }
 
-type RecordTableSortKey = 'customer' | 'customerType' | 'lines' | 'finalBill' | 'status';
+type RecordTableSortKey = 'date' | 'card' | 'billNo' | 'dcNo' | 'customer' | 'customerType' | 'lines' | 'finalBill' | 'status';
 
 function getRecordTrend(
   current: number,
@@ -75,15 +77,35 @@ interface ExportFields {
   cardId: boolean;
   date: boolean;
   customer: boolean;
+  billNo: boolean;
   workType: boolean;
   quantity: boolean;
   amount: boolean;
+  finalBill: boolean;
   commission: boolean;
+  netIncome: boolean;
   paid: boolean;
   dcNo: boolean;
   dcDate: boolean;
   vehicleNo: boolean;
 }
+
+const EXPORT_FIELD_LABELS: Record<keyof ExportFields, string> = {
+  cardId: 'Card ID',
+  date: 'Date',
+  customer: 'Customer Name',
+  billNo: 'Bill No',
+  workType: 'Work Type',
+  quantity: 'Quantity',
+  amount: 'Net Amount',
+  finalBill: 'Final Bill',
+  commission: 'Commission',
+  netIncome: 'Net Income',
+  paid: 'Paid',
+  dcNo: 'DC No',
+  dcDate: 'DC Date',
+  vehicleNo: 'Vehicle No',
+};
 
 interface ExportSummaryFields {
   totalCards: boolean;
@@ -95,9 +117,26 @@ interface ExportSummaryFields {
 }
 
 const DEFAULT_EXPORT_FIELDS: ExportFields = {
-  cardId: true, date: true, customer: true, workType: true,
-  quantity: true, amount: true, commission: false, paid: true,
+  cardId: true, date: true, customer: true, billNo: false, workType: true,
+  quantity: true, amount: true, finalBill: false, commission: false, netIncome: false, paid: true,
   dcNo: true, dcDate: true, vehicleNo: true,
+};
+
+const RMP_DEFAULT_EXPORT_FIELDS: ExportFields = {
+  cardId: false,
+  date: true,
+  customer: false,
+  billNo: true,
+  workType: false,
+  quantity: false,
+  amount: false,
+  finalBill: true,
+  commission: true,
+  netIncome: true,
+  paid: false,
+  dcNo: true,
+  dcDate: false,
+  vehicleNo: true,
 };
 
 const DEFAULT_EXPORT_SUMMARY_FIELDS: ExportSummaryFields = {
@@ -107,6 +146,16 @@ const DEFAULT_EXPORT_SUMMARY_FIELDS: ExportSummaryFields = {
   totalPaid: true,
   totalPending: true,
   totalCommission: false,
+};
+
+const RMP_DEFAULT_EXPORT_SUMMARY_FIELDS: ExportSummaryFields = {
+  totalCards: true,
+  totalBill: true,
+  totalCommission: true,
+  totalNet: true,
+  totalPaid: false,
+  totalPending: false,
+  
 };
 
 const PERIOD_TABS: { mode: PeriodMode; label: string }[] = [
@@ -147,6 +196,11 @@ function formatCardDate(dateStr: string): string {
   return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
+}
+
+function formatExportDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-');
+  return `${day}-${month}-${year}`;
 }
 
 function computeOffsetPeriod(
@@ -248,7 +302,7 @@ function getCardStatusClass(status: RecordRow['paymentStatus']): string {
 
 export function RecordsScreen() {
   const navigate  = useNavigate();
-  const { jobs, customers, payments, getCustomer, deleteJob } = useDataStore();
+  const { jobs, customers, getCustomer, deleteJob } = useDataStore();
   const toast     = useToast();
   const today     = getLocalDateString(new Date());
 
@@ -381,6 +435,8 @@ export function RecordsScreen() {
     );
   }, [customerOptions, selectedCustomerId]);
 
+  const [jobFlowFilter, setJobFlowFilter] = useState<'all' | 'slw_work' | 'agent_work'>('all');
+
   const isRmpSelected = useMemo(() => {
     if (!selectedCustomerId) return false;
     const c = customers.find(x => x.id === selectedCustomerId);
@@ -389,19 +445,41 @@ export function RecordsScreen() {
            (c.name || '').toLowerCase().includes('ramani motors');
   }, [selectedCustomerId, customers]);
 
+  const isWwSelected = useMemo(() => {
+    if (!selectedCustomerId) return false;
+    const c = customers.find(x => x.id === selectedCustomerId);
+    if (!c) return false;
+    return (c.shortCode || '').toLowerCase() === 'ww' ||
+           (c.name || '').toLowerCase().includes('ramani cars');
+  }, [selectedCustomerId, customers]);
+
+  const showFlowFilter = isRmpSelected || isWwSelected;
+
+  const showBillNoColumn = useMemo(() => {
+    if (!selectedCustomerId) return false;
+    const c = customers.find((x) => x.id === selectedCustomerId);
+    return Boolean(c?.hasBillNo);
+  }, [selectedCustomerId, customers]);
+
+  const showDcNoColumn = useMemo(() => {
+    if (!selectedCustomerId) return false;
+    const c = customers.find((x) => x.id === selectedCustomerId);
+    if (!c) return false;
+    const code = (c.shortCode || '').trim().toLowerCase();
+    const name = (c.name || '').trim().toLowerCase();
+    return code === 'rmp' || code === 'ww' || code === 'nm' || name.includes('ramani motors') || name.includes('ramani cars');
+  }, [selectedCustomerId, customers]);
+
+  useEffect(() => {
+    if (isRmpSelected) {
+      setExportFields(RMP_DEFAULT_EXPORT_FIELDS);
+      setExportSummaryFields(RMP_DEFAULT_EXPORT_SUMMARY_FIELDS);
+    }
+  }, [isRmpSelected, selectedCustomerId]);
+
   const jobsInRange = useMemo(
     () => getJobsInRange(jobs, rangeStart, rangeEnd),
     [jobs, rangeStart, rangeEnd]
-  );
-
-  const paymentEventsInRange = useMemo(
-    () => getPaymentEventsInRange(jobs, payments, rangeStart, rangeEnd),
-    [jobs, payments, rangeStart, rangeEnd]
-  );
-
-  const totalReceived = useMemo(
-    () => paymentEventsInRange.reduce((s, e) => s + (e.amount || 0), 0),
-    [paymentEventsInRange]
   );
 
   const jobsForCustomer = useMemo(() => {
@@ -411,8 +489,11 @@ export function RecordsScreen() {
     if (isRmpSelected && rmpHandlerFilter) {
       filtered = filtered.filter(j => j.rmpHandler === rmpHandlerFilter);
     }
+    if (showFlowFilter && jobFlowFilter !== 'all') {
+      filtered = filtered.filter(j => (j.jobFlowType || 'slw_work') === jobFlowFilter);
+    }
     return filtered;
-  }, [jobsInRange, selectedCustomerId, isRmpSelected, rmpHandlerFilter]);
+  }, [jobsInRange, selectedCustomerId, isRmpSelected, rmpHandlerFilter, showFlowFilter, jobFlowFilter]);
 
   const groupedJobs = useMemo(() =>
     groupJobsByCard(jobsForCustomer)
@@ -442,10 +523,13 @@ export function RecordsScreen() {
       const payment = getJobCardPaymentSummary(group.jobs);
       const commission = group.jobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0);
       const workSummary = [...new Set(group.jobs.map(j => j.workTypeName))].join(', ');
+      const dcNumbers = [...new Set(group.jobs.map((j) => (j.dcNo || '').trim()).filter(Boolean))];
       return {
         id: group.key,
         date: group.primary.date,
         jobCardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
+        billNo: group.primary.billNo || undefined,
+        dcNo: dcNumbers.join(', ') || undefined,
         customerName,
         customerType,
         lineCount: group.lineCount,
@@ -473,6 +557,8 @@ export function RecordsScreen() {
     const paidCards = rows.filter(r => r.paymentStatus === 'Paid' || r.paymentStatus === 'Partially Paid').length;
     return { totalCards, totalBill, totalNet, totalPaid, totalPending, totalCommission, grossProfit, workDays, avgPerDay, paidCards };
   }, [rows, groupedJobs]);
+  const totalReceived = summary.totalPaid;
+
   const prevSummary = useMemo(() => {
     if (periodMode === 'all' || periodMode === 'range') return null;
     let prevFrom: string | undefined;
@@ -485,28 +571,45 @@ export function RecordsScreen() {
       prevFrom = prev.from; prevTo = prev.to;
     }
     const prevJobs = getJobsInRange(jobs, prevFrom, prevTo);
-    const prevPayEvents = getPaymentEventsInRange(jobs, payments, prevFrom, prevTo);
-    const prevRows = groupJobsByCard(prevJobs).map(group => {
+    let prevFilteredJobs = selectedCustomerId
+      ? prevJobs.filter((job) => job.customerId === selectedCustomerId)
+      : prevJobs;
+    if (isRmpSelected && rmpHandlerFilter) {
+      prevFilteredJobs = prevFilteredJobs.filter((job) => job.rmpHandler === rmpHandlerFilter);
+    }
+
+    const prevGroups = groupJobsByCard(prevFilteredJobs)
+      .filter((group) => {
+        if (paymentFilter === 'all') return true;
+        const status = getJobCardPaymentSummary(group.jobs).status;
+        return paymentFilter === 'paid' ? status === 'Paid' : status !== 'Paid';
+      });
+
+    const prevRows = prevGroups.map((group) => {
       const payment = getJobCardPaymentSummary(group.jobs);
       const commission = group.jobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0);
       return { finalBill: payment.finalBill, commission, net: payment.net, paid: payment.paid };
     });
     const totalBill = prevRows.reduce((s, r) => s + r.finalBill, 0);
     const totalNet = prevRows.reduce((s, r) => s + r.net, 0);
-    const prevReceived = prevPayEvents.reduce((s, e) => s + (e.amount || 0), 0);
+    const prevReceived = prevRows.reduce((s, r) => s + r.paid, 0);
     return {
       totalBill,
       grossProfit: totalNet,
       totalReceived: prevReceived,
       outstanding: Math.max(0, totalBill - prevReceived),
     };
-  }, [periodMode, periodOffset, selectedDate, jobs, payments]);
+  }, [periodMode, periodOffset, selectedDate, jobs, selectedCustomerId, isRmpSelected, rmpHandlerFilter, paymentFilter]);
 
   const sortedTableRows = useMemo(() => {
     if (!tableSort) return rows;
     const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
     const direction = tableSort.order === 'asc' ? 1 : -1;
     return [...rows].sort((a, b) => {
+      if (tableSort.key === 'date') return a.date.localeCompare(b.date) * direction;
+      if (tableSort.key === 'card') return a.jobCardId.localeCompare(b.jobCardId) * direction;
+      if (tableSort.key === 'billNo') return (a.billNo || '').localeCompare(b.billNo || '') * direction;
+      if (tableSort.key === 'dcNo') return (a.dcNo || '').localeCompare(b.dcNo || '') * direction;
       if (tableSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * direction;
       if (tableSort.key === 'customerType') return collator.compare(a.customerType, b.customerType) * direction;
       if (tableSort.key === 'lines') return (a.lineCount - b.lineCount) * direction;
@@ -528,22 +631,18 @@ export function RecordsScreen() {
 
   const receivedBreakdown = useMemo<PaymentBreakdown>(() => {
     const bd: PaymentBreakdown = { cash: 0, upi: 0, bank: 0, cheque: 0 };
-    paymentEventsInRange.forEach(e => {
-      const amount = e.amount || 0;
-      if (amount <= 0) return;
-      if (e.paymentMode === 'Cash') bd.cash = (bd.cash || 0) + amount;
-      else if (e.paymentMode === 'UPI') bd.upi = (bd.upi || 0) + amount;
-      else if (e.paymentMode === 'Bank') bd.bank = (bd.bank || 0) + amount;
-      else if (e.paymentMode === 'Cheque') bd.cheque = (bd.cheque || 0) + amount;
-      else if (e.paymentMode === 'Mixed' && e.breakdown) {
-        bd.cash = (bd.cash || 0) + (e.breakdown.cash || 0);
-        bd.upi = (bd.upi || 0) + (e.breakdown.upi || 0);
-        bd.bank = (bd.bank || 0) + (e.breakdown.bank || 0);
-        bd.cheque = (bd.cheque || 0) + (e.breakdown.cheque || 0);
-      }
+    groupedJobs.forEach((group) => {
+      group.jobs.forEach((job) => {
+        const paid = getJobPaidAmount(job);
+        if (paid <= 0) return;
+        if (job.paymentMode === 'Cash') bd.cash = (bd.cash || 0) + paid;
+        else if (job.paymentMode === 'UPI') bd.upi = (bd.upi || 0) + paid;
+        else if (job.paymentMode === 'Bank') bd.bank = (bd.bank || 0) + paid;
+        else if (job.paymentMode === 'Cheque') bd.cheque = (bd.cheque || 0) + paid;
+      });
     });
     return bd;
-  }, [paymentEventsInRange]);
+  }, [groupedJobs]);
 
   const exportSummaryMetrics = useMemo(
     () => [
@@ -561,7 +660,7 @@ export function RecordsScreen() {
       },
       {
         key: 'totalNet' as const,
-        label: 'Net Income',
+        label: 'Our Net',
         value: formatCurrency(summary.totalNet),
         cssClass: '',
       },
@@ -579,12 +678,12 @@ export function RecordsScreen() {
       },
       {
         key: 'totalCommission' as const,
-        label: 'Total Commission',
+        label: 'Commission',
         value: formatCurrency(summary.totalCommission),
         cssClass: summary.totalCommission > 0 ? 'r' : '',
       },
     ],
-    [summary.totalCards, summary.totalBill, summary.totalNet, summary.totalPaid, summary.totalPending, summary.totalCommission]
+    [summary.totalCards, summary.totalBill, summary.totalNet, summary.totalPaid, summary.totalPending, summary.totalCommission, totalReceived]
   );
 
   const selectedExportSummaryMetrics = useMemo(
@@ -627,10 +726,14 @@ export function RecordsScreen() {
         const cust = getCustomer(job.customerId);
         return {
           cardId: group.primary.jobCardId || `LEGACY-${group.primary.id}`,
-          date: job.date, customer: cust?.name || 'Unknown',
+          date: formatExportDate(job.date), customer: cust?.name || 'Unknown',
+          billNo: group.primary.billNo || '-',
           workType: job.workTypeName, quantity: job.quantity,
-          amount: getJobNetValue(job), commission: getJobWorkerCommissionExpense(job),
-          paid: getJobPaidAmount(job), dcNo: job.dcNo || '-', dcDate: job.dcDate || '-',
+          amount: Number(job.amount) || 0,
+          finalBill: getJobCardPaymentSummary([job]).finalBill,
+          commission: getJobWorkerCommissionExpense(job),
+          netIncome: getJobNetValue(job),
+          paid: getJobPaidAmount(job), dcNo: job.dcNo || '-', dcDate: job.dcDate ? formatExportDate(job.dcDate) : '-',
           vehicleNo: job.vehicleNo || '-',
         };
       })
@@ -638,20 +741,28 @@ export function RecordsScreen() {
     [groupedJobs, getCustomer]
   );
 
+  const sortedReportRows = useMemo(() => {
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base', numeric: true });
+    return [...reportRows].sort((a, b) => collator.compare(a.billNo || '', b.billNo || ''));
+  }, [reportRows]);
+
   function buildHeadersAndIndices() {
     const headers: string[] = ['S.No'];
     const keys: (keyof typeof reportRows[0])[] = [];
-    if (exportFields.cardId)    { headers.push('Card ID');    keys.push('cardId'); }
-    if (exportFields.date)      { headers.push('Date');       keys.push('date'); }
-    if (exportFields.customer)  { headers.push('Customer');   keys.push('customer'); }
-    if (exportFields.workType)  { headers.push('Work Type');  keys.push('workType'); }
-    if (exportFields.quantity)  { headers.push('Qty');        keys.push('quantity'); }
-    if (exportFields.amount)    { headers.push('Net Amount'); keys.push('amount'); }
+    if (exportFields.billNo)    { headers.push('Bill No');      keys.push('billNo'); }
+    if (exportFields.date)      { headers.push('Date');         keys.push('date'); }
+    if (exportFields.dcNo)      { headers.push('DC No');        keys.push('dcNo'); }
+    if (exportFields.vehicleNo) { headers.push('Vehicle No');   keys.push('vehicleNo'); }
+    if (exportFields.netIncome) { headers.push('Our Net');      keys.push('netIncome'); }
     if (exportFields.commission){ headers.push('Commission'); keys.push('commission'); }
-    if (exportFields.paid)      { headers.push('Paid');       keys.push('paid'); }
-    if (exportFields.dcNo)      { headers.push('DC No');      keys.push('dcNo'); }
-    if (exportFields.dcDate)    { headers.push('DC Date');    keys.push('dcDate'); }
-    if (exportFields.vehicleNo) { headers.push('Vehicle No'); keys.push('vehicleNo'); }
+    if (exportFields.finalBill) { headers.push('Final Bill');   keys.push('finalBill'); }
+    if (exportFields.amount)    { headers.push('Net Amount');   keys.push('amount'); }
+    if (exportFields.cardId)    { headers.push('Card ID');      keys.push('cardId'); }
+    if (exportFields.customer)  { headers.push('Customer Name'); keys.push('customer'); }
+    if (exportFields.workType)  { headers.push('Work Type');    keys.push('workType'); }
+    if (exportFields.quantity)  { headers.push('Qty');          keys.push('quantity'); }
+    if (exportFields.paid)      { headers.push('Paid');         keys.push('paid'); }
+    if (exportFields.dcDate)    { headers.push('DC Date');      keys.push('dcDate'); }
     return { headers, keys };
   }
 
@@ -671,7 +782,7 @@ export function RecordsScreen() {
     const lines = [
       ...summaryLines,
       headers.join(','),
-      ...reportRows.map((row, i) =>
+      ...sortedReportRows.map((row, i) =>
         [`"${i + 1}"`, ...keys.map(k => `"${String(row[k] || '').replace(/"/g, '""')}"`).join(',')].join(',')
       ),
     ];
@@ -682,7 +793,7 @@ export function RecordsScreen() {
   const handleExportPdf = () => {
     const { headers, keys } = buildHeadersAndIndices();
     const headerRow = headers.map(h => `<th>${h}</th>`).join('');
-    const bodyRows  = reportRows.map((row, i) =>
+    const bodyRows  = sortedReportRows.map((row, i) =>
       `<tr><td>${i + 1}</td>${keys.map(k => `<td>${row[k] ?? '-'}</td>`).join('')}</tr>`
     ).join('');
     const summaryGridHtml =
@@ -745,7 +856,7 @@ ${summaryGridHtml}
     setShowExportMenu(false);
     const { headers, keys } = buildHeadersAndIndices();
     const headerRow = headers.map(h => `<th>${h}</th>`).join('');
-    const bodyRows  = reportRows.map((row, i) =>
+    const bodyRows  = sortedReportRows.map((row, i) =>
       `<tr><td>${i + 1}</td>${keys.map(k => `<td>${row[k] ?? '-'}</td>`).join('')}</tr>`
     ).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>SLW Records</title>
@@ -822,7 +933,7 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
               <SearchableSelect<RecordCustomerOption>
                 items={customerOptions}
                 value={selectedCustomerOption}
-                onChange={item => { setSelectedCustomerId(item.id === 0 ? null : item.id); setRmpHandlerFilter(null); }}
+                onChange={item => { setSelectedCustomerId(item.id === 0 ? null : item.id); setRmpHandlerFilter(null); setJobFlowFilter('all'); }}
                 getLabel={item => item.name}
                 getKey={item => String(item.id)}
                 getSearchText={item => `${item.name} ${item.shortCode || ''}`}
@@ -921,6 +1032,18 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
           </div>
         )}
 
+        {showFlowFilter && (
+          <div className="records-payment-filter">
+            {(['all', 'slw_work', 'agent_work'] as const).map(f => (
+              <button key={f} type="button"
+                className={`records-pf-btn${jobFlowFilter === f ? ' active' : ''}`}
+                onClick={() => setJobFlowFilter(f)}>
+                {f === 'all' ? 'All Work' : f === 'slw_work' ? 'SLW Work' : 'Agent Work'}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Right side: count + view toggle */}
         <div className="records-toolbar-end">
           {rows.length > 0 && <span className="records-count">{rows.length} card{rows.length !== 1 ? 's' : ''}</span>}
@@ -971,46 +1094,79 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
       {rows.length > 0 && (
         <>
         <div className="records-summary">
-          <div className="records-stat">
+          <div className="records-stat records-stat--hoverable">
             <div className="records-stat-row records-stat-row--split">
               <div className="records-stat-cell">
                 <span className="records-stat-label">Revenue</span>
                 <span className="records-stat-value">{formatCurrency(summary.totalBill)}</span>
                 <span className="records-stat-sub">
-                  Final bill value
+                  Gross billed amount
                   <RecTrendBadge current={summary.totalBill} prev={prevSummary?.totalBill ?? 0} higher />
                 </span>
               </div>
               <div className="records-stat-cell">
                 <span className="records-stat-label">Commission</span>
                 <span className="records-stat-value">{formatCurrency(summary.totalCommission)}</span>
-                <span className="records-stat-sub">Payable to workers</span>
+                <span className="records-stat-sub">Worker expenses</span>
+              </div>
+            </div>
+            <div className="records-breakdown" role="tooltip">
+              <div className="breakdown-header">Revenue &amp; Commission</div>
+              <div className="breakdown-items">
+                <div className="breakdown-item"><span>Revenue (Final Bill)</span><span>{formatCurrency(summary.totalBill)}</span></div>
+                <div className="breakdown-item"><span>Commission (Workers)</span><span>−{formatCurrency(summary.totalCommission)}</span></div>
+                <div className="breakdown-item"><span>Gross Profit</span><strong>{formatCurrency(summary.grossProfit)}</strong></div>
               </div>
             </div>
           </div>
-          <div className="records-stat records-stat--green">
-            <span className="records-stat-label">Gross profit</span>
+          <div className="records-stat records-stat--green records-stat--hoverable">
+            <span className="records-stat-label">Gross Profit</span>
             <span className="records-stat-value">{formatCurrency(summary.grossProfit)}</span>
             <span className="records-stat-sub">
-              Net income after flow adjustments
+              Revenue − commission
               <RecTrendBadge current={summary.grossProfit} prev={prevSummary?.grossProfit ?? 0} higher />
             </span>
+            <div className="records-breakdown" role="tooltip">
+              <div className="breakdown-header">Gross Profit</div>
+              <div className="breakdown-items">
+                <div className="breakdown-item"><span>Revenue</span><span>{formatCurrency(summary.totalBill)}</span></div>
+                <div className="breakdown-item"><span>− Commission</span><span>−{formatCurrency(summary.totalCommission)}</span></div>
+                <div className="breakdown-item"><span>= Gross Profit</span><strong>{formatCurrency(summary.grossProfit)}</strong></div>
+              </div>
+            </div>
           </div>
-          <div className="records-stat records-stat--green">
+          <div className="records-stat records-stat--green records-stat--hoverable">
             <span className="records-stat-label">Received</span>
             <span className="records-stat-value">{formatCurrency(totalReceived)}</span>
             <span className="records-stat-sub">
-              {summary.paidCards}/{summary.totalCards} payments
+              {summary.paidCards}/{summary.totalCards} cards paid
               <RecTrendBadge current={totalReceived} prev={prevSummary?.totalReceived ?? 0} higher />
             </span>
+            <div className="records-breakdown" role="tooltip">
+              <div className="breakdown-header">Amount Received</div>
+              <div className="breakdown-items">
+                <div className="breakdown-item"><span>Cash</span><span>{formatCurrency(receivedBreakdown.cash || 0)}</span></div>
+                <div className="breakdown-item"><span>UPI</span><span>{formatCurrency(receivedBreakdown.upi || 0)}</span></div>
+                <div className="breakdown-item"><span>Bank</span><span>{formatCurrency(receivedBreakdown.bank || 0)}</span></div>
+                <div className="breakdown-item"><span>Cheque</span><span>{formatCurrency(receivedBreakdown.cheque || 0)}</span></div>
+              </div>
+            </div>
           </div>
-          <div className={`records-stat${Math.max(0, summary.totalBill - totalReceived) > 0 ? ' records-stat--red' : ' records-stat--green'}`}>
+          <div className={`records-stat records-stat--hoverable${Math.max(0, summary.totalBill - totalReceived) > 0 ? ' records-stat--red' : ' records-stat--green'}`}>
             <span className="records-stat-label">Outstanding</span>
             <span className="records-stat-value">{formatCurrency(Math.max(0, summary.totalBill - totalReceived))}</span>
             <span className="records-stat-sub">
-              Final bill - received
+              Billed but not collected
               <RecTrendBadge current={Math.max(0, summary.totalBill - totalReceived)} prev={prevSummary?.outstanding ?? 0} higher={false} />
             </span>
+            <div className="records-breakdown" role="tooltip">
+              <div className="breakdown-header">Outstanding</div>
+              <div className="breakdown-items">
+                <div className="breakdown-item"><span>Revenue</span><span>{formatCurrency(summary.totalBill)}</span></div>
+                <div className="breakdown-item"><span>− Received</span><span>−{formatCurrency(totalReceived)}</span></div>
+                <div className="breakdown-item"><span>= Outstanding</span><strong>{formatCurrency(Math.max(0, summary.totalBill - totalReceived))}</strong></div>
+              </div>
+            </div>
           </div>
           <div className="records-stat records-stat--mode">
             <span className="records-stat-label">By mode</span>
@@ -1048,7 +1204,7 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
                 <label key={key} className="records-field-check">
                   <input type="checkbox" checked={exportFields[key]}
                     onChange={e => setExportFields(prev => ({ ...prev, [key]: e.target.checked }))} />
-                  {key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                  {EXPORT_FIELD_LABELS[key]}
                 </label>
               ))}
             </div>
@@ -1137,8 +1293,46 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
           <table className="records-table">
             <thead>
               <tr>
-                <th>DATE</th>
-                <th>CARD</th>
+                <th
+                  className={`slw-sortable-th${tableSort?.key === 'date' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('date')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('date'); } }}
+                >
+                  DATE {tableSortMark('date')}
+                </th>
+                <th
+                  className={`slw-sortable-th${tableSort?.key === 'card' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableSort('card')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('card'); } }}
+                >
+                  CARD {tableSortMark('card')}
+                </th>
+                {showBillNoColumn && (
+                  <th
+                    className={`slw-sortable-th${tableSort?.key === 'billNo' ? ' is-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleTableSort('billNo')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('billNo'); } }}
+                  >
+                    BILL NO {tableSortMark('billNo')}
+                  </th>
+                )}
+                {showDcNoColumn && (
+                  <th
+                    className={`slw-sortable-th${tableSort?.key === 'dcNo' ? ' is-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleTableSort('dcNo')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTableSort('dcNo'); } }}
+                  >
+                    DC NO {tableSortMark('dcNo')}
+                  </th>
+                )}
                 <th
                   className={`slw-sortable-th${tableSort?.key === 'customer' ? ' is-active' : ''}`}
                   role="button"
@@ -1193,7 +1387,7 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
             </thead>
             <tbody>
               {sortedTableRows.length === 0 ? (
-                <tr className="rec-table-empty"><td colSpan={12}>No job cards found for the selected filters.</td></tr>
+                <tr className="rec-table-empty"><td colSpan={12 + (showBillNoColumn ? 1 : 0) + (showDcNoColumn ? 1 : 0)}>No job cards found for the selected filters.</td></tr>
               ) : sortedTableRows.map(row => {
                 const cust = getCustomer(groupedJobs.find(g => g.key === row.id)?.primary.customerId ?? 0);
                 const extra = row.lineCount - 1;
@@ -1202,8 +1396,10 @@ th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f0f0f
                 return (
                   <tr key={row.id} className="rec-row" onClick={() => setSelectedCardKey(row.id)}
                     tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCardKey(row.id); } }}>
-                    <td><span className="rec-date-cell">{row.date}</span></td>
+                    <td><span className="rec-date-cell">{formatExportDate(row.date)}</span></td>
                     <td><span className="rec-card-id">{row.jobCardId}</span></td>
+                    {showBillNoColumn && <td><span className="mono">{row.billNo || '—'}</span></td>}
+                    {showDcNoColumn && <td><span className="mono">{row.dcNo || '—'}</span></td>}
                     <td>
                       <div className="rec-cust-name">{row.customerName}</div>
                       {cust?.shortCode && <div className="rec-cust-code">{cust.shortCode}</div>}

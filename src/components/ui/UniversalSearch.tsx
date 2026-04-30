@@ -30,6 +30,7 @@ interface CardResult {
   pending: number;
   status: 'Paid' | 'Pending' | 'Partially Paid';
   dcNos: string[];
+  vehicleNos: string[];
   lines: JobLine[];
 }
 
@@ -43,22 +44,34 @@ interface CustomerResult {
 
 type SearchResult = CardResult | CustomerResult;
 
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function highlight(text: string, query: string): string {
-  if (!query || !text) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
-  return (
-    text.slice(0, idx) +
-    `<mark>${text.slice(idx, idx + query.length)}</mark>` +
-    text.slice(idx + query.length)
-  );
+  const safeText = escapeHtml(text || '');
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery || !safeText) return safeText;
+  const regex = new RegExp(`(${escapeRegExp(trimmedQuery)})`, 'ig');
+  return safeText.replace(regex, '<mark>$1</mark>');
 }
 
 function StatusPill({ status }: { status: CardResult['status'] }) {
   const cls =
-    status === 'Paid' ? 'usearch-pill--paid'
-    : status === 'Partially Paid' ? 'usearch-pill--partial'
-    : 'usearch-pill--pending';
+    status === 'Paid'
+      ? 'usearch-pill--paid'
+      : status === 'Partially Paid'
+        ? 'usearch-pill--partial'
+        : 'usearch-pill--pending';
   return <span className={`usearch-pill ${cls}`}>{status}</span>;
 }
 
@@ -70,30 +83,34 @@ function CardDetail({ card }: { card: CardResult }) {
           <div key={line.id} className="usearch-detail-line">
             <span className="usearch-detail-work">
               {line.workTypeName}
-              {line.workName ? ` — ${line.workName}` : ''}
+              {line.workName ? ` - ${line.workName}` : ''}
             </span>
-            {(line.quantity !== undefined && line.quantity !== '') && (
-              <span className="usearch-detail-qty">×{line.quantity}</span>
+            {line.quantity !== undefined && line.quantity !== '' && (
+              <span className="usearch-detail-qty">x{line.quantity}</span>
             )}
             <span className="usearch-detail-amt">{formatCurrency(line.amount)}</span>
             {line.commissionAmount > 0 && (
               <span className="usearch-detail-comm">comm {formatCurrency(line.commissionAmount)}</span>
             )}
-            {line.dcNo && (
-              <span className="usearch-detail-dc">DC: {line.dcNo}</span>
-            )}
-            {line.vehicleNo && (
-              <span className="usearch-detail-dc">{line.vehicleNo}</span>
-            )}
+            {line.dcNo && <span className="usearch-detail-dc">DC: {line.dcNo}</span>}
+            {line.vehicleNo && <span className="usearch-detail-dc">{line.vehicleNo}</span>}
           </div>
         ))}
       </div>
       <div className="usearch-detail-summary">
-        <span>Bill <strong>{formatCurrency(card.finalBill)}</strong></span>
-        <span>Net <strong>{formatCurrency(card.net)}</strong></span>
-        <span className="usearch-detail-paid">Paid <strong>{formatCurrency(card.paid)}</strong></span>
+        <span>
+          Bill <strong>{formatCurrency(card.finalBill)}</strong>
+        </span>
+        <span>
+          Net <strong>{formatCurrency(card.net)}</strong>
+        </span>
+        <span className="usearch-detail-paid">
+          Paid <strong>{formatCurrency(card.paid)}</strong>
+        </span>
         {card.pending > 0 && (
-          <span className="usearch-detail-pending">Due <strong>{formatCurrency(card.pending)}</strong></span>
+          <span className="usearch-detail-pending">
+            Due <strong>{formatCurrency(card.pending)}</strong>
+          </span>
         )}
       </div>
     </div>
@@ -104,6 +121,7 @@ export function UniversalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { jobs, customers, getCustomer } = useDataStore();
@@ -114,7 +132,9 @@ export function UniversalSearch() {
         e.preventDefault();
         setOpen((v) => !v);
       }
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
@@ -124,11 +144,11 @@ export function UniversalSearch() {
     if (open) {
       setQuery('');
       setExpandedKey(null);
+      setActiveIndex(-1);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
 
-  // Reset expansion when query changes
   useEffect(() => {
     setExpandedKey(null);
   }, [query]);
@@ -143,13 +163,15 @@ export function UniversalSearch() {
     for (const group of cards) {
       const cardId = (group.primary.jobCardId || '').toLowerCase();
       const dcNos = [...new Set(group.jobs.map((j) => j.dcNo || '').filter(Boolean))];
+      const vehicleNos = [...new Set(group.jobs.map((j) => j.vehicleNo || '').filter(Boolean))];
       const customerName = getCustomer(group.primary.customerId)?.name || '';
 
       const matchesCard = cardId.includes(q);
       const matchesDc = dcNos.some((dc) => dc.toLowerCase().includes(q));
       const matchesCustomer = customerName.toLowerCase().includes(q);
+      const matchesVehicle = vehicleNos.some((vehicleNo) => vehicleNo.toLowerCase().includes(q));
 
-      if (matchesCard || matchesDc || matchesCustomer) {
+      if (matchesCard || matchesDc || matchesCustomer || matchesVehicle) {
         const payment = getJobCardPaymentSummary(group.jobs);
         out.push({
           type: 'card',
@@ -163,6 +185,7 @@ export function UniversalSearch() {
           pending: payment.pending,
           status: payment.status,
           dcNos,
+          vehicleNos,
           lines: group.jobs.map((j) => ({
             id: j.id,
             workTypeName: j.workTypeName || '',
@@ -201,6 +224,40 @@ export function UniversalSearch() {
   const cardResults = results.filter((r): r is CardResult => r.type === 'card');
   const customerResults = results.filter((r): r is CustomerResult => r.type === 'customer');
 
+  const selectableResults = useMemo(
+    () => [
+      ...cardResults.map((r) => ({ type: 'card' as const, result: r })),
+      ...customerResults.map((r) => ({ type: 'customer' as const, result: r })),
+    ],
+    [cardResults, customerResults]
+  );
+
+  // Reset active index whenever query changes so arrow keys start fresh
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [query]);
+
+  const openCard = (card: CardResult) => {
+    navigate(`/history?cardKey=${encodeURIComponent(card.key)}&date=${encodeURIComponent(card.date)}`);
+    setOpen(false);
+  };
+
+  const openCustomer = (customer: CustomerResult) => {
+    const searchValue = customer.name || query.trim();
+    navigate(`/customers?customerId=${customer.id}&search=${encodeURIComponent(searchValue)}`);
+    setOpen(false);
+  };
+
+  const openActiveResult = () => {
+    if (activeIndex < 0 || activeIndex >= selectableResults.length) return;
+    const selected = selectableResults[activeIndex];
+    if (selected.type === 'card') {
+      openCard(selected.result);
+      return;
+    }
+    openCustomer(selected.result);
+  };
+
   if (!open) {
     return (
       <button
@@ -224,9 +281,29 @@ export function UniversalSearch() {
             ref={inputRef}
             type="text"
             className="usearch-input"
-            placeholder="Search job card ID, DC number, customer name…"
+            placeholder="Search card ID, DC, vehicle no, customer..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (selectableResults.length === 0) return;
+                setActiveIndex((prev) => (prev < 0 ? 0 : (prev + 1) % selectableResults.length));
+                return;
+              }
+
+              if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (selectableResults.length === 0) return;
+                setActiveIndex((prev) => (prev <= 0 ? selectableResults.length - 1 : prev - 1));
+                return;
+              }
+
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                openActiveResult();
+              }
+            }}
           />
           <kbd className="usearch-esc" onClick={() => setOpen(false)}>Esc</kbd>
         </div>
@@ -239,32 +316,59 @@ export function UniversalSearch() {
 
             {cardResults.length > 0 && (
               <section className="usearch-group">
-                <p className="usearch-group-label">Job Cards — click to expand details</p>
-                {cardResults.map((r) => (
+                <p className="usearch-group-label">Job Cards - Enter/click opens card, chevron previews lines</p>
+                {cardResults.map((r, idx) => (
                   <div key={r.key}>
-                    <button
-                      type="button"
-                      className={`usearch-result-row${expandedKey === r.key ? ' usearch-result-row--active' : ''}`}
-                      onClick={() => setExpandedKey(expandedKey === r.key ? null : r.key)}
-                    >
-                      <span className="usearch-card-id"
-                        dangerouslySetInnerHTML={{ __html: highlight(r.cardId, query) }}
-                      />
-                      <span className="usearch-customer"
-                        dangerouslySetInnerHTML={{ __html: highlight(r.customerName, query) }}
-                      />
-                      <span className="usearch-date">
-                        {new Date(`${r.date}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                      </span>
-                      {r.dcNos.length > 0 && (
-                        <span className="usearch-dc"
-                          dangerouslySetInnerHTML={{ __html: `DC: ${highlight(r.dcNos.join(', '), query)}` }}
+                    <div className="usearch-card-row-wrap">
+                      <button
+                        type="button"
+                        className={`usearch-result-row${activeIndex === idx ? ' usearch-result-row--active' : ''}`}
+                        onClick={() => openCard(r)}
+                      >
+                        <span
+                          className="usearch-card-id"
+                          dangerouslySetInnerHTML={{ __html: highlight(r.cardId, query) }}
                         />
-                      )}
-                      <span className="usearch-amount">{formatCurrency(r.finalBill)}</span>
-                      <StatusPill status={r.status} />
-                      <span className="usearch-chevron">{expandedKey === r.key ? '⌃' : '⌄'}</span>
-                    </button>
+                        <span
+                          className="usearch-customer"
+                          dangerouslySetInnerHTML={{ __html: highlight(r.customerName, query) }}
+                        />
+                        <span className="usearch-date">
+                          {new Date(`${r.date}T00:00:00`).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: '2-digit',
+                          })}
+                        </span>
+                        {r.dcNos.length > 0 && (
+                          <span
+                            className="usearch-dc"
+                            dangerouslySetInnerHTML={{ __html: `DC: ${highlight(r.dcNos.join(', '), query)}` }}
+                          />
+                        )}
+                        {r.vehicleNos.length > 0 && (
+                          <span
+                            className="usearch-dc"
+                            dangerouslySetInnerHTML={{ __html: `VH: ${highlight(r.vehicleNos.join(', '), query)}` }}
+                          />
+                        )}
+                        <span className="usearch-amount">{formatCurrency(r.finalBill)}</span>
+                        <StatusPill status={r.status} />
+                      </button>
+                      <button
+                        type="button"
+                        className={`usearch-expand-btn${expandedKey === r.key ? ' active' : ''}`}
+                        aria-label={
+                          expandedKey === r.key
+                            ? `Hide details for ${r.cardId}`
+                            : `Show details for ${r.cardId}`
+                        }
+                        title={expandedKey === r.key ? 'Hide details' : 'Show details'}
+                        onClick={() => setExpandedKey(expandedKey === r.key ? null : r.key)}
+                      >
+                        {expandedKey === r.key ? '^' : 'v'}
+                      </button>
+                    </div>
                     {expandedKey === r.key && <CardDetail card={r} />}
                   </div>
                 ))}
@@ -274,24 +378,26 @@ export function UniversalSearch() {
             {customerResults.length > 0 && (
               <section className="usearch-group">
                 <p className="usearch-group-label">Customers</p>
-                {customerResults.map((r) => (
+                {customerResults.map((r, idx) => (
                   <button
                     key={r.id}
                     type="button"
-                    className="usearch-result-row"
-                    onClick={() => { navigate('/customers'); setOpen(false); }}
+                    className={`usearch-result-row${
+                      activeIndex === cardResults.length + idx ? ' usearch-result-row--active' : ''
+                    }`}
+                    onClick={() => openCustomer(r)}
                   >
-                    <span className="usearch-customer"
+                    <span
+                      className="usearch-customer"
                       dangerouslySetInnerHTML={{ __html: highlight(r.name, query) }}
                     />
                     {r.shortCode && (
-                      <span className="usearch-code"
+                      <span
+                        className="usearch-code"
                         dangerouslySetInnerHTML={{ __html: highlight(r.shortCode, query) }}
                       />
                     )}
-                    {r.customerType && (
-                      <span className="usearch-type">{r.customerType}</span>
-                    )}
+                    {r.customerType && <span className="usearch-type">{r.customerType}</span>}
                   </button>
                 ))}
               </section>
@@ -300,7 +406,7 @@ export function UniversalSearch() {
         )}
 
         {query.trim().length < 2 && (
-          <p className="usearch-hint">Type at least 2 characters · Ctrl+K to toggle</p>
+          <p className="usearch-hint">Type at least 2 characters &middot; Ctrl+K to toggle &middot; &uarr;&darr; navigate &middot; &crarr; open</p>
         )}
       </div>
     </>

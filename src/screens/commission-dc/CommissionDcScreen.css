@@ -1,0 +1,402 @@
+/* ===== COMMISSION DC SCREEN ===== */
+
+/* ── Page layout ────────────────────────────────────────────── */
+.cd-screen {
+  display: grid;
+  gap: 0;
+}
+
+.cd-pg-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cd-pg-title {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.cd-pg-desc {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+
+/* ── Section nav ─────────────────────────────────────────────── */
+.cd-section-nav {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cd-section-tab {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.cd-section-tab:hover { color: var(--text); }
+
+.cd-section-tab.active {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+.cd-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* ── Agent tiles (6-col) ─────────────────────────────────────── */
+.cd-agent-tiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* ── Sub-section (breakdown) ─────────────────────────────────── */
+.cd-subsection {
+  margin-bottom: 16px;
+}
+
+.cd-subsection-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+/* Table tfoot row */
+.cd-tfoot-row td {
+  padding: 10px 14px;
+  background: var(--bg-sunk);
+  border-top: 2px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cd-tfoot-row td.numeric {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Payment form ────────────────────────────────────────────── */
+.cd-form-box {
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.cd-form-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+
+.cd-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.cd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cd-field--full { grid-column: 1 / -1; }
+
+.cd-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cd-input,
+.cd-select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.cd-select { padding-right: 28px; cursor: pointer; }
+
+.cd-input:focus,
+.cd-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.cd-textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.cd-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.cd-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.cd-hint-settled { color: var(--green); }
+.cd-hint-muted   { opacity: 0.7; }
+
+/* ── Amount input + fill button row ─────────────────────────── */
+.cd-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cd-input-row .cd-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cd-fill-btn {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.cd-fill-btn:hover { background: var(--accent); color: #fff; }
+
+.cd-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/* ── Worker link ─────────────────────────────────────────────── */
+.cd-worker-link {
+  border: none;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cd-worker-link:hover { opacity: 0.8; }
+
+/* ── Inline delete confirm ───────────────────────────────────── */
+.cd-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cd-confirm-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cd-btn-yes {
+  padding: 2px 8px;
+  border: 1px solid var(--red-border);
+  background: var(--red-soft);
+  color: var(--red);
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cd-btn-yes:hover { background: var(--red); color: #fff; }
+
+.cd-btn-no {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cd-btn-no:hover { color: var(--text); }
+
+/* ── Ext/Int badge ───────────────────────────────────────────── */
+.cd-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cd-badge--ext { background: var(--accent-soft); color: var(--accent-text); }
+.cd-badge--int { background: var(--bg-sunk); border: 1px solid var(--border); color: var(--text-muted); }
+
+/* ── Settle button ───────────────────────────────────────────── */
+.cd-settle-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.cd-settle-btn:hover { background: var(--accent); color: #fff; }
+
+/* ── Agent dropdown (toolbar) ────────────────────────────────── */
+.cd-agent-select {
+  height: 28px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunk);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cd-agent-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Empty state ─────────────────────────────────────────────── */
+.cd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 48px 24px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-sunk);
+}
+
+.cd-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.cd-empty-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Worker detail modal ─────────────────────────────────────── */
+.cd-detail { display: grid; gap: 16px; }
+
+.cd-detail-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.cd-detail-tile {
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.cd-detail-tile-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.cd-detail-tile-val {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .cd-agent-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .cd-agent-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cd-form-grid   { grid-template-columns: repeat(2, 1fr); }
+  .cd-detail-tiles { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .cd-agent-tiles  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cd-form-grid    { grid-template-columns: 1fr; }
+  .cd-pg-header    { flex-direction: column; align-items: flex-start; }
+  .cd-detail-tiles { grid-template-columns: repeat(2, 1fr); }
+}

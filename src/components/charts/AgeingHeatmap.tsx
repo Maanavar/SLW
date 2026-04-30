@@ -47,10 +47,10 @@ export function AgeingHeatmap({ rows }: AgeingHeatmapProps) {
             <thead>
               <tr>
                 <th>Customer</th>
-                <th className="text-right">Current</th>
-                <th className="text-right">8-30d</th>
-                <th className="text-right">31-60d</th>
-                <th className="text-right">61-90d</th>
+                <th className="text-right">0–7d</th>
+                <th className="text-right">8–30d</th>
+                <th className="text-right">31–60d</th>
+                <th className="text-right">61–90d</th>
                 <th className="text-right">90d+</th>
                 <th className="text-right">Total</th>
                 <th className="text-right">Risk</th>
