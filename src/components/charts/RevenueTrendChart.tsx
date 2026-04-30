@@ -89,8 +89,8 @@ export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendCha
               <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Line
                 type="monotone"
-                dataKey="revenue"
-                name="Revenue"
+                dataKey="slwRevenue"
+                name="SLW Revenue"
                 stroke="var(--accent)"
                 strokeWidth={2}
                 dot={false}

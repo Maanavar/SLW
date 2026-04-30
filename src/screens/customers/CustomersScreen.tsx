@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
 import { DataTable, Column } from '@/components/ui/DataTable';
@@ -12,11 +13,17 @@ import './CustomersScreen.css';
 type TypeFilter = 'all' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
 
 export function CustomersScreen() {
+  const [searchParams] = useSearchParams();
   const { customers: allCustomers, jobs, payments, getActiveCustomers } = useDataStore();
   const { openModal } = useUIStore();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [showInactive, setShowInactive] = useState(false);
+  const appliedSearchParamRef = useRef<string | null>(null);
+  const openedCustomerParamRef = useRef<number | null>(null);
+
+  const deepLinkSearch = (searchParams.get('search') || '').trim();
+  const deepLinkCustomerId = Number(searchParams.get('customerId') || 0);
 
   const customers = showInactive ? allCustomers : getActiveCustomers();
   const inactiveCount = allCustomers.filter((c) => !c.isActive).length;
@@ -45,6 +52,33 @@ export function CustomersScreen() {
     const ageingRows = calculateCustomerAgeing(jobs, payments, allCustomers);
     return new Map(ageingRows.map((row) => [row.customerId, row]));
   }, [jobs, payments, allCustomers]);
+
+  useEffect(() => {
+    if (!deepLinkSearch || appliedSearchParamRef.current === deepLinkSearch) return;
+    setSearch(deepLinkSearch);
+    appliedSearchParamRef.current = deepLinkSearch;
+  }, [deepLinkSearch]);
+
+  useEffect(() => {
+    if (!Number.isInteger(deepLinkCustomerId) || deepLinkCustomerId <= 0) {
+      openedCustomerParamRef.current = null;
+      return;
+    }
+    if (openedCustomerParamRef.current === deepLinkCustomerId) return;
+
+    const target = allCustomers.find((customer) => customer.id === deepLinkCustomerId);
+    if (!target) return;
+
+    if (!target.isActive) {
+      setShowInactive(true);
+    }
+    if (!deepLinkSearch) {
+      setSearch(target.name);
+    }
+
+    openModal('customer', target.id);
+    openedCustomerParamRef.current = deepLinkCustomerId;
+  }, [deepLinkCustomerId, deepLinkSearch, allCustomers, openModal]);
 
   const columns: Column<Customer>[] = [
     {

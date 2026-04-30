@@ -3,8 +3,8 @@
  * Accounting-standard calculations for financial analysis
  */
 
-import type { Job, Payment, Customer, CommissionPayment, CommissionWorker } from '@/types';
-import { getJobFinalBillValue, getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense, groupJobsByCard } from './jobUtils';
+import type { Job, Payment, Customer, CommissionPayment, CommissionWorker, Expense } from '@/types';
+import { getJobFinalBillValue, getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense, groupJobsByCard, isAgentWorkJob, getJobAgentSettlementPending, getJobAgentCommissionIncome, getJobAgentTdsAmount } from './jobUtils';
 import { getLocalDateString } from './dateUtils';
 
 // ============================================================================
@@ -14,8 +14,17 @@ import { getLocalDateString } from './dateUtils';
 export interface RevenueMetrics {
   totalRevenue: number;      // Sum of all final bill values (amount + commission)
   commissionExpense: number; // Sum of all job.commissionAmount
-  grossProfit: number;       // Our net income after commission
+  grossProfit: number;       // Our net income after commission (before expenses)
+  totalExpenses: number;     // Sum of operational expenses in period
+  netProfit: number;         // grossProfit - totalExpenses
   jobCount: number;          // Number of unique jobs/cards
+}
+
+export function sumExpenses(expenses: Expense[], filterByDate?: { from: string; to: string }): number {
+  const filtered = filterByDate
+    ? expenses.filter((e) => e.date >= filterByDate.from && e.date <= filterByDate.to)
+    : expenses;
+  return filtered.reduce((sum, e) => sum + (e.amount || 0), 0);
 }
 
 export interface PaymentMetrics {
@@ -86,6 +95,7 @@ export interface CustomerAgeingRow {
 
 export function calculateRevenueMetrics(
   jobs: Job[],
+  expenses: Expense[],
   filterByDate?: { from: string; to: string }
 ): RevenueMetrics {
   const filtered = filterByDate
@@ -97,11 +107,19 @@ export function calculateRevenueMetrics(
     (sum, job) => sum + getJobWorkerCommissionExpense(job),
     0
   );
+  // Gross profit = SLW net income + agent commission only (TDS excluded — it's a pass-through tax)
+  const grossProfit = filtered.reduce((sum, job) => {
+    if (isAgentWorkJob(job)) return sum + getJobAgentCommissionIncome(job);
+    return sum + (Number(job.amount) || 0);
+  }, 0);
+  const totalExpenses = sumExpenses(expenses, filterByDate);
 
   return {
     totalRevenue,
     commissionExpense,
-    grossProfit: filtered.reduce((sum, job) => sum + getJobNetValue(job), 0),
+    grossProfit,
+    totalExpenses,
+    netProfit: grossProfit - totalExpenses,
     jobCount: groupJobsByCard(filtered).length,
   };
 }
@@ -125,7 +143,7 @@ function getCardIdFromNotes(notes?: string) {
   return notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
 }
 
-function buildCollectionEvents(
+export function buildCollectionEvents(
   jobs: Job[],
   payments: Payment[],
   filterByDate?: { from: string; to: string }
@@ -207,7 +225,7 @@ export function calculatePaymentMetrics(
 
   // Calculate average days to payment (job date → actual payment date)
   const cardPaymentDate = new Map<string, string>();
-  buildCollectionEvents(jobs, payments, filterByDate).forEach((e) => {
+  events.forEach((e) => {
     if (!e.jobCardId) return;
     const existing = cardPaymentDate.get(e.jobCardId);
     if (!existing || e.date < existing) cardPaymentDate.set(e.jobCardId, e.date);
@@ -262,15 +280,23 @@ export function calculateCommissionMetrics(
   return {
     commissionDue,
     commissionPaid,
-    commissionOutstanding: commissionDue - commissionPaid,
+    commissionOutstanding: Math.max(0, commissionDue - commissionPaid),
   };
 }
 
 export function calculateWorkerCommissionSummary(
   jobs: Job[],
   commissionPayments: CommissionPayment[],
-  workers: CommissionWorker[]
+  workers: CommissionWorker[],
+  filterByDate?: { from: string; to: string }
 ): WorkerCommissionSummary[] {
+  const filteredJobs = filterByDate
+    ? jobs.filter((j) => j.date >= filterByDate.from && j.date <= filterByDate.to)
+    : jobs;
+  const filteredPayments = filterByDate
+    ? commissionPayments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
+    : commissionPayments;
+
   const summaryMap = new Map<number, WorkerCommissionSummary>();
   const workerById = new Map<number, CommissionWorker>();
   workers.forEach((worker) => workerById.set(worker.id, worker));
@@ -288,7 +314,7 @@ export function calculateWorkerCommissionSummary(
   });
 
   // Calculate total due from tagged commission worker on each job line
-  jobs.forEach((job) => {
+  filteredJobs.forEach((job) => {
     const commission = getJobWorkerCommissionExpense(job);
     if (commission <= 0) {
       return;
@@ -330,8 +356,8 @@ export function calculateWorkerCommissionSummary(
     }
   });
 
-  // Calculate total paid from commission payments
-  commissionPayments.forEach((payment) => {
+  // Calculate total paid from commission payments (skip agent payment records)
+  filteredPayments.filter(p => !p.paymentType || p.paymentType === 'worker').forEach((payment) => {
     if (!summaryMap.has(payment.workerId)) {
       const knownWorker = workerById.get(payment.workerId);
       summaryMap.set(payment.workerId, {
@@ -446,10 +472,26 @@ export function calculatePaymentMethodBreakdown(
   filtered.forEach((payment) => {
     if (payment.paymentMode === 'Mixed' && payment.breakdown) {
       // Handle mixed payments
-      if (payment.breakdown.cash) breakdown.get('Cash')!.amount += payment.breakdown.cash;
-      if (payment.breakdown.upi) breakdown.get('UPI')!.amount += payment.breakdown.upi;
-      if (payment.breakdown.bank) breakdown.get('Bank')!.amount += payment.breakdown.bank;
-      if (payment.breakdown.cheque) breakdown.get('Cheque')!.amount += payment.breakdown.cheque;
+      if (payment.breakdown.cash) {
+        const method = breakdown.get('Cash')!;
+        method.amount += payment.breakdown.cash;
+        method.count += 1;
+      }
+      if (payment.breakdown.upi) {
+        const method = breakdown.get('UPI')!;
+        method.amount += payment.breakdown.upi;
+        method.count += 1;
+      }
+      if (payment.breakdown.bank) {
+        const method = breakdown.get('Bank')!;
+        method.amount += payment.breakdown.bank;
+        method.count += 1;
+      }
+      if (payment.breakdown.cheque) {
+        const method = breakdown.get('Cheque')!;
+        method.amount += payment.breakdown.cheque;
+        method.count += 1;
+      }
     } else if (payment.paymentMode && methods.includes(payment.paymentMode as any)) {
       const existing = breakdown.get(payment.paymentMode)!;
       existing.amount += payment.amount || 0;
@@ -489,10 +531,26 @@ export function calculateCollectionMethodBreakdown(
 
   events.forEach((entry) => {
     if (entry.paymentMode === 'Mixed' && entry.breakdown) {
-      if (entry.breakdown.cash) breakdown.get('Cash')!.amount += entry.breakdown.cash;
-      if (entry.breakdown.upi) breakdown.get('UPI')!.amount += entry.breakdown.upi;
-      if (entry.breakdown.bank) breakdown.get('Bank')!.amount += entry.breakdown.bank;
-      if (entry.breakdown.cheque) breakdown.get('Cheque')!.amount += entry.breakdown.cheque;
+      if (entry.breakdown.cash) {
+        const method = breakdown.get('Cash')!;
+        method.amount += entry.breakdown.cash;
+        method.count += 1;
+      }
+      if (entry.breakdown.upi) {
+        const method = breakdown.get('UPI')!;
+        method.amount += entry.breakdown.upi;
+        method.count += 1;
+      }
+      if (entry.breakdown.bank) {
+        const method = breakdown.get('Bank')!;
+        method.amount += entry.breakdown.bank;
+        method.count += 1;
+      }
+      if (entry.breakdown.cheque) {
+        const method = breakdown.get('Cheque')!;
+        method.amount += entry.breakdown.cheque;
+        method.count += 1;
+      }
       return;
     }
 
@@ -525,51 +583,69 @@ export function calculateCollectionMethodBreakdown(
 
 export function calculateOutstandingAgeing(
   jobs: Job[],
-  _payments: Payment[]
+  payments: Payment[]
 ): AgeingBucket[] {
   const today = new Date();
   const buckets: AgeingBucket[] = [
-    { range: '0-7 days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
-    { range: '7-14 days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
-    { range: '14-30 days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
-    { range: '30-60 days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
-    { range: '60+ days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
+    { range: '0-7 days',   amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
+    { range: '8-30 days',  amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
+    { range: '31-60 days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
+    { range: '61-90 days', amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
+    { range: '90+ days',   amount: 0, percentage: 0, jobCount: 0, customerCount: 0 },
   ];
 
-  const customerAges = new Map<number, number[]>();
+  // Total received per customer including payment vouchers (proper deduplication)
+  const receivedByCustomer = new Map<number, number>();
+  buildCollectionEvents(jobs, payments).forEach((e) => {
+    receivedByCustomer.set(e.customerId, (receivedByCustomer.get(e.customerId) || 0) + (e.amount || 0));
+  });
 
+  const jobsByCustomer = new Map<number, Job[]>();
   jobs.forEach((job) => {
-    const outstanding = getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0);
-    if (outstanding > 0) {
-      const jobDate = new Date(job.date);
-      const days = Math.floor((today.getTime() - jobDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (!jobsByCustomer.has(job.customerId)) jobsByCustomer.set(job.customerId, []);
+    jobsByCustomer.get(job.customerId)!.push(job);
+  });
 
-      let bucketIndex = 0;
+  const customerBuckets = new Map<number, number[]>();
+
+  jobsByCustomer.forEach((customerJobs, customerId) => {
+    // FIFO: oldest bills are assumed paid first
+    const sortedJobs = [...customerJobs].sort((a, b) => a.date.localeCompare(b.date));
+    let remainingReceived = receivedByCustomer.get(customerId) || 0;
+
+    sortedJobs.forEach((job) => {
+      const jobBill = getJobFinalBillValue(job);
+      const paid = Math.min(jobBill, remainingReceived);
+      remainingReceived = Math.max(0, remainingReceived - paid);
+      const outstanding = jobBill - paid;
+      if (outstanding <= 0) return;
+
+      const days = Math.floor(
+        (today.getTime() - new Date(`${job.date}T00:00:00`).getTime()) / 86400000
+      );
+
+      let bucketIndex: number;
       if (days <= 7) bucketIndex = 0;
-      else if (days <= 14) bucketIndex = 1;
-      else if (days <= 30) bucketIndex = 2;
-      else if (days <= 60) bucketIndex = 3;
+      else if (days <= 30) bucketIndex = 1;
+      else if (days <= 60) bucketIndex = 2;
+      else if (days <= 90) bucketIndex = 3;
       else bucketIndex = 4;
 
       buckets[bucketIndex].amount += outstanding;
       buckets[bucketIndex].jobCount += 1;
 
-      if (!customerAges.has(job.customerId)) {
-        customerAges.set(job.customerId, []);
+      if (!customerBuckets.has(customerId)) customerBuckets.set(customerId, []);
+      if (!customerBuckets.get(customerId)!.includes(bucketIndex)) {
+        customerBuckets.get(customerId)!.push(bucketIndex);
       }
-      if (!customerAges.get(job.customerId)!.includes(bucketIndex)) {
-        customerAges.get(job.customerId)!.push(bucketIndex);
-      }
-    }
+    });
   });
 
   const totalOutstanding = buckets.reduce((sum, b) => sum + b.amount, 0);
-
-  buckets.forEach((bucket) => {
+  buckets.forEach((bucket, index) => {
     bucket.percentage = totalOutstanding > 0 ? (bucket.amount / totalOutstanding) * 100 : 0;
-    // Count unique customers in this bucket (rough estimate)
-    bucket.customerCount = Array.from(customerAges.values()).filter((ages) =>
-      ages.includes(buckets.indexOf(bucket))
+    bucket.customerCount = Array.from(customerBuckets.values()).filter((bktList) =>
+      bktList.includes(index)
     ).length;
   });
 
@@ -578,21 +654,32 @@ export function calculateOutstandingAgeing(
 
 export function calculateCustomerAgeing(
   jobs: Job[],
-  _payments: Payment[],
+  payments: Payment[],
   customers: Customer[]
 ): CustomerAgeingRow[] {
   const today = new Date();
   const rows = new Map<number, CustomerAgeingRow>();
 
-  jobs.forEach((job) => {
-    const outstanding = Math.max(0, getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0));
-    if (outstanding <= 0) {
-      return;
-    }
+  // Total received per customer including payment vouchers (proper deduplication)
+  const receivedByCustomer = new Map<number, number>();
+  buildCollectionEvents(jobs, payments).forEach((e) => {
+    receivedByCustomer.set(e.customerId, (receivedByCustomer.get(e.customerId) || 0) + (e.amount || 0));
+  });
 
-    const existing = rows.get(job.customerId) || {
-      customerId: job.customerId,
-      customerName: customers.find((customer) => customer.id === job.customerId)?.name || 'Unknown',
+  const jobsByCustomer = new Map<number, Job[]>();
+  jobs.forEach((job) => {
+    if (!jobsByCustomer.has(job.customerId)) jobsByCustomer.set(job.customerId, []);
+    jobsByCustomer.get(job.customerId)!.push(job);
+  });
+
+  jobsByCustomer.forEach((customerJobs, customerId) => {
+    // FIFO: oldest bills are assumed paid first
+    const sortedJobs = [...customerJobs].sort((a, b) => a.date.localeCompare(b.date));
+    let remainingReceived = receivedByCustomer.get(customerId) || 0;
+
+    const row: CustomerAgeingRow = {
+      customerId,
+      customerName: customers.find((c) => c.id === customerId)?.name || 'Unknown',
       current: 0,
       band1: 0,
       band2: 0,
@@ -602,26 +689,29 @@ export function calculateCustomerAgeing(
       oldestInvoiceDays: 0,
     };
 
-    const days = Math.max(
-      0,
-      Math.floor((today.getTime() - new Date(`${job.date}T00:00:00`).getTime()) / 86400000)
-    );
+    sortedJobs.forEach((job) => {
+      const jobBill = getJobFinalBillValue(job);
+      const paid = Math.min(jobBill, remainingReceived);
+      remainingReceived = Math.max(0, remainingReceived - paid);
+      const outstanding = jobBill - paid;
+      if (outstanding <= 0) return;
 
-    if (days <= 7) {
-      existing.current += outstanding;
-    } else if (days <= 30) {
-      existing.band1 += outstanding;
-    } else if (days <= 60) {
-      existing.band2 += outstanding;
-    } else if (days <= 90) {
-      existing.band3 += outstanding;
-    } else {
-      existing.band4 += outstanding;
-    }
+      const days = Math.max(
+        0,
+        Math.floor((today.getTime() - new Date(`${job.date}T00:00:00`).getTime()) / 86400000)
+      );
 
-    existing.total += outstanding;
-    existing.oldestInvoiceDays = Math.max(existing.oldestInvoiceDays, days);
-    rows.set(job.customerId, existing);
+      if (days <= 7) row.current += outstanding;
+      else if (days <= 30) row.band1 += outstanding;
+      else if (days <= 60) row.band2 += outstanding;
+      else if (days <= 90) row.band3 += outstanding;
+      else row.band4 += outstanding;
+
+      row.total += outstanding;
+      row.oldestInvoiceDays = Math.max(row.oldestInvoiceDays, days);
+    });
+
+    if (row.total > 0) rows.set(customerId, row);
   });
 
   return Array.from(rows.values()).sort((a, b) => b.total - a.total);
@@ -636,7 +726,12 @@ export interface TenDayDayData {
   dayNum: number;
   revenue: number;
   commission: number;
-  netProfit: number;
+  slwNetProfit: number;
+  agentNetProfit: number;   // agent commission income only (TDS excluded)
+  agentTds: number;         // TDS collected — pass-through, not SLW income
+  agentSettlementPending: number;
+  expenses: number;
+  netProfit: number;        // slwNetProfit + agentNetProfit - expenses
   cards: number;
 }
 
@@ -648,12 +743,18 @@ export interface TenDaySet {
   days: TenDayDayData[];
   totalRevenue: number;
   totalCommission: number;
-  totalNetProfit: number;
+  totalSlwNetProfit: number;
+  totalAgentNetProfit: number;  // commission only
+  totalAgentTds: number;
+  totalAgentSettlementPending: number;
+  totalExpenses: number;
+  totalNetProfit: number;       // totalSlwNetProfit + totalAgentNetProfit - totalExpenses
   totalCards: number;
 }
 
 export function calculateTenDayBreakdown(
   jobs: Job[],
+  expenses: Expense[],
   year: number,
   month: number  // 1-indexed: 1=Jan, 12=Dec
 ): TenDaySet[] {
@@ -662,6 +763,7 @@ export function calculateTenDayBreakdown(
   const monthName = MONTH_NAMES[month - 1];
   const monthStr = `${year}-${String(month).padStart(2, '0')}`;
   const jobsInMonth = jobs.filter(j => j.date.startsWith(monthStr));
+  const expensesInMonth = expenses.filter(e => e.date.startsWith(monthStr));
 
   const sets: Array<{ setNumber: 1 | 2 | 3; from: number; to: number }> = [
     { setNumber: 1, from: 1,  to: 10 },
@@ -678,12 +780,22 @@ export function calculateTenDayBreakdown(
     for (let d = from; d <= to; d++) {
       const dateStr = `${monthStr}-${String(d).padStart(2, '0')}`;
       const dayJobs = jobsInMonth.filter(j => j.date === dateStr);
+      const slwNetProfit   = dayJobs.filter(j => !isAgentWorkJob(j)).reduce((s, j) => s + getJobNetValue(j), 0);
+      const agentNetProfit = dayJobs.filter(j =>  isAgentWorkJob(j)).reduce((s, j) => s + getJobAgentCommissionIncome(j), 0);
+      const agentTds       = dayJobs.filter(j =>  isAgentWorkJob(j)).reduce((s, j) => s + getJobAgentTdsAmount(j), 0);
+      const agentSettlementPending = dayJobs.reduce((s, j) => s + getJobAgentSettlementPending(j), 0);
+      const dayExpenses    = expensesInMonth.filter(e => e.date === dateStr).reduce((s, e) => s + (e.amount || 0), 0);
       days.push({
         date: dateStr,
         dayNum: d,
         revenue:    dayJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0),
         commission: dayJobs.reduce((s, j) => s + getJobWorkerCommissionExpense(j), 0),
-        netProfit:  dayJobs.reduce((s, j) => s + getJobNetValue(j), 0),
+        slwNetProfit,
+        agentNetProfit,
+        agentTds,
+        agentSettlementPending,
+        expenses:   dayExpenses,
+        netProfit:  slwNetProfit + agentNetProfit - dayExpenses,
         cards:      groupJobsByCard(dayJobs).length,
       });
     }
@@ -694,10 +806,15 @@ export function calculateTenDayBreakdown(
       fromDate,
       toDate,
       days,
-      totalRevenue:    days.reduce((s, d) => s + d.revenue, 0),
-      totalCommission: days.reduce((s, d) => s + d.commission, 0),
-      totalNetProfit:  days.reduce((s, d) => s + d.netProfit, 0),
-      totalCards:      days.reduce((s, d) => s + d.cards, 0),
+      totalRevenue:              days.reduce((s, d) => s + d.revenue, 0),
+      totalCommission:           days.reduce((s, d) => s + d.commission, 0),
+      totalSlwNetProfit:         days.reduce((s, d) => s + d.slwNetProfit, 0),
+      totalAgentNetProfit:       days.reduce((s, d) => s + d.agentNetProfit, 0),
+      totalAgentTds:             days.reduce((s, d) => s + d.agentTds, 0),
+      totalAgentSettlementPending: days.reduce((s, d) => s + d.agentSettlementPending, 0),
+      totalExpenses:             days.reduce((s, d) => s + d.expenses, 0),
+      totalNetProfit:            days.reduce((s, d) => s + d.netProfit, 0),
+      totalCards:                days.reduce((s, d) => s + d.cards, 0),
     };
   });
 }
@@ -711,6 +828,8 @@ export interface DailyCashFlow {
   revenue: number;
   commission: number;
   netIncome: number;
+  expenses: number;
+  netProfit: number;
   received: number;
   outstanding: number;
 }
@@ -718,6 +837,7 @@ export interface DailyCashFlow {
 export function calculateDailyCashFlow(
   jobs: Job[],
   payments: Payment[],
+  expenses: Expense[],
   days: number = 30
 ): DailyCashFlow[] {
   const today = new Date();
@@ -735,6 +855,8 @@ export function calculateDailyCashFlow(
       revenue: 0,
       commission: 0,
       netIncome: 0,
+      expenses: 0,
+      netProfit: 0,
       received: 0,
       outstanding: 0,
     });
@@ -749,6 +871,19 @@ export function calculateDailyCashFlow(
       flow.netIncome += getJobNetValue(job);
       flow.outstanding += Math.max(0, getJobFinalBillValue(job) - (getJobPaidAmount(job) || 0));
     }
+  });
+
+  // Add expenses per day
+  expenses.forEach((expense) => {
+    const flow = cashFlows.get(expense.date);
+    if (flow) {
+      flow.expenses += expense.amount || 0;
+    }
+  });
+
+  // Compute net profit = net income - expenses for each day
+  cashFlows.forEach((flow) => {
+    flow.netProfit = flow.netIncome - flow.expenses;
   });
 
   // Add receipts (vouchers + job-paid entries) for the window

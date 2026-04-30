@@ -1,10 +1,10 @@
 import type { Customer, Job, Payment } from '@/types';
-import { getJobFinalBillValue, groupJobsByCard } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobNetValue, groupJobsByCard, isAgentWorkJob } from '@/lib/jobUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 
 export interface Anomaly {
   id: string;
-  type: 'revenue_drop' | 'customer_silent' | 'duplicate' | 'large_job';
+  type: 'gross_profit_drop' | 'customer_silent' | 'duplicate' | 'large_job';
   severity: 'warning' | 'info';
   message: string;
   relatedCustomerId?: number;
@@ -62,38 +62,42 @@ function stdDev(values: number[]): number {
     return 0;
   }
   const avg = mean(values);
-  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1);
   return Math.sqrt(variance);
 }
 
 export function detectAnomalies(jobs: Job[], _payments: Payment[], customers: Customer[]): Anomaly[] {
   const anomalies: Anomaly[] = [];
   const detectedAt = new Date().toISOString();
+  const slwJobs = jobs.filter((job) => !isAgentWorkJob(job));
 
   const weekBuckets = getWeekBuckets();
-  const weeklyRevenue = weekBuckets.map((week) =>
-    jobs
+  const weeklyGrossProfit = weekBuckets.map((week) =>
+    slwJobs
       .filter((job) => job.date >= week.from && job.date <= week.to)
-      .reduce((sum, job) => sum + getJobFinalBillValue(job), 0)
+      .reduce((sum, job) => sum + getJobNetValue(job), 0)
   );
-  if (weeklyRevenue.length >= 5) {
-    const thisWeekRevenue = weeklyRevenue[weeklyRevenue.length - 1];
-    const previous4 = weeklyRevenue.slice(Math.max(0, weeklyRevenue.length - 5), weeklyRevenue.length - 1);
+  if (weeklyGrossProfit.length >= 5) {
+    const thisWeekGrossProfit = weeklyGrossProfit[weeklyGrossProfit.length - 1];
+    const previous4 = weeklyGrossProfit.slice(
+      Math.max(0, weeklyGrossProfit.length - 5),
+      weeklyGrossProfit.length - 1
+    );
     const avg4Week = mean(previous4);
-    if (avg4Week > 0 && thisWeekRevenue < avg4Week * 0.6) {
-      const dropPct = Math.round(((avg4Week - thisWeekRevenue) / avg4Week) * 100);
+    if (avg4Week > 0 && thisWeekGrossProfit < avg4Week * 0.6) {
+      const dropPct = Math.round(((avg4Week - thisWeekGrossProfit) / avg4Week) * 100);
       anomalies.push({
-        id: `revenue_drop_${getLocalDateString(new Date())}`,
-        type: 'revenue_drop',
+        id: `gross_profit_drop_${getLocalDateString(new Date())}`,
+        type: 'gross_profit_drop',
         severity: 'warning',
-        message: `Revenue this week is ${dropPct}% below your 4-week average.`,
+        message: `Gross profit this week is ${dropPct}% below your 4-week average.`,
         detectedAt,
       });
     }
   }
 
   const jobsByCustomer = new Map<number, Job[]>();
-  jobs.forEach((job) => {
+  slwJobs.forEach((job) => {
     if (!jobsByCustomer.has(job.customerId)) {
       jobsByCustomer.set(job.customerId, []);
     }
@@ -133,9 +137,9 @@ export function detectAnomalies(jobs: Job[], _payments: Payment[], customers: Cu
       const lastJobDate = new Date(`${uniqueDates[uniqueDates.length - 1]}T00:00:00`);
       const daysSinceLastJob = Math.max(0, Math.floor((now.getTime() - lastJobDate.getTime()) / 86400000));
 
-      // Require at least 7 days of silence AND 1.5× the usual gap before alerting.
+      // Require at least 14 days of silence AND 1.5× the usual gap before alerting.
       // This prevents false positives for customers who visited recently.
-      const silenceThreshold = Math.max(7, usualGap * 1.5);
+      const silenceThreshold = Math.max(14, usualGap * 1.5);
       if (daysSinceLastJob > silenceThreshold) {
         anomalies.push({
           id: `customer_silent_${customer.id}_${uniqueDates[uniqueDates.length - 1]}`,
@@ -148,7 +152,7 @@ export function detectAnomalies(jobs: Job[], _payments: Payment[], customers: Cu
       }
     });
 
-  const groupedCards = groupJobsByCard(jobs);
+  const groupedCards = groupJobsByCard(slwJobs);
   groupedCards.forEach((cardGroup) => {
     const sameCardLines = cardGroup.jobs;
     const seen = new Set<string>();

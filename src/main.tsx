@@ -13,8 +13,9 @@ import { HistoryScreen } from './screens/history/HistoryScreen';
 import { RecordsScreen } from './screens/records/RecordsScreen';
 import { FinanceReports } from './screens/FinanceReports';
 import { ExpenseManager } from './screens/ExpenseManager';
-import { CommissionScreen } from './screens/commission/CommissionScreen';
+import { CommissionDcScreen } from './screens/commission-dc/CommissionDcScreen';
 import { LoggerScreen } from './screens/logger/LoggerScreen';
+import { InvoiceScreen } from './screens/invoice/InvoiceScreen';
 import { LoginScreen } from './screens/auth/LoginScreen';
 import './styles/index.css';
 
@@ -68,12 +69,16 @@ const router = createHashRouter([
         element: <ExpenseManager />,
       },
       {
-        path: '/commission',
-        element: <CommissionScreen />,
+        path: '/commission-dc',
+        element: <CommissionDcScreen />,
       },
       {
         path: '/logger',
         element: <LoggerScreen />,
+      },
+      {
+        path: '/invoice',
+        element: <InvoiceScreen />,
       },
     ],
   },

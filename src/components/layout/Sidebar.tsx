@@ -54,24 +54,25 @@ export function Sidebar() {
     {
       title: 'Reporting',
       items: [
-        { path: '/records', label: 'Records', tamil: '????????', icon: <Icon name="records" width={15} height={15} /> },
         { path: '/history', label: 'History', tamil: '??????', icon: <Icon name="history" width={15} height={15} /> },
+        { path: '/records', label: 'Records', tamil: '????????', icon: <Icon name="records" width={15} height={15} /> },
+        { path: '/commission-dc', label: 'Commission DC', icon: <Icon name="commission" width={15} height={15} /> },
       ],
     },
     {
       title: 'Finance',
       items: [
-        { path: '/payments', label: 'Payments', tamil: '?????????', icon: <Icon name="payments" width={15} height={15} /> },
-        { path: '/finance', label: 'Finance', tamil: '????', icon: <Icon name="finance" width={15} height={15} /> },
-        { path: '/commission', label: 'Commission', tamil: '??????', icon: <Icon name="commission" width={15} height={15} /> },
-        { path: '/expenses', label: 'Expenses', tamil: '????????', icon: <Icon name="expenses" width={15} height={15} /> },
+        { path: '/invoice', label: 'Invoice', tamil: '??????', icon: <Icon name="invoice" width={15} height={15} /> },
+        { path: '/payments', label: 'Record Payments', tamil: '?????????', icon: <Icon name="payments" width={15} height={15} /> },
+        { path: '/finance', label: 'Audit', tamil: '????', icon: <Icon name="finance" width={15} height={15} /> },
       ],
     },
     {
       title: 'Admin',
       items: [
-        { path: '/customers', label: 'Customers', tamil: '????????????????', icon: <Icon name="customers" width={15} height={15} /> },
-        { path: '/work-types', label: 'Work Types', tamil: '???? ??????', icon: <Icon name="worktypes" width={15} height={15} /> },
+        { path: '/expenses', label: 'Expense', tamil: '????????', icon: <Icon name="expenses" width={15} height={15} /> },
+        { path: '/customers', label: 'Customer', tamil: '????????????????', icon: <Icon name="customers" width={15} height={15} /> },
+        { path: '/work-types', label: 'Worktype', tamil: '???? ??????', icon: <Icon name="worktypes" width={15} height={15} /> },
         { path: '/logger', label: 'Logger', tamil: '???????', icon: <Icon name="logger" width={15} height={15} /> },
       ],
     },

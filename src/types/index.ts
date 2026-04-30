@@ -183,6 +183,8 @@ export interface CommissionPayment {
   date: string;
   notes?: string;
   createdAt?: string;
+  paymentType?: 'worker' | 'agent';
+  agentName?: string;
 }
 
 export interface AuthUser {

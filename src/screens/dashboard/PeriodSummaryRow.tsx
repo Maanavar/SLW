@@ -3,7 +3,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobsInRange, getPaymentEventsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobFinalBillValue, getJobCardPaymentSummary, getJobNetValue, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobCardPaymentSummary, getJobWorkerCommissionExpense, isAgentWorkJob, getJobAgentCommissionIncome } from '@/lib/jobUtils';
 import { getLocalDateString, getTenDayRange, getWeekStartDate } from '@/lib/dateUtils';
 
 type ActivePeriod = 'today' | 'week' | 'tenday' | 'month' | 'quarter' | 'year';
@@ -113,7 +113,10 @@ function getPeriodStats(
 
   const totalRevenue = jobsInPeriod.reduce((sum, job) => sum + getJobFinalBillValue(job), 0);
   const commissionExpense = jobsInPeriod.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
-  const grossProfit = jobsInPeriod.reduce((sum, job) => sum + getJobNetValue(job), 0);
+  const grossProfit = jobsInPeriod.reduce((sum, job) => {
+    if (isAgentWorkJob(job)) return sum + getJobAgentCommissionIncome(job);
+    return sum + (Number(job.amount) || 0);
+  }, 0);
 
   const received = paymentEventsInPeriod.reduce((sum, entry) => sum + (entry.amount || 0), 0);
   const outstanding = Math.max(0, totalRevenue - received);
@@ -430,8 +433,8 @@ export function PeriodSummaryRow() {
         <article className="period-card">
           <p className="period-card-label">Revenue</p>
           <p className="period-card-value">{formatCurrency(currentStats.totalRevenue)}</p>
-          <p className="period-card-meta is-green">
-            Net income
+          <p className="period-card-meta">
+            Gross billed to customers
             <TrendBadge current={currentStats.totalRevenue} prev={prevStats.totalRevenue} higher />
           </p>
         </article>
@@ -469,7 +472,7 @@ export function PeriodSummaryRow() {
             {formatCurrency(currentStats.outstanding)}
           </p>
           <p className="period-card-meta">
-            Final bill - received
+            Billed but not yet collected
             <TrendBadge current={currentStats.outstanding} prev={prevStats.outstanding} higher={false} />
           </p>
         </article>
@@ -478,7 +481,11 @@ export function PeriodSummaryRow() {
       <section className="payment-breakdown-panel">
         <div className="payment-breakdown-head">
           <h3 className="payment-breakdown-title">Payment mode breakdown</h3>
-          <p className="payment-breakdown-subtitle">Received this {activePeriod}</p>
+          <p className="payment-breakdown-subtitle">Received {
+            activePeriod === 'today' ? 'today'
+            : activePeriod === 'tenday' ? 'this 10-day'
+            : `this ${activePeriod}`
+          }</p>
         </div>
 
         <div className="payment-breakdown-body">

@@ -1,9 +1,11 @@
 import type { Job, Payment } from '@/types';
-import { getJobFinalBillValue, getJobNetValue } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobNetValue, isAgentWorkJob } from '@/lib/jobUtils';
+import { buildCollectionEvents } from '@/lib/financeUtils';
 
 export interface TrendDataPoint {
   label: string;
   revenue: number;
+  slwRevenue: number;
   grossProfit: number;
   received: number;
   outstanding: number;
@@ -15,6 +17,7 @@ interface TrendBucket {
   key: string;
   label: string;
   revenue: number;
+  slwRevenue: number;
   grossProfit: number;
   received: number;
 }
@@ -88,9 +91,6 @@ export function buildRevenueTrend(
   const jobsInRange = dateRange
     ? jobs.filter((job) => job.date >= dateRange.from && job.date <= dateRange.to)
     : jobs;
-  const paymentsInRange = dateRange
-    ? payments.filter((payment) => payment.date >= dateRange.from && payment.date <= dateRange.to)
-    : payments;
 
   const ensureBucket = (dateStr: string) => {
     const key = toBucketKey(dateStr, groupBy);
@@ -99,6 +99,7 @@ export function buildRevenueTrend(
         key,
         label: formatLabel(key, groupBy),
         revenue: 0,
+        slwRevenue: 0,
         grossProfit: 0,
         received: 0,
       });
@@ -110,12 +111,15 @@ export function buildRevenueTrend(
     const bucket = ensureBucket(job.date);
     const revenue = getJobFinalBillValue(job);
     bucket.revenue += revenue;
+    if (!isAgentWorkJob(job)) bucket.slwRevenue += revenue;
     bucket.grossProfit += getJobNetValue(job);
   });
 
-  paymentsInRange.forEach((payment) => {
-    const bucket = ensureBucket(payment.date);
-    bucket.received += Number(payment.amount) || 0;
+  // Use deduplicated collection events (vouchers + job-paid entries) so received
+  // matches calculatePaymentMetrics rather than raw vouchers only.
+  buildCollectionEvents(jobs, payments, dateRange).forEach((event) => {
+    const bucket = ensureBucket(event.date);
+    bucket.received += event.amount || 0;
   });
 
   const sorted = Array.from(buckets.values()).sort((a, b) => a.key.localeCompare(b.key));
@@ -123,6 +127,7 @@ export function buildRevenueTrend(
   return sorted.map((bucket) => ({
     label: bucket.label,
     revenue: bucket.revenue,
+    slwRevenue: bucket.slwRevenue,
     grossProfit: bucket.grossProfit,
     received: bucket.received,
     outstanding: Math.max(0, bucket.revenue - bucket.received),

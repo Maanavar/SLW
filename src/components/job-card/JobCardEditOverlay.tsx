@@ -604,7 +604,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
                 checked={externalDc}
                 onChange={(e) => setExternalDc(e.target.checked)}
               />
-              External DC (not worked by SLW)
+              Commission DC (not worked by SLW)
             </label>
             <div className="edit-2col">
               <div className="edit-field-group">

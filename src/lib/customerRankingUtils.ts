@@ -1,5 +1,6 @@
 import type { Customer, Job, Payment } from '@/types';
 import { calculateCustomerFinancials } from '@/lib/financeUtils';
+import { isAgentWorkJob } from '@/lib/jobUtils';
 
 export interface CustomerRank {
   customerId: number;
@@ -7,6 +8,7 @@ export interface CustomerRank {
   rank: number;
   totalRevenue: number;
   grossProfit: number;
+  slwNetProfit: number;
   totalOutstanding: number;
   jobCardCount: number;
   collectionRate: number;
@@ -47,7 +49,17 @@ export function rankCustomers(
   const activeCustomers = customers.filter((customer) => customer.isActive !== false);
   const customerFinancials = calculateCustomerFinancials(jobs, payments, activeCustomers);
 
-  const totalRevenueAll = customerFinancials.reduce((sum, row) => sum + row.totalRevenue, 0);
+  // Per-customer SLW direct net profit (excludes agent work — ranking is based on our own work)
+  const slwNetProfitByCustomer = new Map<number, number>();
+  jobs.forEach((job) => {
+    if (isAgentWorkJob(job)) return;
+    slwNetProfitByCustomer.set(
+      job.customerId,
+      (slwNetProfitByCustomer.get(job.customerId) ?? 0) + (Number(job.amount) || 0)
+    );
+  });
+  const totalSlwNetProfitAll = Array.from(slwNetProfitByCustomer.values()).reduce((s, v) => s + v, 0);
+
   const firstJobDateByCustomer = new Map<number, string>();
   const lastJobDateByCustomer = new Map<number, string>();
   const cardKeysByCustomer = new Map<number, Set<string>>();
@@ -90,10 +102,11 @@ export function rankCustomers(
         : 1;
       const jobsPerMonth = jobCardCount / monthsActive;
 
+      const slwNetProfit = slwNetProfitByCustomer.get(row.customerId) ?? 0;
       const collectionPts = Math.max(0, Math.min(40, (row.paymentRate / 100) * 40));
-      const frequencyPts = Math.max(0, Math.min(30, (jobsPerMonth / 10) * 30));
-      const revenueShare = totalRevenueAll > 0 ? row.totalRevenue / totalRevenueAll : 0;
-      const contributionPts = Math.max(0, Math.min(20, revenueShare * 20));
+      const frequencyPts = Math.max(0, Math.min(30, (jobsPerMonth / 3) * 30));
+      const profitShare = totalSlwNetProfitAll > 0 ? slwNetProfit / totalSlwNetProfitAll : 0;
+      const contributionPts = Math.max(0, Math.min(20, profitShare * 20));
 
       let recencyPts = 0;
       if (daysSinceLastJob <= 30) {
@@ -112,6 +125,7 @@ export function rankCustomers(
         rank: 0,
         totalRevenue: row.totalRevenue,
         grossProfit: row.grossProfit,
+        slwNetProfit,
         totalOutstanding: row.totalOutstanding,
         jobCardCount,
         collectionRate: row.paymentRate,
@@ -122,7 +136,7 @@ export function rankCustomers(
         healthLabel: toHealthLabel(healthScore),
       };
     })
-    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .sort((a, b) => b.slwNetProfit - a.slwNetProfit)
     .map((item, index) => ({
       ...item,
       rank: index + 1,

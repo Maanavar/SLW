@@ -5,9 +5,11 @@ import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString, getTenDayRange, getWeekStartDate } from '@/lib/dateUtils';
 import {
   getJobAgentCommissionIncome,
+  getJobAgentTdsAmount,
   getJobAgentSettlementPending,
   getJobFinalBillValue,
   getJobWorkerCommissionExpense,
+  groupJobsByCard,
   isAgentWorkJob,
 } from '@/lib/jobUtils';
 import {
@@ -25,6 +27,7 @@ import { rankCustomers } from '@/lib/customerRankingUtils';
 import { CustomerRankingTable } from '@/components/charts/CustomerRankingTable';
 import { AgeingHeatmap } from '@/components/charts/AgeingHeatmap';
 import { RevenueTrendChart } from '@/components/charts/RevenueTrendChart';
+import type { CommissionWorker, Job } from '@/types';
 import '@/components/charts/CustomerRankingTable.css';
 import '@/components/charts/AgeingHeatmap.css';
 import '@/components/charts/RevenueTrendChart.css';
@@ -49,19 +52,31 @@ const PERIOD_TABS: { mode: PeriodType; label: string }[] = [
 ];
 
 const NAV_TABS: { id: ReportTab; label: string }[] = [
-  { id: 'revenue',    label: 'Revenue' },
-   { id: 'tenday',     label: '10-Day' },
+  { id: 'revenue',    label: 'Overview' },
   { id: 'trends',     label: 'Trends' },
   { id: 'payments',   label: 'Payments' },
+  { id: 'tenday',     label: '10-Day' },
   { id: 'commission', label: 'Commission' },
   { id: 'customers',  label: 'Customers' },
   { id: 'rankings',   label: 'Rankings' },
   { id: 'ageing',     label: 'Ageing' },
   { id: 'cashflow',   label: 'Cash Flow' },
- 
 ];
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function resolveCommissionWorkerId(job: Job, workers: CommissionWorker[]): number | null {
+  if (typeof job.commissionWorkerId === 'number') {
+    return job.commissionWorkerId;
+  }
+  const workerName = job.commissionWorkerName?.trim();
+  if (!workerName) return null;
+  const normalizedName = workerName.toLowerCase();
+  const matchedWorker = workers.find(
+    (worker) => worker.customerId === job.customerId && worker.name.toLowerCase() === normalizedName
+  );
+  return matchedWorker?.id ?? null;
+}
 
 function getDateRange(period: PeriodType): { from: string; to: string } | undefined {
   if (period === 'all' || period === 'range') return undefined;
@@ -82,6 +97,72 @@ function getDateRange(period: PeriodType): { from: string; to: string } | undefi
     from = new Date(today.getFullYear(), 0, 1);
   }
   return { from: getLocalDateString(from), to: toStr };
+}
+
+function getDateRangeWithOffset(period: PeriodType, offset: number): { from: string; to: string } | undefined {
+  if (period === 'all' || period === 'range') return getDateRange(period);
+  if (period === 'tenday') return getTenDayRange(new Date(), offset);
+  if (offset === 0) return getDateRange(period);
+  const today = new Date();
+  if (period === 'today') {
+    const d = new Date(today); d.setDate(d.getDate() + offset);
+    const s = getLocalDateString(d); return { from: s, to: s };
+  }
+  if (period === 'week') {
+    const base = new Date(today); base.setDate(base.getDate() + offset * 7);
+    const ws = getWeekStartDate(base);
+    const we = new Date(`${ws}T00:00:00`); we.setDate(we.getDate() + 6);
+    return { from: ws, to: getLocalDateString(we) };
+  }
+  if (period === 'month') {
+    let m = today.getMonth() + offset;
+    const y = today.getFullYear() + Math.floor(m / 12);
+    m = ((m % 12) + 12) % 12;
+    const from = new Date(y, m, 1); const to = new Date(y, m + 1, 0);
+    return { from: getLocalDateString(from), to: getLocalDateString(to) };
+  }
+  if (period === 'quarter') {
+    let q = Math.floor(today.getMonth() / 3) + offset;
+    const y = today.getFullYear() + Math.floor(q / 4);
+    q = ((q % 4) + 4) % 4;
+    const from = new Date(y, q * 3, 1); const to = new Date(y, q * 3 + 3, 0);
+    return { from: getLocalDateString(from), to: getLocalDateString(to) };
+  }
+  if (period === 'year') {
+    const y = today.getFullYear() + offset;
+    return { from: `${y}-01-01`, to: `${y}-12-31` };
+  }
+  return getDateRange(period);
+}
+
+function getOffsetPeriodLabel(period: PeriodType, offset: number): string {
+  const range = getDateRangeWithOffset(period, offset);
+  if (!range) return '';
+  if (period === 'tenday') {
+    const s = new Date(`${range.from}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const e = new Date(`${range.to}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return `${s} – ${e}`;
+  }
+  if (period === 'today') {
+    return new Date(`${range.from}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  if (period === 'week') {
+    const s = new Date(`${range.from}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const e = new Date(`${range.to}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return `${s} – ${e}`;
+  }
+  if (period === 'month') {
+    const [y, m] = range.from.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  }
+  if (period === 'quarter') {
+    const [y, m] = range.from.split('-').map(Number);
+    return `Q${Math.ceil(m / 3)} ${y}`;
+  }
+  if (period === 'year') {
+    return range.from.substring(0, 4);
+  }
+  return '';
 }
 
 function nextSortState<T extends string>(
@@ -117,7 +198,7 @@ function BarChart({ items, maxVal }: { items: { label: string; value: number }[]
 }
 
 export function FinanceReports() {
-  const { jobs, payments, customers, commissionPayments, commissionWorkers, getCustomer } = useDataStore();
+  const { jobs, payments, customers, commissionPayments, commissionWorkers, expenses, getCustomer } = useDataStore();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<ReportTab>(() => {
     const tab = searchParams.get('tab');
@@ -125,6 +206,7 @@ export function FinanceReports() {
     return (valid.includes(tab as ReportTab) ? tab : 'revenue') as ReportTab;
   });
   const [period, setPeriod] = useState<PeriodType>('month');
+  const [periodOffset, setPeriodOffset] = useState(0);
   const today = getLocalDateString(new Date());
   const [rangeFrom, setRangeFrom] = useState(today);
   const [rangeTo, setRangeTo] = useState(today);
@@ -170,8 +252,9 @@ export function FinanceReports() {
 
   const dateRange = useMemo(() => {
     if (period === 'range') return rangeFrom && rangeTo ? { from: rangeFrom, to: rangeTo } : undefined;
-    return getDateRange(period);
-  }, [period, rangeFrom, rangeTo]);
+    if (period === 'all') return undefined;
+    return getDateRangeWithOffset(period, periodOffset);
+  }, [period, rangeFrom, rangeTo, periodOffset]);
 
   const filteredJobs = useMemo(
     () => dateRange ? jobs.filter(j => j.date >= dateRange.from && j.date <= dateRange.to) : jobs,
@@ -179,7 +262,7 @@ export function FinanceReports() {
   );
 
   // ── Revenue ───────────────────────────────────────────────────────────────
-  const revenueMetrics = useMemo(() => calculateRevenueMetrics(jobs, dateRange), [jobs, dateRange]);
+  const revenueMetrics = useMemo(() => calculateRevenueMetrics(jobs, expenses, dateRange), [jobs, expenses, dateRange]);
 
   const topCustomers = useMemo(() => {
     const map = new Map<number, { name: string; value: number }>();
@@ -198,6 +281,58 @@ export function FinanceReports() {
     return Array.from(map.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 10);
   }, [filteredJobs]);
 
+  const revenueJobCardMix = useMemo(() => {
+    return groupJobsByCard(filteredJobs).reduce(
+      (acc, group) => {
+        const isAgentCard = group.jobs.some((job) => isAgentWorkJob(job));
+        if (!isAgentCard) {
+          acc.slwWorkCards += 1;
+          return acc;
+        }
+
+        const isExternalCard = group.jobs.some((job) => Boolean(job.externalDc));
+        if (isExternalCard) {
+          acc.agentWorkExternalCards += 1;
+        } else {
+          acc.agentWorkInternalCards += 1;
+        }
+        return acc;
+      },
+      { slwWorkCards: 0, agentWorkInternalCards: 0, agentWorkExternalCards: 0 }
+    );
+  }, [filteredJobs]);
+
+  const revenueFlowSplit = useMemo(() => {
+    return filteredJobs.reduce(
+      (acc, job) => {
+        if (isAgentWorkJob(job)) {
+          acc.agentWorkRevenue += getJobFinalBillValue(job);
+        } else {
+          acc.slwRevenue += getJobFinalBillValue(job);
+        }
+        return acc;
+      },
+      { slwRevenue: 0, agentWorkRevenue: 0 }
+    );
+  }, [filteredJobs]);
+
+
+  const revenueGrossProfitFormula = useMemo(() => {
+    return filteredJobs.reduce(
+      (acc, job) => {
+        if (isAgentWorkJob(job)) {
+          acc.agentCommissionIncome += getJobAgentCommissionIncome(job);
+          acc.agentTdsIncome += getJobAgentTdsAmount(job);
+          return acc;
+        }
+        acc.slwRevenue += getJobFinalBillValue(job);
+        acc.workerCommission += getJobWorkerCommissionExpense(job);
+        return acc;
+      },
+      { slwRevenue: 0, workerCommission: 0, agentCommissionIncome: 0, agentTdsIncome: 0 }
+    );
+  }, [filteredJobs]);
+
   // ── Payments ──────────────────────────────────────────────────────────────
   const paymentMetrics = useMemo(() => calculatePaymentMetrics(jobs, payments, dateRange), [jobs, payments, dateRange]);
   const paymentMethodBreakdown = useMemo(
@@ -211,18 +346,19 @@ export function FinanceReports() {
     [jobs, commissionPayments, dateRange]
   );
   const workerSummary = useMemo(
-    () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
-    [jobs, commissionPayments, commissionWorkers]
+    () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers, dateRange),
+    [jobs, commissionPayments, commissionWorkers, dateRange]
   );
   const workerJobCounts = useMemo(() => {
     const map = new Map<number, number>();
     filteredJobs.forEach(j => {
-      if (getJobWorkerCommissionExpense(j) > 0 && j.commissionWorkerId) {
-        map.set(j.commissionWorkerId, (map.get(j.commissionWorkerId) || 0) + 1);
-      }
+      if (getJobWorkerCommissionExpense(j) <= 0) return;
+      const workerId = resolveCommissionWorkerId(j, commissionWorkers);
+      if (workerId === null) return;
+      map.set(workerId, (map.get(workerId) || 0) + 1);
     });
     return map;
-  }, [filteredJobs]);
+  }, [filteredJobs, commissionWorkers]);
   const agentFlowMetrics = useMemo(() => {
     return filteredJobs.reduce(
       (acc, job) => {
@@ -284,15 +420,62 @@ export function FinanceReports() {
 
   // ── Ten-Day ───────────────────────────────────────────────────────────────
   const tenDaySets = useMemo(
-    () => calculateTenDayBreakdown(jobs, tenDayYear, tenDayMonth),
-    [jobs, tenDayYear, tenDayMonth]
+    () => calculateTenDayBreakdown(jobs, expenses, tenDayYear, tenDayMonth),
+    [jobs, expenses, tenDayYear, tenDayMonth]
   );
+
+  const tenDayPayables = useMemo(() => {
+    type Entry = { custId: number; subLabel: string; amount: number };
+    const monthStr = `${tenDayYear}-${String(tenDayMonth).padStart(2, '0')}`;
+    const monthJobs = jobs.filter(j => j.date.startsWith(monthStr));
+
+    const agentCommissionMap              = new Map<string, Entry>();
+    const agentTdsMap                     = new Map<string, Entry>();
+    const slwWorkerMap                    = new Map<string, Entry>();
+    const agentSettlementInternalByCustomer = new Map<number, number>();
+    let agentSettlementExternal = 0;
+
+    const addSub = (map: Map<string, Entry>, custId: number, subLabel: string, val: number) => {
+      const key = `${custId}|${subLabel}`;
+      const e = map.get(key) ?? { custId, subLabel, amount: 0 };
+      e.amount += val;
+      map.set(key, e);
+    };
+
+    monthJobs.forEach(job => {
+      if (isAgentWorkJob(job)) {
+        const sub = job.agentName || (job.rmpHandler ?? '');
+        addSub(agentCommissionMap, job.customerId, sub, getJobAgentCommissionIncome(job));
+        addSub(agentTdsMap,        job.customerId, sub, getJobAgentTdsAmount(job));
+        const p = getJobAgentSettlementPending(job);
+        if (job.externalDc) agentSettlementExternal += p;
+        else agentSettlementInternalByCustomer.set(job.customerId, (agentSettlementInternalByCustomer.get(job.customerId) || 0) + p);
+      } else {
+        const sub = job.rmpHandler ?? '';
+        addSub(slwWorkerMap, job.customerId, sub, getJobWorkerCommissionExpense(job));
+      }
+    });
+
+    const totalMap = (map: Map<string, Entry>) => Array.from(map.values()).reduce((s, e) => s + e.amount, 0);
+    const totalNum = (map: Map<number, number>) => Array.from(map.values()).reduce((s, v) => s + v, 0);
+    return {
+      agentCommissionMap,
+      agentTdsMap,
+      slwWorkerMap,
+      agentSettlementInternalByCustomer,
+      agentSettlementExternal,
+      totalAgentCommission: totalMap(agentCommissionMap),
+      totalAgentTds:        totalMap(agentTdsMap),
+      totalSlwWorker:       totalMap(slwWorkerMap),
+      totalAgentInternal:   totalNum(agentSettlementInternalByCustomer),
+    };
+  }, [jobs, tenDayYear, tenDayMonth]);
 
   // ── Cash Flow ─────────────────────────────────────────────────────────────
   const cashFlowDays = period === 'year' ? 365 : period === 'range' ? 90 : period === 'month' ? 30 : period === 'tenday' ? 10 : 7;
   const dailyCashFlow = useMemo(
-    () => calculateDailyCashFlow(jobs, payments, cashFlowDays),
-    [jobs, payments, cashFlowDays]
+    () => calculateDailyCashFlow(jobs, payments, expenses, cashFlowDays),
+    [jobs, payments, expenses, cashFlowDays]
   );
   const sortedDailyCashFlow = useMemo(() => {
     if (!cashflowSort) return dailyCashFlow;
@@ -316,12 +499,37 @@ export function FinanceReports() {
           {PERIOD_TABS.map(({ mode, label }) => (
             <button key={mode} type="button"
               className={`fin-period-tab${period === mode ? ' active' : ''}`}
-              onClick={() => setPeriod(mode)}>
+              onClick={() => { setPeriod(mode); setPeriodOffset(0); }}>
               {label}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Period navigation — prev/next for navigable periods */}
+      {period !== 'all' && period !== 'range' && (
+        <div className="fin-period-nav">
+          <button type="button" className="fin-period-nav-btn"
+            onClick={() => setPeriodOffset(o => o - 1)} aria-label="Previous period">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <span className="fin-period-nav-label">{getOffsetPeriodLabel(period, periodOffset)}</span>
+          <button type="button" className="fin-period-nav-btn"
+            onClick={() => setPeriodOffset(o => o + 1)} disabled={periodOffset >= 0} aria-label="Next period">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          {periodOffset < 0 && (
+            <button type="button" className="fin-period-nav-reset"
+              onClick={() => setPeriodOffset(0)}>
+              Current
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Range inputs */}
       {period === 'range' && (
@@ -356,23 +564,98 @@ export function FinanceReports() {
       {/* ── Revenue ── */}
       {activeTab === 'revenue' && (
         <div className="fin-tab-content">
-          <div className="fin-stats fin-stats-3">
-            <div className="fin-stat">
-              <span className="fin-stat-label">Total Revenue</span>
-              <span className="fin-stat-value">{formatCurrency(revenueMetrics.totalRevenue)}</span>
-              <span className="fin-stat-sub">Gross billed to customers</span>
-            </div>
-            <div className="fin-stat fin-stat--green">
+          <div className="fin-stats fin-stats-4">
+            <div className="fin-stat fin-stat--green fin-stat--hoverable">
               <span className="fin-stat-label">Job Cards</span>
               <span className="fin-stat-value">{revenueMetrics.jobCount}</span>
               <span className="fin-stat-sub">Cards in period</span>
+              <div className="fin-stat-tooltip" role="tooltip" aria-label="Job Cards breakdown">
+                <div className="fin-stat-tooltip-title">Job Cards Breakdown</div>
+                <div className="fin-stat-tooltip-row">
+                  <span>SLW Work</span>
+                  <strong>{revenueJobCardMix.slwWorkCards}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Agent Work (Not External)</span>
+                  <strong>{revenueJobCardMix.agentWorkInternalCards}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Agent Work (External)</span>
+                  <strong>{revenueJobCardMix.agentWorkExternalCards}</strong>
+                </div>
+              </div>
             </div>
-            <div className="fin-stat">
-              <span className="fin-stat-label">Avg Revenue / Card</span>
-              <span className="fin-stat-value">
-                {formatCurrency(revenueMetrics.jobCount > 0 ? revenueMetrics.totalRevenue / revenueMetrics.jobCount : 0)}
-              </span>
-              <span className="fin-stat-sub">Per job card</span>
+            <div className="fin-stat fin-stat--hoverable">
+              <span className="fin-stat-label">Total Revenue</span>
+              <span className="fin-stat-value">{formatCurrency(revenueMetrics.totalRevenue)}</span>
+              <span className="fin-stat-sub">Gross billed to customers</span>
+              <div className="fin-stat-tooltip" role="tooltip" aria-label="Total Revenue breakdown">
+                <div className="fin-stat-tooltip-title">Revenue Breakdown</div>
+                <div className="fin-stat-tooltip-row">
+                  <span>SLW Revenue</span>
+                  <strong>{formatCurrency(revenueFlowSplit.slwRevenue)}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Agent Work Revenue</span>
+                  <strong>{formatCurrency(revenueFlowSplit.agentWorkRevenue)}</strong>
+                </div>
+              </div>
+            </div>
+            <div className="fin-stat fin-stat--green fin-stat--hoverable">
+              <span className="fin-stat-label">Gross Profit</span>
+              <span className="fin-stat-value">{formatCurrency(revenueMetrics.grossProfit)}</span>
+              <span className="fin-stat-sub">After commission deductions</span>
+              <div className="fin-stat-tooltip" role="tooltip" aria-label="Gross Profit details">
+                <div className="fin-stat-tooltip-title">Gross Profit Formula</div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Calculation</span>
+                  <strong>SLW Revenue − Worker Comm + Agent Comm</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>SLW Revenue</span>
+                  <strong>{formatCurrency(revenueGrossProfitFormula.slwRevenue)}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Worker Commission</span>
+                  <strong>−{formatCurrency(revenueGrossProfitFormula.workerCommission)}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Agent Commission Income</span>
+                  <strong>{formatCurrency(revenueGrossProfitFormula.agentCommissionIncome)}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Total Gross Profit</span>
+                  <strong>{formatCurrency(revenueMetrics.grossProfit)}</strong>
+                </div>
+              </div>
+            </div>
+            <div className={`fin-stat fin-stat--hoverable${revenueMetrics.netProfit >= 0 ? ' fin-stat--green' : ' fin-stat--red'}`}>
+              <span className="fin-stat-label">Net Profit</span>
+              <span className="fin-stat-value">{formatCurrency(revenueMetrics.netProfit)}</span>
+              <span className="fin-stat-sub">Final profit after all costs</span>
+              <div className="fin-stat-tooltip" role="tooltip" aria-label="Net Profit details">
+                <div className="fin-stat-tooltip-title">Net Profit Breakdown</div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Calculation</span>
+                  <strong>Gross Profit − Expenses</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Gross Profit</span>
+                  <strong>{formatCurrency(revenueMetrics.grossProfit)}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Expenses</span>
+                  <strong>−{formatCurrency(revenueMetrics.totalExpenses)}</strong>
+                </div>
+                <div className="fin-stat-tooltip-row">
+                  <span>Net Margin</span>
+                  <strong>
+                    {revenueMetrics.totalRevenue > 0
+                      ? `${((revenueMetrics.netProfit / revenueMetrics.totalRevenue) * 100).toFixed(1)}%`
+                      : '0.0%'}
+                  </strong>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -390,6 +673,7 @@ export function FinanceReports() {
                 : <p className="fin-empty">No work type data for this period</p>}
             </div>
           </div>
+
         </div>
       )}
 
@@ -398,7 +682,7 @@ export function FinanceReports() {
         <div className="fin-tab-content">
           <RevenueTrendChart jobs={jobs} payments={payments} dateRange={dateRange} />
         </div>
-            )}
+      )}
 
       {/* Payments */}
       {activeTab === 'payments' && (
@@ -458,17 +742,17 @@ export function FinanceReports() {
               <span className="fin-stat-value">{formatCurrency(commissionMetrics.commissionDue)}</span>
               <span className="fin-stat-sub">Owed to workers</span>
             </div>
-            <div className="fin-stat">
+            <div className="fin-stat fin-stat--green">
               <span className="fin-stat-label">Agent Commission Income</span>
               <span className="fin-stat-value">{formatCurrency(agentFlowMetrics.agentCommissionIncome)}</span>
-              <span className="fin-stat-sub">{agentFlowMetrics.agentCards} agent-flow lines</span>
+              <span className="fin-stat-sub">From {agentFlowMetrics.agentCards} agent job{agentFlowMetrics.agentCards !== 1 ? 's' : ''}</span>
             </div>
             <div className="fin-stat fin-stat--green">
               <span className="fin-stat-label">Worker Commission Paid</span>
               <span className="fin-stat-value">{formatCurrency(commissionMetrics.commissionPaid)}</span>
               <span className="fin-stat-sub">Already distributed</span>
             </div>
-            <div className={`fin-stat${commissionMetrics.commissionOutstanding > 0 ? ' fin-stat--red' : ' fin-stat--green'}`}>
+            <div className={`fin-stat${agentFlowMetrics.agentSettlementPending > 0 ? ' fin-stat--red' : ' fin-stat--green'}`}>
               <span className="fin-stat-label">Agent Settlement Pending</span>
               <span className="fin-stat-value">{formatCurrency(agentFlowMetrics.agentSettlementPending)}</span>
               <span className="fin-stat-sub">Need to transfer to agents</span>
@@ -575,7 +859,7 @@ export function FinanceReports() {
                       >
                         Outstanding {sortMark(customerSort, 'outstanding')}
                       </th>
-                      <th className="text-right">Rate</th>
+                      <th className="text-right">Coll. Rate</th>
                       <th
                         className={`text-right slw-sortable-th${customerSort?.key === 'cards' ? ' is-active' : ''}`}
                         role="button"
@@ -610,8 +894,7 @@ export function FinanceReports() {
         </div>
       )}
 
-      {/* ── Ageing ── */}
-      {/* Rankings */}
+      {/* ── Rankings ── */}
       {activeTab === 'rankings' && (
         <div className="fin-tab-content">
           <CustomerRankingTable rankings={customerRankings} />
@@ -646,6 +929,8 @@ export function FinanceReports() {
                       </th>
                       <th className="text-right">Commission</th>
                       <th className="text-right">Net Income</th>
+                      <th className="text-right">Expenses</th>
+                      <th className="text-right">Net Profit</th>
                       <th className="text-right">Received</th>
                       <th
                         className={`text-right slw-sortable-th${cashflowSort?.key === 'outstanding' ? ' is-active' : ''}`}
@@ -664,7 +949,9 @@ export function FinanceReports() {
                         <td>{new Date(flow.date).toLocaleDateString('en-IN')}</td>
                         <td className="text-right">{formatCurrency(flow.revenue)}</td>
                         <td className="text-right color-muted">{formatCurrency(flow.commission)}</td>
-                        <td className="text-right color-green">{formatCurrency(flow.netIncome)}</td>
+                        <td className="text-right">{formatCurrency(flow.netIncome)}</td>
+                        <td className={`text-right${flow.expenses > 0 ? ' color-red' : ' color-muted'}`}>{flow.expenses > 0 ? `−${formatCurrency(flow.expenses)}` : '—'}</td>
+                        <td className={`text-right${flow.netProfit >= 0 ? ' color-green' : ' color-red'}`}>{formatCurrency(flow.netProfit)}</td>
                         <td className="text-right">{formatCurrency(flow.received)}</td>
                         <td className={`text-right${flow.outstanding > 0 ? ' color-red' : ' color-green'}`}>{formatCurrency(flow.outstanding)}</td>
                       </tr>
@@ -690,46 +977,163 @@ export function FinanceReports() {
             <button type="button" className="td-month-btn" onClick={(e) => { e.stopPropagation(); navigateTenDayMonth(1); }}>→</button>
           </div>
 
-          {/* Month total summary strip */}
+          {/* Month Total + Commission Summary */}
           {(() => {
-            const mRev = tenDaySets.reduce((s, t) => s + t.totalRevenue, 0);
-            const mCom = tenDaySets.reduce((s, t) => s + t.totalCommission, 0);
-            const mNet = tenDaySets.reduce((s, t) => s + t.totalNetProfit, 0);
-            const mCards = tenDaySets.reduce((s, t) => s + t.totalCards, 0);
+            const mRev    = tenDaySets.reduce((s, t) => s + t.totalRevenue, 0);
+            const mCom    = tenDaySets.reduce((s, t) => s + t.totalCommission, 0);
+            const mSlw    = tenDaySets.reduce((s, t) => s + t.totalSlwNetProfit, 0);
+            const mAgent  = tenDaySets.reduce((s, t) => s + t.totalAgentNetProfit, 0);
+            const mExp    = tenDaySets.reduce((s, t) => s + t.totalExpenses, 0);
+            const mNet    = tenDaySets.reduce((s, t) => s + t.totalNetProfit, 0);
+            const mCards  = tenDaySets.reduce((s, t) => s + t.totalCards, 0);
+            const totalPayables = tenDayPayables.totalSlwWorker + tenDayPayables.totalAgentInternal + tenDayPayables.agentSettlementExternal;
             return (
-              <div className="td-month-summary">
-                <span className="td-ms-label">Month Total</span>
-                <div className="td-ms-divider" />
-                <div className="td-ms-stat">
-                  <span className="td-ms-key">Revenue</span>
-                  <span className="td-ms-val">{formatCurrency(mRev)}</span>
+              <div className="td-summary-row">
+
+                {/* Card 1 — Month Total */}
+                <div className="td-sum-card">
+                  <div className="td-sum-card-hd">
+                    <span className="td-sum-card-title">Month Total</span>
+                    <span className="td-sum-card-period">{MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</span>
+                  </div>
+                  <div className="td-sum-stats">
+                    <div className="td-sum-stat">
+                      <span className="td-sum-stat-lbl">Revenue</span>
+                      <span className="td-sum-stat-val">{formatCurrency(mRev)}</span>
+                    </div>
+                    <div className="td-sum-stat">
+                      <span className="td-sum-stat-lbl">Commission Out</span>
+                      <span className="td-sum-stat-val color-muted">−{formatCurrency(mCom)}</span>
+                    </div>
+                    {mExp > 0 && (
+                      <div className="td-sum-stat td-sum-stat--wide">
+                        <span className="td-sum-stat-lbl">Expenses</span>
+                        <span className="td-sum-stat-val color-red">−{formatCurrency(mExp)}</span>
+                      </div>
+                    )}
+                    <div className="td-sum-stat td-sum-stat--wide">
+                      <span className="td-sum-stat-lbl">Net Profit</span>
+                      <span className={`td-sum-stat-val${mNet >= 0 ? ' color-green' : ' color-red'}`}>{formatCurrency(mNet)}</span>
+                    </div>
+                    <div className="td-sum-stat">
+                      <span className="td-sum-stat-lbl">Cards</span>
+                      <span className="td-sum-stat-val">{mCards}</span>
+                    </div>
+                  </div>
+                  <div className="td-sum-breakdown">
+                    <div className="td-sum-brk">
+                      <span className="td-sum-brk-lbl">SLW Work</span>
+                      <span className="td-sum-brk-val">{formatCurrency(mSlw)}</span>
+                    </div>
+                    <div className="td-sum-brk-sep" />
+                    <div className="td-sum-brk">
+                      <span className="td-sum-brk-lbl">Agent / Ext DC</span>
+                      <span className="td-sum-brk-val">{formatCurrency(mAgent)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="td-ms-divider" />
-                <div className="td-ms-stat">
-                  <span className="td-ms-key">Commission</span>
-                  <span className="td-ms-val color-muted">{formatCurrency(mCom)}</span>
+
+                {/* Card 2 — Commission & Payables */}
+                <div className="td-sum-card">
+                  <div className="td-sum-card-hd">
+                    <span className="td-sum-card-title">Commission &amp; Payables</span>
+                    <span className="td-sum-card-period">{MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</span>
+                  </div>
+                  <div className="td-com-body">
+
+                    {/* Received column */}
+                    {(() => {
+                      const entryLabel = (custId: number, sub: string) => {
+                        const cust = getCustomer(custId);
+                        const base = cust?.shortCode ? cust.shortCode.toUpperCase() : cust?.name ?? `#${custId}`;
+                        return sub ? `${base} — ${sub}` : base;
+                      };
+                      const commEntries = Array.from(tenDayPayables.agentCommissionMap.values())
+                        .filter(e => e.amount > 0 && getCustomer(e.custId)?.hasCommission);
+                      const tdsEntries  = Array.from(tenDayPayables.agentTdsMap.values())
+                        .filter(e => e.amount > 0 && getCustomer(e.custId)?.hasCommission);
+                      return (
+                        <div className="td-com-col td-com-col--in">
+                          <div className="td-com-col-hd">Receivable</div>
+                          <div className="td-com-subhd">Namakku Commission</div>
+                          {commEntries.map(e => (
+                            <div key={`comm-${e.custId}|${e.subLabel}`} className="td-com-row">
+                              <span>{entryLabel(e.custId, e.subLabel)}</span>
+                              <span>{formatCurrency(e.amount)}</span>
+                            </div>
+                          ))}
+                          <div className="td-com-subhd td-com-subhd--tds">TDS Collected</div>
+                          {tdsEntries.map(e => (
+                            <div key={`tds-${e.custId}|${e.subLabel}`} className="td-com-row td-com-row--tds">
+                              <span>{entryLabel(e.custId, e.subLabel)}</span>
+                              <span>{formatCurrency(e.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    <div className="td-com-vsep" />
+
+                    {/* To Pay column */}
+                    {(() => {
+                      const entryLabel = (custId: number, sub: string) => {
+                        const cust = getCustomer(custId);
+                        const base = cust?.shortCode ? cust.shortCode.toUpperCase() : cust?.name ?? `#${custId}`;
+                        return sub ? `${base} — ${sub}` : base;
+                      };
+                      const workerEntries = Array.from(tenDayPayables.slwWorkerMap.values())
+                        .filter(e => e.amount > 0 && getCustomer(e.custId)?.hasCommission);
+                      const internalEntries = Array.from(tenDayPayables.agentSettlementInternalByCustomer.entries())
+                        .filter(([custId, amt]) => amt > 0 && getCustomer(custId)?.hasCommission);
+                      return (
+                        <div className="td-com-col td-com-col--out">
+                          <div className="td-com-col-hd">To Pay</div>
+                          <div className="td-com-subhd">Worker — SLW Work</div>
+                          {workerEntries.map(e => (
+                            <div key={`slw-${e.custId}|${e.subLabel}`} className="td-com-row">
+                              <span>{entryLabel(e.custId, e.subLabel)}</span>
+                              <span>{formatCurrency(e.amount)}</span>
+                            </div>
+                          ))}
+                          <div className="td-com-subhd">Full Commission DC</div>
+                          {internalEntries.map(([custId, amt]) => {
+                            const cust = getCustomer(custId);
+                            const lbl = cust?.shortCode ? cust.shortCode.toUpperCase() : cust?.name ?? `#${custId}`;
+                            return (
+                              <div key={`int-${custId}`} className="td-com-row">
+                                <span>{lbl}</span>
+                                <span>{formatCurrency(amt)}</span>
+                              </div>
+                            );
+                          })}
+                          {tenDayPayables.agentSettlementExternal > 0 && (
+                            <div className="td-com-row">
+                              <span className="td-com-subhd" style={{ marginTop: 0 }}>Leaf Cut Bhai</span>
+                              <span>{formatCurrency(tenDayPayables.agentSettlementExternal)}</span>
+                            </div>
+                          )}
+                          <div className="td-com-total">
+                            <span>Total Payables</span>
+                            <span>{formatCurrency(totalPayables)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                  </div>
                 </div>
-                <div className="td-ms-divider" />
-                <div className="td-ms-stat">
-                  <span className="td-ms-key">Net Profit</span>
-                  <span className="td-ms-val color-green">{formatCurrency(mNet)}</span>
-                </div>
-                <div className="td-ms-divider" />
-                <div className="td-ms-stat">
-                  <span className="td-ms-key">Cards</span>
-                  <span className="td-ms-val">{mCards}</span>
-                </div>
+
               </div>
             );
           })()}
 
           {/* Daily Revenue — 3-column breakdown */}
           <div className="fin-table-tile">
-            <div className="fin-chart-title">Daily Revenue — {MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</div>
+            <div className="fin-chart-title">Daily Net Profit — {MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</div>
             <div className="td-daily-3col">
               {tenDaySets.map(set => {
-                const maxDayRev = Math.max(...set.days.map(d => Math.max(0, d.revenue - d.commission)), 1);
-                const setRevenueExcludingCommission = Math.max(0, set.totalRevenue - set.totalCommission);
+                const maxDayNet = Math.max(...set.days.map(d => Math.max(0, d.netProfit)), 1);
                 return (
                   <div key={set.setNumber} className="td-daily-col">
                     <div className="td-daily-col-hd">
@@ -744,22 +1148,22 @@ export function FinanceReports() {
                       {set.days.map(day => (
                         <div
                           key={day.dayNum}
-                          className={`td-daily-row${Math.max(0, day.revenue - day.commission) === 0 ? ' is-zero' : ''}${day.date === today ? ' is-today' : ''}`}
+                          className={`td-daily-row${day.netProfit === 0 ? ' is-zero' : ''}${day.date === today ? ' is-today' : ''}`}
                         >
                           <span className="td-daily-daynum">{day.dayNum}</span>
                           <div className="td-daily-bar-wrap">
                             <div
                               className="td-daily-bar"
-                              style={{ '--pct': `${(Math.max(0, day.revenue - day.commission) / maxDayRev) * 100}%` } as React.CSSProperties}
+                              style={{ '--pct': `${(Math.max(0, day.netProfit) / maxDayNet) * 100}%` } as React.CSSProperties}
                             />
                           </div>
-                          <span className="td-daily-amount">{formatCurrency(Math.max(0, day.revenue - day.commission))}</span>
+                          <span className="td-daily-amount">{formatCurrency(Math.max(0, day.netProfit))}</span>
                         </div>
                       ))}
                     </div>
                     <div className="td-daily-col-footer">
-                      <span className="td-daily-footer-label">Total</span>
-                      <span className="td-daily-footer-val">{formatCurrency(setRevenueExcludingCommission)}</span>
+                      <span className="td-daily-footer-label">Net Profit</span>
+                      <span className="td-daily-footer-val color-green">{formatCurrency(set.totalNetProfit)}</span>
                     </div>
                   </div>
                 );
@@ -779,7 +1183,12 @@ export function FinanceReports() {
                 <div key={set.setNumber} className="td-set-card" onClick={(e) => e.stopPropagation()}>
                   <div className="td-set-header">
                     <span className="td-set-title">{set.label}</span>
-                    <span className="td-set-badge">{set.totalCards} cards</span>
+                    <div className="td-set-header-badges">
+                      {today >= set.fromDate && today <= set.toDate && (
+                        <span className="td-set-current-badge">Current</span>
+                      )}
+                      <span className="td-set-badge">{set.totalCards} cards</span>
+                    </div>
                   </div>
 
                   {/* Vertical daily bar chart */}
@@ -839,8 +1248,22 @@ export function FinanceReports() {
                           <span className="color-muted">{formatCurrency(activeDay.commission)}</span>
                         </div>
                         <div className="td-day-detail-item">
+                          <span>SLW Work</span>
+                          <span>{formatCurrency(activeDay.slwNetProfit)}</span>
+                        </div>
+                        <div className="td-day-detail-item">
+                          <span>Agent / Ext DC</span>
+                          <span>{formatCurrency(activeDay.agentNetProfit)}</span>
+                        </div>
+                        {activeDay.expenses > 0 && (
+                          <div className="td-day-detail-item">
+                            <span>Expenses</span>
+                            <span className="color-red">−{formatCurrency(activeDay.expenses)}</span>
+                          </div>
+                        )}
+                        <div className="td-day-detail-item">
                           <span>Net Profit</span>
-                          <span className="color-green">{formatCurrency(activeDay.netProfit)}</span>
+                          <span className={activeDay.netProfit >= 0 ? 'color-green' : 'color-red'}>{formatCurrency(activeDay.netProfit)}</span>
                         </div>
                         <div className="td-day-detail-item">
                           <span>Cards</span>
@@ -862,8 +1285,26 @@ export function FinanceReports() {
                     </div>
                     <div className="td-stat-divider" />
                     <div className="td-stat-row">
+                      <span className="td-stat-key">SLW Work</span>
+                      <span className="td-stat-val">{formatCurrency(set.totalSlwNetProfit)}</span>
+                    </div>
+                    <div className="td-stat-row">
+                      <span className="td-stat-key">Agent / Ext DC</span>
+                      <span className="td-stat-val">{formatCurrency(set.totalAgentNetProfit)}</span>
+                    </div>
+                    {set.totalExpenses > 0 && (
+                      <>
+                        <div className="td-stat-divider" />
+                        <div className="td-stat-row">
+                          <span className="td-stat-key">Expenses</span>
+                          <span className="td-stat-val color-red">−{formatCurrency(set.totalExpenses)}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="td-stat-divider" />
+                    <div className="td-stat-row td-stat-row--total">
                       <span className="td-stat-key">Net Profit</span>
-                      <span className="td-stat-val color-green">{formatCurrency(set.totalNetProfit)}</span>
+                      <span className={`td-stat-val${set.totalNetProfit >= 0 ? ' color-green' : ' color-red'}`}>{formatCurrency(set.totalNetProfit)}</span>
                     </div>
                   </div>
                 </div>

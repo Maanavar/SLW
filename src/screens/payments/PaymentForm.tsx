@@ -5,8 +5,8 @@ import { DataTable } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getReportRange, getPaymentsInRange, getJobsInRange, groupJobsByCard } from '@/lib/reportUtils';
-import { getJobPaidAmount } from '@/lib/jobUtils';
+import { getReportRange, getJobsInRange, groupJobsByCard, getPaymentEventsInRange } from '@/lib/reportUtils';
+import { getLocalDateString } from '@/lib/dateUtils';
 
 import type { Payment } from '@/types';
 import { RecordPaymentModal } from './RecordPaymentModal';
@@ -35,6 +35,64 @@ const PERIOD_TABS: { mode: PeriodType; label: string }[] = [
   { mode: 'all',       label: 'All' },
 ];
 
+function getOffsetRange(period: PeriodType, offset: number): { from?: string; to?: string; label: string } {
+  const now = new Date();
+  const todayStr = getLocalDateString(now);
+
+  if (period === 'all') return { from: undefined, to: undefined, label: 'All Time' };
+  if (period === 'tenday') { const r = getReportRange(period); return { from: r.from, to: r.to, label: '10-Day' }; }
+
+  if (period === 'today') {
+    const d = new Date(now); d.setDate(d.getDate() + offset);
+    const s = getLocalDateString(d);
+    return { from: s, to: s, label: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) };
+  }
+  if (period === 'week') {
+    const dow = now.getDay();
+    const wStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (dow + 6) % 7 + offset * 7);
+    const wEnd = new Date(wStart.getFullYear(), wStart.getMonth(), wStart.getDate() + 6);
+    const from = getLocalDateString(wStart);
+    const to = getLocalDateString(wEnd) > todayStr ? todayStr : getLocalDateString(wEnd);
+    const s = wStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const e = new Date(`${to}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return { from, to, label: `${s} – ${e}` };
+  }
+  if (period === 'month') {
+    let m = now.getMonth() + offset;
+    const y = now.getFullYear() + Math.floor(m / 12);
+    m = ((m % 12) + 12) % 12;
+    const mStart = new Date(y, m, 1); const mEnd = new Date(y, m + 1, 0);
+    const to = getLocalDateString(mEnd) > todayStr ? todayStr : getLocalDateString(mEnd);
+    return { from: getLocalDateString(mStart), to, label: mStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) };
+  }
+  if (period === 'quarter') {
+    let q = Math.floor(now.getMonth() / 3) + offset;
+    const y = now.getFullYear() + Math.floor(q / 4);
+    q = ((q % 4) + 4) % 4;
+    const qStart = new Date(y, q * 3, 1); const qEnd = new Date(y, q * 3 + 3, 0);
+    const to = getLocalDateString(qEnd) > todayStr ? todayStr : getLocalDateString(qEnd);
+    return { from: getLocalDateString(qStart), to, label: `Q${q + 1} ${y}` };
+  }
+  // halfyear
+  let h = Math.floor(now.getMonth() / 6) + offset;
+  const y = now.getFullYear() + Math.floor(h / 2);
+  h = ((h % 2) + 2) % 2;
+  const hStart = new Date(y, h * 6, 1); const hEnd = new Date(y, h * 6 + 6, 0);
+  const to = getLocalDateString(hEnd) > todayStr ? todayStr : getLocalDateString(hEnd);
+  return { from: getLocalDateString(hStart), to, label: `H${h + 1} ${y}` };
+}
+
+const ChevL = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+const ChevR = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
 function getPaymentDisplayId(row: PaymentDisplay): string {
   if (typeof row.id === 'string') return row.id;
   if (typeof row.id === 'number') return row.id < 0 ? '(auto)' : String(row.id);
@@ -56,6 +114,7 @@ export function PaymentForm() {
   const toast = useToast();
 
   const [reportPeriod, setReportPeriod] = useState<PeriodType>('today');
+  const [periodOffset, setPeriodOffset] = useState(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [editingCardKey, setEditingCardKey] = useState<string | null>(null);
@@ -64,10 +123,13 @@ export function PaymentForm() {
 
   // ── Period range ──────────────────────────────────────────────────────────
 
-  const reportRange = useMemo(() => {
-    if (reportPeriod === 'all') return { from: undefined, to: undefined };
-    return getReportRange(reportPeriod);
-  }, [reportPeriod]);
+  const { from: rangeFrom, to: rangeTo, label: periodLabel } = useMemo(
+    () => getOffsetRange(reportPeriod, periodOffset),
+    [reportPeriod, periodOffset]
+  );
+  const reportRange = useMemo(() => ({ from: rangeFrom, to: rangeTo }), [rangeFrom, rangeTo]);
+
+  const canNavigate = reportPeriod !== 'all' && reportPeriod !== 'tenday';
 
   // ── Customer options ──────────────────────────────────────────────────────
 
@@ -109,76 +171,31 @@ export function PaymentForm() {
 
   // ── Payments in range ─────────────────────────────────────────────────────
 
-  const filteredReportPayments = useMemo(
-    () => getPaymentsInRange(payments, reportRange.from, reportRange.to),
-    [payments, reportRange.from, reportRange.to]
-  );
-
-  const getCardIdFromNotes = (notes?: string) => notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
-
-  const fallbackJobPayments = useMemo(() => {
-    const groups = groupJobsByCard(jobsInRange.filter(j => getJobPaidAmount(j) > 0));
-    return groups.map<PaymentDisplay>(group => {
-      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-      return {
-        id: -Math.abs(group.primary.id),
-        customerId: group.primary.customerId,
-        amount: group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0),
-        date: group.primary.date,
-        paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
-        notes: `From JobCard ${cardId}`,
-        customerName: getCustomer(group.primary.customerId)?.name || 'Unknown',
-        source: 'Job Paid Entry',
-        jobCardId: cardId,
-        jobCardKey: cardKeyById.get(cardId),
-      };
-    });
-  }, [jobsInRange, getCustomer, cardKeyById]);
-
   const reportPayments: PaymentDisplay[] = useMemo(() => {
-    const vouchers = filteredReportPayments.map(p => {
-      const linkedCardId = getCardIdFromNotes(p.notes);
-      return {
-        ...p,
-        customerName: getCustomer(p.customerId)?.name || 'Unknown',
-        source: 'Payment Voucher' as const,
-        jobCardId: linkedCardId || '-',
-        jobCardKey: linkedCardId ? cardKeyById.get(linkedCardId) : undefined,
-      };
-    });
+    const events = getPaymentEventsInRange(jobs, payments, reportRange.from, reportRange.to);
+    return events.map((event, index) => ({
+      id:
+        event.source === 'Payment Voucher'
+          ? Number.parseInt(event.id.replace(/^payment:/, ''), 10) || -(index + 1)
+          : -(index + 1),
+      customerId: event.customerId,
+      amount: event.amount,
+      date: event.date,
+      paymentMode: event.paymentMode,
+      breakdown: event.breakdown,
+      notes: event.notes,
+      customerName: getCustomer(event.customerId)?.name || 'Unknown',
+      source: event.source,
+      jobCardId: event.jobCardId || '-',
+      jobCardKey: event.jobCardId ? cardKeyById.get(event.jobCardId) : undefined,
+    }));
+  }, [jobs, payments, reportRange.from, reportRange.to, getCustomer, cardKeyById]);
 
-    const vouchersByCustomerDate = new Map<string, PaymentDisplay[]>();
-    vouchers.forEach(v => {
-      const key = `${v.customerId}|${v.date}`;
-      const list = vouchersByCustomerDate.get(key) || [];
-      list.push(v);
-      vouchersByCustomerDate.set(key, list);
-    });
-
-    const fallbacks = fallbackJobPayments.filter(fb => {
-      const key = `${fb.customerId}|${fb.date}`;
-      const sameDay = vouchersByCustomerDate.get(key) || [];
-      if (sameDay.length === 0) return true;
-
-      const cardId = fb.jobCardId;
-      const hasExplicitLink = cardId && sameDay.some(v => (v.notes || '').toLowerCase().includes(cardId.toLowerCase()));
-      if (hasExplicitLink) return false;
-
-      const hasExactAmountMatch = sameDay.some(v => Math.abs((v.amount || 0) - (fb.amount || 0)) < 0.01);
-      if (hasExactAmountMatch) return false;
-
-      return true;
-    });
-
-    return [...vouchers, ...fallbacks];
-  }, [filteredReportPayments, getCustomer, fallbackJobPayments, cardKeyById]);
-
-  const filteredPayments = useMemo(() =>
-    selectedCustomerId
-      ? reportPayments.filter(p => p.customerId === selectedCustomerId)
-      : reportPayments,
-    [reportPayments, selectedCustomerId]
-  );
+  const filteredPayments = useMemo(() => {
+    const hasCustomerFilter = selectedCustomerId !== null && Number.isFinite(selectedCustomerId);
+    if (!hasCustomerFilter) return reportPayments;
+    return reportPayments.filter((p) => p.customerId === Number(selectedCustomerId));
+  }, [reportPayments, selectedCustomerId]);
 
   // ── Summary stats ─────────────────────────────────────────────────────────
 
@@ -273,12 +290,25 @@ export function PaymentForm() {
               key={mode}
               type="button"
               className={`pay-period-tab${reportPeriod === mode ? ' active' : ''}`}
-              onClick={() => setReportPeriod(mode)}
+              onClick={() => { setReportPeriod(mode); setPeriodOffset(0); }}
             >
               {label}
             </button>
           ))}
         </div>
+
+        {canNavigate && (
+          <>
+            <div className="pay-nav-shell">
+              <button type="button" className="pay-nav-btn" onClick={() => setPeriodOffset(o => o - 1)} aria-label="Previous period"><ChevL /></button>
+              <span className="pay-nav-label">{periodLabel}</span>
+              <button type="button" className="pay-nav-btn" onClick={() => setPeriodOffset(o => o + 1)} disabled={periodOffset >= 0} aria-label="Next period"><ChevR /></button>
+            </div>
+            {periodOffset < 0 && (
+              <button type="button" className="pay-today-btn" onClick={() => setPeriodOffset(0)}>Current</button>
+            )}
+          </>
+        )}
 
         <div className="pay-toolbar-sep" />
 
@@ -286,7 +316,10 @@ export function PaymentForm() {
           <SearchableSelect<CustomerOption>
             items={customerOptions}
             value={selectedCustomerOption}
-            onChange={item => setSelectedCustomerId(item.id === 0 ? null : item.id)}
+            onChange={(item) => {
+              const id = Number(item.id);
+              setSelectedCustomerId(Number.isFinite(id) && id > 0 ? id : null);
+            }}
             getLabel={item => item.name}
             getKey={item => String(item.id)}
             getSearchText={item => item.name}
