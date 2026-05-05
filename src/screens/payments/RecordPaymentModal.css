@@ -46,6 +46,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+.rpm-input--error {
+  border-color: var(--red, #dc2626);
+}
+
+.rpm-input--error:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.rpm-field-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--red, #dc2626);
+}
+
+.rpm-field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 .rpm-textarea {
   height: auto;
   padding: 10px 12px;

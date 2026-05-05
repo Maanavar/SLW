@@ -374,6 +374,7 @@ export function PaymentForm() {
           {
             key: 'jobCardId',
             label: 'Job Card',
+            sortable: true,
             render: (value, row) =>
               row.jobCardKey ? (
                 <button
@@ -385,9 +386,9 @@ export function PaymentForm() {
                 </button>
               ) : String(value),
           },
-          { key: 'amount', label: 'Amount', render: value => formatCurrency(value as number) },
+          { key: 'amount', label: 'Amount', sortable: true, render: value => formatCurrency(value as number) },
           { key: 'paymentMode', label: 'Mode', render: (_, row) => formatPaymentBreakdown(row), sortable: true },
-          { key: 'notes', label: 'Notes' },
+          { key: 'notes', label: 'Notes', sortable: true },
           {
             key: 'id',
             label: 'Actions',

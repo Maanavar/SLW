@@ -17,6 +17,8 @@ const createCustomerSchema = z.object({
   requiresDc: z.boolean().default(false),
   hasBillNo: z.boolean().default(false),
   advanceBalance: z.number().min(0).default(0),
+  openingBalance: z.number().min(0).default(0),
+  invoiceGroup: z.enum(['rmp', 'ww', 'nm']).nullable().optional(),
   notes: z.string().max(1000).default(''),
   isActive: z.boolean().default(true),
 });

@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { z } from 'zod';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
+import { useFormErrors } from '@/hooks/useFormErrors';
+
+const corePaymentSchema = z.object({
+  amount: z.number().positive('Amount must be greater than 0'),
+  notes: z.string().max(500, 'Notes must be under 500 characters').optional(),
+});
 import { Modal } from '@/components/ui/Modal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { PaymentModeGroup, type PaymentMode } from '@/components/ui/PaymentModeGroup';
@@ -36,6 +43,7 @@ interface RecordPaymentModalProps {
 export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps) {
   const { getActiveCustomers, payments, addPayment, jobs, updateJob, updateCustomer } = useDataStore();
   const toast = useToast();
+  const { errors: fieldErrors, validate: validateFields, clearError, clearAll: clearFieldErrors } = useFormErrors<z.infer<typeof corePaymentSchema>>();
 
   const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
   const today = getLocalDateString(new Date());
@@ -61,7 +69,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
 
   const customerBalance = useMemo(() => {
     if (!selectedCustomer) return { balance: 0 };
-    return { balance: calculateCustomerBalance(jobs, payments, selectedCustomer.id) };
+    return { balance: calculateCustomerBalance(jobs, payments, selectedCustomer.id, selectedCustomer.openingBalance || 0) };
   }, [selectedCustomer, jobs, payments]);
 
   const scopeRange = useMemo(() => {
@@ -97,6 +105,7 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
   }, [paymentScope, scopedPendingAmount, selectedCustomer?.advanceBalance]);
 
   const resetForm = () => {
+    clearFieldErrors();
     setSelectedCustomer(null);
     setAmount('');
     setPaymentMode('cash');
@@ -159,8 +168,10 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
       if (totalAmount <= 0) { toast.error('Error', 'Enter an amount for at least one mode'); return; }
     } else {
       totalAmount = parseFloat(amount) || 0;
-      if (totalAmount <= 0) { toast.error('Error', 'Enter a valid amount'); return; }
     }
+
+    const coreValid = validateFields(corePaymentSchema, { amount: totalAmount, notes: notes || undefined });
+    if (!coreValid) return;
 
     if (paymentDate > today) { toast.error('Error', 'Future payment date not allowed'); return; }
 
@@ -429,16 +440,20 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
               <div key={id} className="rpm-field">
                 <label className="rpm-label" htmlFor={id}>{label}</label>
                 <input id={id} type="number" className="rpm-input" placeholder="0.00"
-                  value={val} onChange={e => set(e.target.value)} step="0.01" min="0" />
+                  value={val} onChange={e => { set(e.target.value); clearError('amount'); }} step="0.01" min="0" />
               </div>
             ))}
+            {fieldErrors.amount && <p className="rpm-field-error">{fieldErrors.amount}</p>}
           </div>
         ) : (
           <div className="rpm-field">
             <label className="rpm-label" htmlFor="rpm-amount">Amount (INR)</label>
-            <input id="rpm-amount" type="number" className="rpm-input rpm-input--lg"
-              placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)}
+            <input id="rpm-amount" type="number"
+              className={`rpm-input rpm-input--lg${fieldErrors.amount ? ' rpm-input--error' : ''}`}
+              placeholder="0.00" value={amount}
+              onChange={e => { setAmount(e.target.value); clearError('amount'); }}
               step="0.01" min="0" required />
+            {fieldErrors.amount && <p className="rpm-field-error">{fieldErrors.amount}</p>}
             {selectedCustomer && customerBalance.balance > 0 && (
               <div className="rpm-fill-chips">
                 <button type="button" className="rpm-fill-chip"
@@ -466,8 +481,16 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
         {/* Notes */}
         <div className="rpm-field">
           <label className="rpm-label" htmlFor="rpm-notes">Notes</label>
-          <textarea id="rpm-notes" className="rpm-input rpm-textarea" rows={2}
-            placeholder="Optional notes..." value={notes} onChange={e => setNotes(e.target.value)} />
+          <textarea id="rpm-notes"
+            className={`rpm-input rpm-textarea${fieldErrors.notes ? ' rpm-input--error' : ''}`}
+            rows={2} placeholder="Optional notes..." value={notes}
+            onChange={e => { setNotes(e.target.value); clearError('notes'); }}
+            maxLength={500}
+          />
+          {fieldErrors.notes
+            ? <p className="rpm-field-error">{fieldErrors.notes}</p>
+            : notes.length > 400 && <p className="rpm-field-hint">{500 - notes.length} chars remaining</p>
+          }
         </div>
 
         <button type="submit" className="btn btn-accent rpm-submit" disabled={!selectedCustomer}>

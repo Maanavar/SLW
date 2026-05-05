@@ -6,7 +6,9 @@ import { getJobFinalBillValue, isMahalingamCustomer } from '@/lib/jobUtils';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { useToast } from '@/hooks/useToast';
 import { toBlob } from 'html-to-image';
-import type { Customer, WorkType } from '@/types';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import type { Customer, Job, WorkType } from '@/types';
 import './InvoiceScreen.css';
 
 // ─── Customer group detection ─────────────────────────────────────────────────
@@ -14,6 +16,8 @@ import './InvoiceScreen.css';
 type CustomerGroup = 'rmp' | 'ww' | 'nm' | 'default';
 
 function getCustomerGroup(customer: Customer): CustomerGroup {
+  // Explicit field takes priority over shortCode heuristic
+  if (customer.invoiceGroup) return customer.invoiceGroup;
   const code = customer.shortCode.toUpperCase().trim();
   if (code === 'RMP') return 'rmp';
   if (code === 'WW') return 'ww';
@@ -47,6 +51,11 @@ function resolveWorkTypeName(rawName: string, workTypes: WorkType[]): string {
 
   // 4. Return the raw value as-is (best effort for truly unknown entries)
   return rawName;
+}
+
+function resolveWorkLabel(job: Job, workTypes: WorkType[]): string {
+  const base = resolveWorkTypeName(job.workTypeName || job.workName || '', workTypes);
+  return (job.workMode === 'Spot' || job.isSpotWork) ? `${base} (Spot)` : base;
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -189,7 +198,7 @@ export function InvoiceScreen() {
     [customerPayments, periodStart, periodEnd]
   );
 
-  // Old balance: total billed before period start minus total paid before period start
+  // Old balance: openingBalance (from customer profile) + total billed before period start - total paid before period start
   const oldBalance = useMemo(() => {
     if (!periodStart) return 0;
     const billedBefore = customerJobs
@@ -198,8 +207,8 @@ export function InvoiceScreen() {
     const paidBefore = customerPayments
       .filter((p) => p.date < periodStart)
       .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    return billedBefore - paidBefore;
-  }, [customerJobs, customerPayments, periodStart]);
+    return (selectedCustomer?.openingBalance || 0) + billedBefore - paidBefore;
+  }, [customerJobs, customerPayments, periodStart, selectedCustomer]);
 
   const periodTotal = useMemo(
     () => periodJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0),
@@ -230,6 +239,98 @@ export function InvoiceScreen() {
 
   const handlePrint = () => window.print();
 
+  const INVOICE_EXPORT_WIDTH = 800;
+  const EXPORT_CANVAS_MAX_SIDE = 16384;
+  const EXPORT_CANVAS_MAX_AREA = 16_000_000; // keeps exports safe on stricter mobile browsers
+  const EXPORT_TARGET_PIXEL_RATIO = 2;
+
+  const getSafeExportPixelRatio = (width: number, height: number): number => {
+    const safeWidth = Math.max(width, 1);
+    const safeHeight = Math.max(height, 1);
+    const sideRatioLimit = Math.min(
+      EXPORT_CANVAS_MAX_SIDE / safeWidth,
+      EXPORT_CANVAS_MAX_SIDE / safeHeight
+    );
+    const areaRatioLimit = Math.sqrt(EXPORT_CANVAS_MAX_AREA / (safeWidth * safeHeight));
+    const ratio = Math.min(EXPORT_TARGET_PIXEL_RATIO, sideRatioLimit, areaRatioLimit);
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  };
+
+  const LIGHT_VARS: Record<string, string> = {
+    '--bg': '#eef0f8',
+    '--bg-elev': '#ffffff',
+    '--bg-sunk': '#e2e5f0',
+    '--bg-hover': '#d8dcea',
+    '--bg-active': '#cdd2e3',
+    '--border': '#c8cde2',
+    '--border-strong': '#b6bdd4',
+    '--text': '#181a2c',
+    '--text-muted': '#535870',
+    '--text-faint': '#8489a6',
+    '--accent': 'oklch(0.50 0.19 265)',
+    '--accent-hover': 'oklch(0.44 0.21 265)',
+    '--accent-soft': 'oklch(0.93 0.04 265)',
+    '--accent-border': 'oklch(0.82 0.09 265)',
+    '--accent-text': 'oklch(0.36 0.19 265)',
+    '--green': 'oklch(0.55 0.14 150)',
+    '--green-soft': 'oklch(0.93 0.05 150)',
+    '--green-border': 'oklch(0.82 0.09 150)',
+    '--amber': 'oklch(0.67 0.15 75)',
+    '--amber-soft': 'oklch(0.94 0.06 75)',
+    '--amber-border': 'oklch(0.83 0.10 75)',
+    '--red': 'oklch(0.55 0.20 25)',
+    '--red-soft': 'oklch(0.94 0.04 25)',
+    '--red-border': 'oklch(0.84 0.08 25)',
+  };
+
+  const renderInvoicePngBlob = async (sourceNode: HTMLDivElement): Promise<Blob> => {
+    const exportHost = document.createElement('div');
+    exportHost.style.position = 'fixed';
+    exportHost.style.left = '-100000px';
+    exportHost.style.top = '0';
+    exportHost.style.opacity = '0';
+    exportHost.style.pointerEvents = 'none';
+    exportHost.style.zIndex = '-1';
+    exportHost.style.margin = '0';
+    exportHost.style.padding = '0';
+    exportHost.style.background = '#ffffff';
+    // Force light-theme CSS variables so the PNG looks correct regardless of the active theme
+    for (const [k, v] of Object.entries(LIGHT_VARS)) {
+      exportHost.style.setProperty(k, v);
+    }
+
+    const exportNode = sourceNode.cloneNode(true) as HTMLDivElement;
+    exportNode.style.width = `${INVOICE_EXPORT_WIDTH}px`;
+    exportNode.style.maxWidth = `${INVOICE_EXPORT_WIDTH}px`;
+    exportNode.style.margin = '0';
+    exportNode.style.boxShadow = 'none';
+    exportNode.style.borderRadius = '0';
+
+    exportHost.appendChild(exportNode);
+    document.body.appendChild(exportHost);
+
+    try {
+      const exportWidth = Math.ceil(exportNode.scrollWidth || exportNode.clientWidth || INVOICE_EXPORT_WIDTH);
+      const exportHeight = Math.ceil(exportNode.scrollHeight || exportNode.clientHeight || 1);
+      const pixelRatio = getSafeExportPixelRatio(exportWidth, exportHeight);
+
+      const blob = await toBlob(exportNode, {
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        width: exportWidth,
+        height: exportHeight,
+        canvasWidth: exportWidth,
+        canvasHeight: exportHeight,
+        pixelRatio,
+      });
+
+      if (!blob) throw new Error('Unable to generate PNG');
+      return blob;
+    } finally {
+      document.body.removeChild(exportHost);
+    }
+  };
+
   const buildShareFileNameBase = () => {
     const cust = (selectedCustomer?.shortCode || selectedCustomer?.name || 'customer')
       .replace(/\s+/g, '-')
@@ -240,8 +341,7 @@ export function InvoiceScreen() {
   const handleShareWhatsAppPng = async () => {
     if (!invoiceRef.current || !canGenerate) return;
     try {
-      const blob = await toBlob(invoiceRef.current, { pixelRatio: 2, backgroundColor: '#ffffff' });
-      if (!blob) throw new Error('Unable to generate PNG');
+      const blob = await renderInvoicePngBlob(invoiceRef.current);
       const file = new File([blob], `${buildShareFileNameBase()}.png`, { type: 'image/png' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -281,6 +381,89 @@ export function InvoiceScreen() {
       );
     }, 300);
     toast.info('PDF Share', 'Use Print -> Save as PDF, then attach in WhatsApp.');
+  };
+
+  const handleDownloadPdf = () => {
+    if (!canGenerate || !selectedCustomer) return;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+
+    // Header
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Siva Lathe Works', margin, 18);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Tax Invoice', pageW - margin, 18, { align: 'right' });
+
+    // Invoice meta
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(selectedCustomer.name, margin, 28);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Invoice No: ${invoiceNumber}`, pageW - margin, 24, { align: 'right' });
+    doc.text(`Period: ${periodLabel}`, pageW - margin, 30, { align: 'right' });
+    doc.text(`Date: ${formatDate(today)}`, pageW - margin, 36, { align: 'right' });
+
+    // Divider
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, 42, pageW - margin, 42);
+
+    // Jobs table
+    const tableRows = periodJobs.map((j, idx) => [
+      String(idx + 1),
+      formatDate(j.date),
+      j.billNo || j.dcNo || '—',
+      resolveWorkLabel(j, workTypes),
+      String(j.quantity),
+      formatCurrency(getJobFinalBillValue(j)),
+    ]);
+
+    autoTable(doc, {
+      startY: 46,
+      head: [['#', 'Date', 'Bill/DC', 'Work Type', 'Qty', 'Amount']],
+      body: tableRows,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [17, 17, 15], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 5: { halign: 'right' } },
+    });
+
+    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+
+    // Totals block
+    const totalsX = pageW - margin - 60;
+    let ty = finalY;
+    const addTotalRow = (label: string, value: string, bold = false) => {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(9);
+      doc.text(label, totalsX, ty);
+      doc.text(value, pageW - margin, ty, { align: 'right' });
+      ty += 6;
+    };
+
+    if (!isDcGroup && !hidePreviousBalance && oldBalance > 0) {
+      addTotalRow('Previous Balance', formatCurrency(oldBalance));
+    }
+    addTotalRow('Period Total', formatCurrency(periodTotal));
+    if (paymentsReceived > 0) {
+      addTotalRow('Payments Received', `- ${formatCurrency(paymentsReceived)}`);
+    }
+    doc.setDrawColor(180, 180, 180);
+    doc.line(totalsX, ty - 2, pageW - margin, ty - 2);
+    addTotalRow('Balance Due', formatCurrency(balanceDue), true);
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text('Thank you for your business — Siva Lathe Works', margin, doc.internal.pageSize.getHeight() - 10);
+
+    const fileName = `${buildShareFileNameBase()}.pdf`;
+    doc.save(fileName);
+    toast.success('PDF Downloaded', fileName);
   };
 
   return (
@@ -439,6 +622,9 @@ export function InvoiceScreen() {
               </svg>
               Export / Print
             </button>
+            <button type="button" className="inv-print-btn" onClick={handleDownloadPdf}>
+              Download PDF
+            </button>
             <button type="button" className="inv-print-btn inv-share-btn" onClick={handleShareWhatsAppPng}>
               Share WhatsApp (PNG)
             </button>
@@ -459,7 +645,7 @@ export function InvoiceScreen() {
                 <div className="inv-brand-mark" aria-hidden="true">SLW</div>
                 <div className="inv-brand-info">
                   <p className="inv-company-name">SIVA LATHE WORKS</p>
-                  <p className="inv-company-sub">Precision Machining &amp; Fabrication</p>
+                  <p className="inv-company-sub"></p>
                 </div>
               </div>
               <div className="inv-doc-meta">
@@ -524,7 +710,7 @@ export function InvoiceScreen() {
                         <tr key={job.id} className="inv-tr">
                           <td className="inv-td inv-col-date">{formatDateShort(job.date)}</td>
                           <td className="inv-td inv-col-work">
-                            {resolveWorkTypeName(job.workTypeName, workTypes)}
+                            {resolveWorkLabel(job, workTypes)}
                           </td>
                           <td className="inv-td inv-col-qty inv-align-right numeric">
                             {job.quantity ?? '—'}
@@ -568,7 +754,7 @@ export function InvoiceScreen() {
                         <td className="inv-td inv-col-dcno">{job.dcNo || '—'}</td>
                         <td className="inv-td inv-col-vehicle">{job.vehicleNo || '—'}</td>
                         <td className="inv-td inv-col-wtype">
-                          {resolveWorkTypeName(job.workTypeName, workTypes)}
+                          {resolveWorkLabel(job, workTypes)}
                         </td>
                         <td className="inv-td inv-col-amt inv-align-right numeric">
                           {formatCurrency(getJobFinalBillValue(job))}

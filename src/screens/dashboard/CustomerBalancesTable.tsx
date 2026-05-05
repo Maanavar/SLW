@@ -5,15 +5,26 @@ import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
 import { rankCustomers } from '@/lib/customerRankingUtils';
 import { Customer } from '@/types';
+import { CustomerBillsOverlay } from './CustomerBillsOverlay';
 
 type CustomerTypeFilter = 'All' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
-type BalanceSortKey = 'customer' | 'finalBill' | 'balance';
+type BalanceSortKey =
+  | 'customer'
+  | 'type'
+  | 'ourIncome'
+  | 'commission'
+  | 'finalBill'
+  | 'paidAmount'
+  | 'openingBalanceAmt'
+  | 'advance'
+  | 'balance';
 
-interface CustomerBalance extends Customer {
+export interface CustomerBalance extends Customer {
   ourIncome: number;
   commission: number;
   finalBill: number;
   paidAmount: number;
+  openingBalanceAmt: number;
   balance: number;
   advance: number;
 }
@@ -34,6 +45,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
   const { getActiveCustomers, jobs, payments } = useDataStore();
   const [typeFilter, setTypeFilter] = useState<CustomerTypeFilter>('All');
   const [customerFilter, setCustomerFilter] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerBalance | null>(null);
   const [sortState, setSortState] = useState<{ key: BalanceSortKey; order: 'asc' | 'desc' }>({
     key: 'balance',
     order: 'desc',
@@ -62,7 +74,8 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
         const commission = customerJobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
         const finalBill = ourIncome + commission;
         const paidAmount = customerJobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-        const balance = finalBill - paidAmount;
+        const openingBalanceAmt = customer.openingBalance || 0;
+        const balance = openingBalanceAmt + finalBill - paidAmount;
         const advance = customer.advanceBalance || 0;
 
         return {
@@ -71,11 +84,12 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
           commission,
           finalBill,
           paidAmount,
+          openingBalanceAmt,
           balance,
           advance,
         };
       })
-      .filter((customer) => customer.balance !== 0 || customer.advance > 0);
+      .filter((customer) => customer.balance !== 0 || customer.advance > 0 || customer.openingBalanceAmt > 0);
   }, [customers, scopedJobs]);
 
   const filtered = useMemo(() => {
@@ -95,7 +109,13 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
     const direction = sortState.order === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (sortState.key === 'customer') return collator.compare(a.name, b.name) * direction;
+      if (sortState.key === 'type') return collator.compare(a.type, b.type) * direction;
+      if (sortState.key === 'ourIncome') return (a.ourIncome - b.ourIncome) * direction;
+      if (sortState.key === 'commission') return (a.commission - b.commission) * direction;
       if (sortState.key === 'finalBill') return (a.finalBill - b.finalBill) * direction;
+      if (sortState.key === 'paidAmount') return (a.paidAmount - b.paidAmount) * direction;
+      if (sortState.key === 'openingBalanceAmt') return (a.openingBalanceAmt - b.openingBalanceAmt) * direction;
+      if (sortState.key === 'advance') return (a.advance - b.advance) * direction;
       return (a.balance - b.balance) * direction;
     });
   }, [filtered, sortState]);
@@ -103,7 +123,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
     setSortState((prev) =>
       prev.key === key
         ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
-        : { key, order: key === 'customer' ? 'asc' : 'desc' }
+        : { key, order: key === 'customer' || key === 'type' ? 'asc' : 'desc' }
     );
   };
   const sortMark = (key: BalanceSortKey) => {
@@ -118,12 +138,14 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
       commission: sorted.reduce((sum, customer) => sum + customer.commission, 0),
       finalBill: sorted.reduce((sum, customer) => sum + customer.finalBill, 0),
       paidAmount: sorted.reduce((sum, customer) => sum + customer.paidAmount, 0),
+      openingBalanceAmt: sorted.reduce((sum, customer) => sum + customer.openingBalanceAmt, 0),
       advance: sorted.reduce((sum, customer) => sum + customer.advance, 0),
       balance: sorted.reduce((sum, customer) => sum + customer.balance, 0),
     };
   }, [sorted]);
 
   return (
+    <>
     <section className="customer-balances">
       {showFilters ? (
         <div className="customer-balances-head">
@@ -175,9 +197,48 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
               >
                 Customer {sortMark('customer')}
               </th>
-              <th>Type</th>
-              <th className="numeric">Our Income</th>
-              <th className="numeric">Commission</th>
+              <th
+                className={`slw-sortable-th${sortState.key === 'type' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('type')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('type');
+                  }
+                }}
+              >
+                Type {sortMark('type')}
+              </th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'ourIncome' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('ourIncome')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('ourIncome');
+                  }
+                }}
+              >
+                Our Income {sortMark('ourIncome')}
+              </th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'commission' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('commission')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('commission');
+                  }
+                }}
+              >
+                Commission {sortMark('commission')}
+              </th>
               <th
                 className={`numeric slw-sortable-th${sortState.key === 'finalBill' ? ' is-active' : ''}`}
                 role="button"
@@ -192,8 +253,48 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
               >
                 Final Bill {sortMark('finalBill')}
               </th>
-              <th className="numeric">Paid</th>
-              <th className="numeric">Advance</th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'paidAmount' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('paidAmount')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('paidAmount');
+                  }
+                }}
+              >
+                Paid {sortMark('paidAmount')}
+              </th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'openingBalanceAmt' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('openingBalanceAmt')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('openingBalanceAmt');
+                  }
+                }}
+              >
+                Opening Bal {sortMark('openingBalanceAmt')}
+              </th>
+              <th
+                className={`numeric slw-sortable-th${sortState.key === 'advance' ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSort('advance')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort('advance');
+                  }
+                }}
+              >
+                Advance {sortMark('advance')}
+              </th>
               <th
                 className={`numeric slw-sortable-th${sortState.key === 'balance' ? ' is-active' : ''}`}
                 role="button"
@@ -214,7 +315,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
           <tbody>
             {sorted.length === 0 ? (
               <tr className="table-empty-row">
-                <td colSpan={8}>No customers found for this filter.</td>
+                <td colSpan={9}>No customers found for this filter.</td>
               </tr>
             ) : (
               sorted.map((customer) => {
@@ -240,7 +341,13 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
                             }`}
                           />
                         ) : null}
-                        <span>{customer.name}</span>
+                        <button
+                          type="button"
+                          className="customer-name-link"
+                          onClick={() => setSelectedCustomer(customer)}
+                        >
+                          {customer.name}
+                        </button>
                       </div>
                       <div className="customer-code">{customer.shortCode || '-'}</div>
                     </td>
@@ -253,6 +360,13 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
                     <td className="numeric">{formatCurrency(customer.commission)}</td>
                     <td className="numeric">{formatCurrency(customer.finalBill)}</td>
                     <td className="numeric amount-paid">{formatCurrency(customer.paidAmount)}</td>
+                    <td className="numeric">
+                      {customer.openingBalanceAmt > 0 ? (
+                        <span className="amount-balance">{formatCurrency(customer.openingBalanceAmt)}</span>
+                      ) : (
+                        <span className="muted-dash">-</span>
+                      )}
+                    </td>
                     <td className="numeric">
                       {customer.advance > 0 ? (
                         <span className="amount-advance">{formatCurrency(customer.advance)}</span>
@@ -276,6 +390,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
                 <td className="numeric">{formatCurrency(totals.commission)}</td>
                 <td className="numeric">{formatCurrency(totals.finalBill)}</td>
                 <td className="numeric">{formatCurrency(totals.paidAmount)}</td>
+                <td className="numeric">{formatCurrency(totals.openingBalanceAmt)}</td>
                 <td className="numeric">{formatCurrency(totals.advance)}</td>
                 <td className="numeric">{formatCurrency(totals.balance)}</td>
               </tr>
@@ -284,5 +399,14 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
         </table>
       </div>
     </section>
+
+    {selectedCustomer ? (
+      <CustomerBillsOverlay
+        customer={selectedCustomer}
+        jobs={scopedJobs.filter((j) => j.customerId === selectedCustomer.id)}
+        onClose={() => setSelectedCustomer(null)}
+      />
+    ) : null}
+  </>
   );
 }

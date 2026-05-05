@@ -50,10 +50,15 @@ function getUserFromAdminKey(req: Request): AuthenticatedUser | null {
   };
 }
 
+function parseCookieToken(req: Request): string | null {
+  return (req.cookies as Record<string, string>)?.slw_session ?? null;
+}
+
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
-  const bearer = parseBearerToken(req);
-  if (bearer) {
-    const claims = verifyAuthToken(bearer);
+  // Accept token from Bearer header OR httpOnly cookie (cookie takes priority when both present)
+  const token = parseCookieToken(req) || parseBearerToken(req);
+  if (token) {
+    const claims = verifyAuthToken(token);
     if (!claims) {
       throw new HttpError(401, 'Session expired or invalid token');
     }

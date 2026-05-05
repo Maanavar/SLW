@@ -186,12 +186,13 @@ export function getJobDcStatus(job: Job, customer?: Customer): string {
 
 /**
  * Calculate customer balance
- * Balance = Total Final Bill - Amount Paid from Jobs - Direct Payments
+ * Balance = openingBalance + Total Final Bill - Amount Paid from Jobs - Direct Payments
  */
 export function calculateCustomerBalance(
   jobs: Job[],
   payments: Array<{ customerId: number; amount: number }>,
-  customerId: number
+  customerId: number,
+  openingBalance = 0
 ): number {
   const customerJobs = jobs.filter((j) => j.customerId === customerId);
   const customerPayments = payments.filter((p) => p.customerId === customerId);
@@ -203,7 +204,7 @@ export function calculateCustomerBalance(
   // Payments are usually reflected in both `payments` and `job.paidAmount`.
   // Using the larger source prevents double-counting while staying backward-compatible with legacy rows.
   const totalPaid = Math.max(totalPaidFromJobs, totalPaidFromPayments);
-  return Math.max(0, totalDue - totalPaid);
+  return Math.max(0, (openingBalance || 0) + totalDue - totalPaid);
 }
 
 /**

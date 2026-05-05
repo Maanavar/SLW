@@ -21,19 +21,24 @@ interface RevenueTrendChartProps {
   dateRange?: { from: string; to: string };
 }
 
+type TrendMetricView = 'all' | 'slwRevenue' | 'revenue' | 'grossProfit' | 'received' | 'outstanding';
+
 export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendChartProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>('set');
+  const [metricView, setMetricView] = useState<TrendMetricView>('all');
   const trendData = useMemo(
     () => buildRevenueTrend(jobs, payments, groupBy, dateRange),
     [jobs, payments, groupBy, dateRange]
   );
+  const showLine = (metric: Exclude<TrendMetricView, 'all'>) => metricView === 'all' || metricView === metric;
 
   return (
     <div className="trend-chart-tile">
       <div className="trend-chart-head">
         <h3 className="trend-chart-title">Revenue Trends</h3>
-        <div className="trend-group-toggle">
-                    <button
+        <div className="trend-chart-controls">
+          <div className="trend-group-toggle">
+            <button
             type="button"
             className={`trend-group-btn${groupBy === 'set' ? ' active' : ''}`}
             onClick={() => setGroupBy('set')}
@@ -61,7 +66,23 @@ export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendCha
           >
             Monthly
           </button>
-
+          </div>
+          <label className="trend-metric-select-wrap" htmlFor="trend-metric-view">
+            <span className="trend-metric-label">Show</span>
+            <select
+              id="trend-metric-view"
+              className="trend-metric-select"
+              value={metricView}
+              onChange={(event) => setMetricView(event.target.value as TrendMetricView)}
+            >
+              <option value="all">All Metrics</option>
+              <option value="slwRevenue">SLW Revenue</option>
+              <option value="revenue">Total Revenue</option>
+              <option value="grossProfit">Gross Profit</option>
+              <option value="received">Received</option>
+              <option value="outstanding">Outstanding</option>
+            </select>
+          </label>
         </div>
       </div>
 
@@ -87,30 +108,56 @@ export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendCha
                 labelStyle={{ color: 'var(--text-muted)' }}
               />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Line
-                type="monotone"
-                dataKey="slwRevenue"
-                name="SLW Revenue"
-                stroke="var(--accent)"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="grossProfit"
-                name="Gross Profit"
-                stroke="var(--green)"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="received"
-                name="Received"
-                stroke="var(--amber)"
-                strokeWidth={2}
-                dot={false}
-              />
+              {showLine('slwRevenue') && (
+                <Line
+                  type="monotone"
+                  dataKey="slwRevenue"
+                  name="SLW Revenue"
+                  stroke="var(--accent)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
+              {showLine('revenue') && (
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  name="Total Revenue"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
+              {showLine('grossProfit') && (
+                <Line
+                  type="monotone"
+                  dataKey="grossProfit"
+                  name="Gross Profit"
+                  stroke="var(--green)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
+              {showLine('received') && (
+                <Line
+                  type="monotone"
+                  dataKey="received"
+                  name="Received"
+                  stroke="var(--amber)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
+              {showLine('outstanding') && (
+                <Line
+                  type="monotone"
+                  dataKey="outstanding"
+                  name="Outstanding"
+                  stroke="var(--red)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>

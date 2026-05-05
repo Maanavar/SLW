@@ -11,8 +11,11 @@ export interface Customer {
   requiresDc: boolean;
   hasBillNo?: boolean;
   advanceBalance?: number;
+  openingBalance?: number;
   notes: string;
   isActive: boolean;
+  /** Explicit invoice billing group. Overrides shortCode-based detection when set. */
+  invoiceGroup?: 'rmp' | 'ww' | 'nm' | null;
 }
 
 export interface WorkType {
@@ -170,6 +173,7 @@ export interface CommissionWorker {
   shareType: 'percentage' | 'fixed';
   shareValue: number; // if percentage: 0-100, if fixed: fixed rupee amount
   isActive: boolean;
+  isAgent?: boolean; // true = external agent (commission is income), false/undefined = worker (commission is expense)
   createdAt?: string;
 }
 

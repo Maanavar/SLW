@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
@@ -27,18 +27,19 @@ import { rankCustomers } from '@/lib/customerRankingUtils';
 import { CustomerRankingTable } from '@/components/charts/CustomerRankingTable';
 import { AgeingHeatmap } from '@/components/charts/AgeingHeatmap';
 import { RevenueTrendChart } from '@/components/charts/RevenueTrendChart';
+import { exportFinanceSummaryToExcel } from '@/lib/exportUtils';
 import type { CommissionWorker, Job } from '@/types';
 import '@/components/charts/CustomerRankingTable.css';
 import '@/components/charts/AgeingHeatmap.css';
 import '@/components/charts/RevenueTrendChart.css';
 import './FinanceReports.css';
 
-type ReportTab = 'revenue' | 'trends' | 'payments' | 'commission' | 'customers' | 'rankings' | 'ageing' | 'cashflow' | 'tenday';
+type ReportTab = 'revenue' | 'trends' | 'payments' | 'commissionSend' | 'commissionReceive' | 'externalDcPayments' | 'customers' | 'rankings' | 'ageing' | 'cashflow' | 'tenday';
 type PeriodType = 'today' | 'week' | 'tenday' | 'month' | 'quarter' | 'year' | 'all' | 'range';
 type SortOrder = 'asc' | 'desc';
-type WorkerSortKey = 'customer' | 'cards' | 'outstanding';
-type CustomerSortKey = 'customer' | 'revenue' | 'outstanding' | 'cards';
-type CashflowSortKey = 'revenue' | 'outstanding';
+type WorkerSortKey = 'worker' | 'customer' | 'cards' | 'earned' | 'paid' | 'outstanding';
+type CustomerSortKey = 'customer' | 'revenue' | 'commission' | 'profit' | 'received' | 'outstanding' | 'collectionRate' | 'cards';
+type CashflowSortKey = 'date' | 'revenue' | 'commission' | 'netIncome' | 'expenses' | 'netProfit' | 'received' | 'outstanding';
 
 const PERIOD_TABS: { mode: PeriodType; label: string }[] = [
   { mode: 'today',   label: 'Today' },
@@ -54,16 +55,77 @@ const PERIOD_TABS: { mode: PeriodType; label: string }[] = [
 const NAV_TABS: { id: ReportTab; label: string }[] = [
   { id: 'revenue',    label: 'Overview' },
   { id: 'trends',     label: 'Trends' },
-  { id: 'payments',   label: 'Payments' },
   { id: 'tenday',     label: '10-Day' },
-  { id: 'commission', label: 'Commission' },
+    { id: 'externalDcPayments', label: 'External DC Payments' },
+  { id: 'commissionSend', label: 'Commission to Send' },
+  { id: 'commissionReceive', label: 'Commission to Receive' },
+  { id: 'payments',   label: 'Payments' },
   { id: 'customers',  label: 'Customers' },
   { id: 'rankings',   label: 'Rankings' },
   { id: 'ageing',     label: 'Ageing' },
   { id: 'cashflow',   label: 'Cash Flow' },
 ];
 
+const VALID_REPORT_TABS: ReportTab[] = [
+  'revenue',
+  'trends',
+  'payments',
+  'commissionSend',
+  'commissionReceive',
+  'externalDcPayments',
+  'customers',
+  'rankings',
+  'ageing',
+  'cashflow',
+  'tenday',
+];
+
+function mapQueryTab(tab: string | null): ReportTab | null {
+  if (!tab) return null;
+  if (tab === 'commission') return 'commissionSend';
+  return VALID_REPORT_TABS.includes(tab as ReportTab) ? (tab as ReportTab) : null;
+}
+
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function normalizeToken(value: string | null | undefined): string {
+  return (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isRmpCustomerLabel(shortCode?: string, name?: string): boolean {
+  const code = normalizeToken(shortCode).replace(/\s/g, '');
+  const label = normalizeToken(name);
+  return code === 'rmp' || label.includes('ramani motors');
+}
+
+function isWwCustomerLabel(shortCode?: string, name?: string): boolean {
+  const code = normalizeToken(shortCode).replace(/\s/g, '');
+  const label = normalizeToken(name);
+  return code === 'ww' || label.includes('ramani cars');
+}
+
+function toCanonicalLocalDate(dateValue: string | null | undefined): string | null {
+  const raw = String(dateValue || '').trim();
+  if (!raw) return null;
+
+  const ymd = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(raw);
+  if (ymd) {
+    const year = ymd[1];
+    const month = String(Number(ymd[2])).padStart(2, '0');
+    const day = String(Number(ymd[3])).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const dmy = /^(\d{1,2})-(\d{1,2})-(\d{4})/.exec(raw);
+  if (dmy) {
+    const day = String(Number(dmy[1])).padStart(2, '0');
+    const month = String(Number(dmy[2])).padStart(2, '0');
+    const year = dmy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
+}
 
 function resolveCommissionWorkerId(job: Job, workers: CommissionWorker[]): number | null {
   if (typeof job.commissionWorkerId === 'number') {
@@ -141,7 +203,7 @@ function getOffsetPeriodLabel(period: PeriodType, offset: number): string {
   if (period === 'tenday') {
     const s = new Date(`${range.from}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     const e = new Date(`${range.to}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    return `${s} – ${e}`;
+    return `${s} - ${e}`;
   }
   if (period === 'today') {
     return new Date(`${range.from}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
@@ -149,7 +211,7 @@ function getOffsetPeriodLabel(period: PeriodType, offset: number): string {
   if (period === 'week') {
     const s = new Date(`${range.from}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     const e = new Date(`${range.to}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    return `${s} – ${e}`;
+    return `${s} - ${e}`;
   }
   if (period === 'month') {
     const [y, m] = range.from.split('-').map(Number);
@@ -177,8 +239,8 @@ function nextSortState<T extends string>(
 }
 
 function sortMark<T extends string>(state: { key: T; order: SortOrder } | null, key: T): string {
-  if (!state || state.key !== key) return '↕';
-  return state.order === 'asc' ? '↑' : '↓';
+  if (!state || state.key !== key) return '<>';
+  return state.order === 'asc' ? '^' : 'v';
 }
 
 function BarChart({ items, maxVal }: { items: { label: string; value: number }[]; maxVal: number }) {
@@ -201,9 +263,7 @@ export function FinanceReports() {
   const { jobs, payments, customers, commissionPayments, commissionWorkers, expenses, getCustomer } = useDataStore();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<ReportTab>(() => {
-    const tab = searchParams.get('tab');
-    const valid: ReportTab[] = ['revenue','trends','payments','commission','customers','rankings','ageing','cashflow','tenday'];
-    return (valid.includes(tab as ReportTab) ? tab : 'revenue') as ReportTab;
+    return mapQueryTab(searchParams.get('tab')) ?? 'revenue';
   });
   const [period, setPeriod] = useState<PeriodType>('month');
   const [periodOffset, setPeriodOffset] = useState(0);
@@ -234,6 +294,23 @@ export function FinanceReports() {
   }
 
   const [selectedDay, setSelectedDay] = useState<{ setNum: number; dayNum: number } | null>(null);
+  useEffect(() => {
+    setSelectedDay(null);
+  }, [tenDayYear, tenDayMonth]);
+
+  // Keep 10-day month in sync with the main period navigator when Month is selected.
+  useEffect(() => {
+    if (activeTab !== 'tenday' || period !== 'month') return;
+    const monthRange = getDateRangeWithOffset('month', periodOffset);
+    if (!monthRange) return;
+    const [yearStr, monthStr] = monthRange.from.split('-');
+    const nextYear = Number(yearStr);
+    const nextMonth = Number(monthStr);
+    if (!Number.isFinite(nextYear) || !Number.isFinite(nextMonth)) return;
+
+    if (nextYear !== tenDayYear) setTenDayYear(nextYear);
+    if (nextMonth !== tenDayMonth) setTenDayMonth(nextMonth);
+  }, [activeTab, period, periodOffset, tenDayYear, tenDayMonth]);
 
   const navTabsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -243,10 +320,9 @@ export function FinanceReports() {
 
   // Sync tab from URL on SPA navigation (useState initialiser only runs once)
   useEffect(() => {
-    const tab = searchParams.get('tab');
-    const valid: ReportTab[] = ['revenue','trends','payments','commission','customers','rankings','ageing','cashflow','tenday'];
-    if (valid.includes(tab as ReportTab)) {
-      setActiveTab(tab as ReportTab);
+    const mappedTab = mapQueryTab(searchParams.get('tab'));
+    if (mappedTab) {
+      setActiveTab(mappedTab);
     }
   }, [searchParams]);
 
@@ -261,7 +337,7 @@ export function FinanceReports() {
     [jobs, dateRange]
   );
 
-  // ── Revenue ───────────────────────────────────────────────────────────────
+  // â”€â”€ Revenue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const revenueMetrics = useMemo(() => calculateRevenueMetrics(jobs, expenses, dateRange), [jobs, expenses, dateRange]);
 
   const topCustomers = useMemo(() => {
@@ -333,14 +409,14 @@ export function FinanceReports() {
     );
   }, [filteredJobs]);
 
-  // ── Payments ──────────────────────────────────────────────────────────────
+  // â”€â”€ Payments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const paymentMetrics = useMemo(() => calculatePaymentMetrics(jobs, payments, dateRange), [jobs, payments, dateRange]);
   const paymentMethodBreakdown = useMemo(
     () => calculateCollectionMethodBreakdown(jobs, payments, dateRange),
     [jobs, payments, dateRange]
   );
 
-  // ── Commission ────────────────────────────────────────────────────────────
+  // â”€â”€ Commission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const commissionMetrics = useMemo(
     () => calculateCommissionMetrics(jobs, commissionPayments, dateRange),
     [jobs, commissionPayments, dateRange]
@@ -371,6 +447,125 @@ export function FinanceReports() {
       { agentCards: 0, agentCommissionIncome: 0, agentSettlementPending: 0 }
     );
   }, [filteredJobs]);
+  const commissionReceivableBreakdown = useMemo(() => {
+    const breakdown = {
+      rmpExternalLeafBhai: 0,
+      rmpInternalBhaiRaja: 0,
+      wwPalanisamy: 0,
+      other: 0,
+    };
+
+    filteredJobs.forEach((job) => {
+      if (!isAgentWorkJob(job)) return;
+      const commission = getJobAgentCommissionIncome(job);
+      if (commission <= 0) return;
+
+      const customer = getCustomer(job.customerId);
+      const isRmp = isRmpCustomerLabel(customer?.shortCode, customer?.name);
+      const isWw = isWwCustomerLabel(customer?.shortCode, customer?.name);
+      const agentName = normalizeToken(job.agentName);
+
+      if (isRmp && job.externalDc) {
+        if (agentName.includes('leaf') || agentName.includes('bhai')) {
+          breakdown.rmpExternalLeafBhai += commission;
+          return;
+        }
+      }
+
+      if (isRmp && !job.externalDc) {
+        if (agentName.includes('bhai') || agentName.includes('raja')) {
+          breakdown.rmpInternalBhaiRaja += commission;
+          return;
+        }
+      }
+
+      if (isWw && agentName.includes('palanisamy')) {
+        breakdown.wwPalanisamy += commission;
+        return;
+      }
+
+      breakdown.other += commission;
+    });
+
+    const total =
+      breakdown.rmpExternalLeafBhai +
+      breakdown.rmpInternalBhaiRaja +
+      breakdown.wwPalanisamy +
+      breakdown.other;
+
+    return { ...breakdown, total };
+  }, [filteredJobs, getCustomer]);
+  const externalDcPaymentsBreakdown = useMemo(() => {
+    const externalDc = {
+      cards: 0,
+      commissionToReceive: 0,
+      settlementPending: 0,
+    };
+    const noExternalDc = {
+      cards: 0,
+      commissionToReceive: 0,
+      settlementPending: 0,
+    };
+    const externalDcByWorker = new Map<string, {
+      workerName: string;
+      cards: number;
+      commissionToReceive: number;
+      settlementPending: number;
+    }>();
+    const noExternalDcByWorker = new Map<string, {
+      workerName: string;
+      cards: number;
+      commissionToReceive: number;
+      settlementPending: number;
+    }>();
+
+    filteredJobs.forEach((job) => {
+      if (!isAgentWorkJob(job)) return;
+      const target = job.externalDc ? externalDc : noExternalDc;
+      target.cards += 1;
+      target.commissionToReceive += getJobAgentCommissionIncome(job);
+      target.settlementPending += getJobAgentSettlementPending(job);
+
+      const workerName = job.agentName?.trim() || 'Unassigned';
+      const bucket = job.externalDc ? externalDcByWorker : noExternalDcByWorker;
+      const existing = bucket.get(workerName) ?? {
+        workerName,
+        cards: 0,
+        commissionToReceive: 0,
+        settlementPending: 0,
+      };
+      existing.cards += 1;
+      existing.commissionToReceive += getJobAgentCommissionIncome(job);
+      existing.settlementPending += getJobAgentSettlementPending(job);
+      bucket.set(workerName, existing);
+    });
+
+    const workerPaymentToPay = workerSummary.reduce((sum, worker) => sum + worker.outstanding, 0);
+    const totalAgentCards = externalDc.cards + noExternalDc.cards;
+    const totalCommissionToReceive = externalDc.commissionToReceive + noExternalDc.commissionToReceive;
+    const totalAgentSettlementPending = externalDc.settlementPending + noExternalDc.settlementPending;
+    const sortByAmountThenName = (
+      a: { workerName: string; settlementPending: number; commissionToReceive: number },
+      b: { workerName: string; settlementPending: number; commissionToReceive: number }
+    ) => {
+      if (b.settlementPending !== a.settlementPending) return b.settlementPending - a.settlementPending;
+      if (b.commissionToReceive !== a.commissionToReceive) return b.commissionToReceive - a.commissionToReceive;
+      return a.workerName.localeCompare(b.workerName, 'en-IN');
+    };
+    const externalDcWorkers = Array.from(externalDcByWorker.values()).sort(sortByAmountThenName);
+    const noExternalDcWorkers = Array.from(noExternalDcByWorker.values()).sort(sortByAmountThenName);
+
+    return {
+      externalDc,
+      noExternalDc,
+      externalDcWorkers,
+      noExternalDcWorkers,
+      workerPaymentToPay,
+      totalAgentCards,
+      totalCommissionToReceive,
+      totalAgentSettlementPending,
+    };
+  }, [filteredJobs, workerSummary]);
   const workerRows = useMemo(
     () =>
       workerSummary.map((worker) => ({
@@ -385,13 +580,16 @@ export function FinanceReports() {
     const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
     const direction = workerSort.order === 'asc' ? 1 : -1;
     return [...workerRows].sort((a, b) => {
+      if (workerSort.key === 'worker') return collator.compare(a.workerName, b.workerName) * direction;
       if (workerSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * direction;
       if (workerSort.key === 'cards') return (a.cards - b.cards) * direction;
+      if (workerSort.key === 'earned') return (a.totalDue - b.totalDue) * direction;
+      if (workerSort.key === 'paid') return (a.totalPaid - b.totalPaid) * direction;
       return (a.outstanding - b.outstanding) * direction;
     });
   }, [workerRows, workerSort]);
 
-  // ── Customers ─────────────────────────────────────────────────────────────
+  // â”€â”€ Customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const customerFinancials = useMemo(
     () => calculateCustomerFinancials(jobs, payments, customers, dateRange),
     [jobs, payments, customers, dateRange]
@@ -403,12 +601,16 @@ export function FinanceReports() {
     return [...customerFinancials].sort((a, b) => {
       if (customerSort.key === 'customer') return collator.compare(a.customerName, b.customerName) * direction;
       if (customerSort.key === 'revenue') return (a.totalRevenue - b.totalRevenue) * direction;
+      if (customerSort.key === 'commission') return (a.commissionExpense - b.commissionExpense) * direction;
+      if (customerSort.key === 'profit') return (a.grossProfit - b.grossProfit) * direction;
+      if (customerSort.key === 'received') return (a.totalReceived - b.totalReceived) * direction;
       if (customerSort.key === 'outstanding') return (a.totalOutstanding - b.totalOutstanding) * direction;
+      if (customerSort.key === 'collectionRate') return (a.paymentRate - b.paymentRate) * direction;
       return (a.jobCount - b.jobCount) * direction;
     });
   }, [customerFinancials, customerSort]);
 
-  // ── Ageing (customer-wise) ────────────────────────────────────────────────
+  // â”€â”€ Ageing (customer-wise) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const customerRankings = useMemo(
     () => rankCustomers(jobs, payments, customers),
     [jobs, payments, customers]
@@ -418,7 +620,7 @@ export function FinanceReports() {
     [jobs, payments, customers]
   );
 
-  // ── Ten-Day ───────────────────────────────────────────────────────────────
+  // â”€â”€ Ten-Day â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const tenDaySets = useMemo(
     () => calculateTenDayBreakdown(jobs, expenses, tenDayYear, tenDayMonth),
     [jobs, expenses, tenDayYear, tenDayMonth]
@@ -427,7 +629,10 @@ export function FinanceReports() {
   const tenDayPayables = useMemo(() => {
     type Entry = { custId: number; subLabel: string; amount: number };
     const monthStr = `${tenDayYear}-${String(tenDayMonth).padStart(2, '0')}`;
-    const monthJobs = jobs.filter(j => j.date.startsWith(monthStr));
+    const monthJobs = jobs.filter((job) => {
+      const normalized = toCanonicalLocalDate(job.date);
+      return Boolean(normalized && normalized.startsWith(monthStr));
+    });
 
     const agentCommissionMap              = new Map<string, Entry>();
     const agentTdsMap                     = new Map<string, Entry>();
@@ -471,7 +676,7 @@ export function FinanceReports() {
     };
   }, [jobs, tenDayYear, tenDayMonth]);
 
-  // ── Cash Flow ─────────────────────────────────────────────────────────────
+  // â”€â”€ Cash Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const cashFlowDays = period === 'year' ? 365 : period === 'range' ? 90 : period === 'month' ? 30 : period === 'tenday' ? 10 : 7;
   const dailyCashFlow = useMemo(
     () => calculateDailyCashFlow(jobs, payments, expenses, cashFlowDays),
@@ -481,20 +686,57 @@ export function FinanceReports() {
     if (!cashflowSort) return dailyCashFlow;
     const direction = cashflowSort.order === 'asc' ? 1 : -1;
     return [...dailyCashFlow].sort((a, b) => {
+      if (cashflowSort.key === 'date') return a.date.localeCompare(b.date) * direction;
       if (cashflowSort.key === 'revenue') return (a.revenue - b.revenue) * direction;
+      if (cashflowSort.key === 'commission') return (a.commission - b.commission) * direction;
+      if (cashflowSort.key === 'netIncome') return (a.netIncome - b.netIncome) * direction;
+      if (cashflowSort.key === 'expenses') return (a.expenses - b.expenses) * direction;
+      if (cashflowSort.key === 'netProfit') return (a.netProfit - b.netProfit) * direction;
+      if (cashflowSort.key === 'received') return (a.received - b.received) * direction;
       return (a.outstanding - b.outstanding) * direction;
     });
   }, [dailyCashFlow, cashflowSort]);
 
+  const handleExportExcel = () => {
+    const periodLabel = getOffsetPeriodLabel(period, periodOffset);
+    const filteredPayments = dateRange
+      ? payments.filter(p => p.date >= dateRange.from && p.date <= dateRange.to)
+      : payments;
+    const filteredExpenses = dateRange
+      ? expenses.filter(e => e.date >= dateRange.from && e.date <= dateRange.to)
+      : expenses;
+
+    exportFinanceSummaryToExcel({
+      periodLabel,
+      revenue: revenueMetrics.totalRevenue,
+      grossProfit: revenueMetrics.grossProfit,
+      netProfit: revenueMetrics.netProfit,
+      totalExpenses: revenueMetrics.totalExpenses,
+      totalReceived: paymentMetrics.totalReceived,
+      outstanding: paymentMetrics.totalOutstanding,
+      collectionRate: paymentMetrics.collectionRate,
+      jobs: filteredJobs,
+      payments: filteredPayments,
+      expenses: filteredExpenses,
+      customers,
+    }, `slw-finance-${periodLabel.replace(/\s+/g, '-').toLowerCase()}.xlsx`);
+  };
+
   return (
     <div className="fin-screen">
 
-      {/* Row 1 – Header */}
+      {/* Row 1 â€“ Header */}
       <div className="fin-pg-header">
-        <div>
+        <div className="fin-pg-title-row">
           <h1 className="fin-pg-title">Finance</h1>
-          <p className="fin-pg-desc">Financial reports and business analytics</p>
+          <button type="button" className="fin-export-btn" onClick={handleExportExcel} title="Export to Excel">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2 12v2h12v-2M8 2v8M5 7l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Export Excel
+          </button>
         </div>
+        <p className="fin-pg-desc">Financial reports and business analytics</p>
         <div className="fin-period-tabs">
           {PERIOD_TABS.map(({ mode, label }) => (
             <button key={mode} type="button"
@@ -506,7 +748,7 @@ export function FinanceReports() {
         </div>
       </div>
 
-      {/* Period navigation — prev/next for navigable periods */}
+      {/* Period navigation â€” prev/next for navigable periods */}
       {period !== 'all' && period !== 'range' && (
         <div className="fin-period-nav">
           <button type="button" className="fin-period-nav-btn"
@@ -550,7 +792,7 @@ export function FinanceReports() {
         </div>
       )}
 
-      {/* Row 2 – Nav tabs */}
+      {/* Row 2 â€“ Nav tabs */}
       <div className="fin-nav-tabs" ref={navTabsRef}>
         {NAV_TABS.map(tab => (
           <button key={tab.id} type="button"
@@ -561,7 +803,7 @@ export function FinanceReports() {
         ))}
       </div>
 
-      {/* ── Revenue ── */}
+      {/* â”€â”€ Revenue â”€â”€ */}
       {activeTab === 'revenue' && (
         <div className="fin-tab-content">
           <div className="fin-stats fin-stats-4">
@@ -609,7 +851,7 @@ export function FinanceReports() {
                 <div className="fin-stat-tooltip-title">Gross Profit Formula</div>
                 <div className="fin-stat-tooltip-row">
                   <span>Calculation</span>
-                  <strong>SLW Revenue − Worker Comm + Agent Comm</strong>
+                  <strong>SLW Revenue - Worker Comm + Agent Comm</strong>
                 </div>
                 <div className="fin-stat-tooltip-row">
                   <span>SLW Revenue</span>
@@ -617,7 +859,7 @@ export function FinanceReports() {
                 </div>
                 <div className="fin-stat-tooltip-row">
                   <span>Worker Commission</span>
-                  <strong>−{formatCurrency(revenueGrossProfitFormula.workerCommission)}</strong>
+                  <strong>-{formatCurrency(revenueGrossProfitFormula.workerCommission)}</strong>
                 </div>
                 <div className="fin-stat-tooltip-row">
                   <span>Agent Commission Income</span>
@@ -637,7 +879,7 @@ export function FinanceReports() {
                 <div className="fin-stat-tooltip-title">Net Profit Breakdown</div>
                 <div className="fin-stat-tooltip-row">
                   <span>Calculation</span>
-                  <strong>Gross Profit − Expenses</strong>
+                  <strong>Gross Profit - Expenses</strong>
                 </div>
                 <div className="fin-stat-tooltip-row">
                   <span>Gross Profit</span>
@@ -645,7 +887,7 @@ export function FinanceReports() {
                 </div>
                 <div className="fin-stat-tooltip-row">
                   <span>Expenses</span>
-                  <strong>−{formatCurrency(revenueMetrics.totalExpenses)}</strong>
+                  <strong>-{formatCurrency(revenueMetrics.totalExpenses)}</strong>
                 </div>
                 <div className="fin-stat-tooltip-row">
                   <span>Net Margin</span>
@@ -661,13 +903,13 @@ export function FinanceReports() {
 
           <div className="fin-chart-row">
             <div className="fin-chart-tile">
-              <div className="fin-chart-title">Top 10 — Customer Revenue</div>
+              <div className="fin-chart-title">Top 10 - Customer Revenue</div>
               {topCustomers.length > 0
                 ? <BarChart items={topCustomers.map(c => ({ label: c.name, value: c.value }))} maxVal={topCustomers[0]?.value || 1} />
                 : <p className="fin-empty">No revenue data for this period</p>}
             </div>
             <div className="fin-chart-tile">
-              <div className="fin-chart-title">Top 10 — Work Type Revenue</div>
+              <div className="fin-chart-title">Top 10 - Work Type Revenue</div>
               {topWorkTypes.length > 0
                 ? <BarChart items={topWorkTypes} maxVal={topWorkTypes[0]?.value || 1} />
                 : <p className="fin-empty">No work type data for this period</p>}
@@ -706,7 +948,7 @@ export function FinanceReports() {
             <div className="fin-stat">
               <span className="fin-stat-label">Avg Days to Payment</span>
               <span className="fin-stat-value">{paymentMetrics.averagePaymentDays}</span>
-              <span className="fin-stat-sub">Days job → receipt</span>
+              <span className="fin-stat-sub">Days job to receipt</span>
             </div>
           </div>
 
@@ -733,8 +975,8 @@ export function FinanceReports() {
         </div>
       )}
 
-      {/* ── Commission ── */}
-      {activeTab === 'commission' && (
+      {/* â”€â”€ Commission â”€â”€ */}
+      {activeTab === 'commissionSend' && (
         <div className="fin-tab-content">
           <div className="fin-stats fin-stats-4">
             <div className="fin-stat">
@@ -743,14 +985,14 @@ export function FinanceReports() {
               <span className="fin-stat-sub">Owed to workers</span>
             </div>
             <div className="fin-stat fin-stat--green">
-              <span className="fin-stat-label">Agent Commission Income</span>
-              <span className="fin-stat-value">{formatCurrency(agentFlowMetrics.agentCommissionIncome)}</span>
-              <span className="fin-stat-sub">From {agentFlowMetrics.agentCards} agent job{agentFlowMetrics.agentCards !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="fin-stat fin-stat--green">
               <span className="fin-stat-label">Worker Commission Paid</span>
               <span className="fin-stat-value">{formatCurrency(commissionMetrics.commissionPaid)}</span>
               <span className="fin-stat-sub">Already distributed</span>
+            </div>
+            <div className={`fin-stat${commissionMetrics.commissionOutstanding > 0 ? ' fin-stat--red' : ' fin-stat--green'}`}>
+              <span className="fin-stat-label">Worker Outstanding</span>
+              <span className="fin-stat-value">{formatCurrency(commissionMetrics.commissionOutstanding)}</span>
+              <span className="fin-stat-sub">Still to pay workers</span>
             </div>
             <div className={`fin-stat${agentFlowMetrics.agentSettlementPending > 0 ? ' fin-stat--red' : ' fin-stat--green'}`}>
               <span className="fin-stat-label">Agent Settlement Pending</span>
@@ -766,7 +1008,15 @@ export function FinanceReports() {
                 <table className="fin-table">
                   <thead>
                     <tr>
-                      <th>Worker</th>
+                      <th
+                        className={`slw-sortable-th${workerSort?.key === 'worker' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setWorkerSort((prev) => nextSortState(prev, 'worker', 'asc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setWorkerSort((prev) => nextSortState(prev, 'worker', 'asc')); } }}
+                      >
+                        Worker {sortMark(workerSort, 'worker')}
+                      </th>
                       <th
                         className={`slw-sortable-th${workerSort?.key === 'customer' ? ' is-active' : ''}`}
                         role="button"
@@ -785,8 +1035,24 @@ export function FinanceReports() {
                       >
                         Jobs {sortMark(workerSort, 'cards')}
                       </th>
-                      <th className="text-right">Earned</th>
-                      <th className="text-right">Paid</th>
+                      <th
+                        className={`text-right slw-sortable-th${workerSort?.key === 'earned' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setWorkerSort((prev) => nextSortState(prev, 'earned', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setWorkerSort((prev) => nextSortState(prev, 'earned', 'desc')); } }}
+                      >
+                        Earned {sortMark(workerSort, 'earned')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${workerSort?.key === 'paid' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setWorkerSort((prev) => nextSortState(prev, 'paid', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setWorkerSort((prev) => nextSortState(prev, 'paid', 'desc')); } }}
+                      >
+                        Paid {sortMark(workerSort, 'paid')}
+                      </th>
                       <th
                         className={`text-right slw-sortable-th${workerSort?.key === 'outstanding' ? ' is-active' : ''}`}
                         role="button"
@@ -819,6 +1085,196 @@ export function FinanceReports() {
         </div>
       )}
 
+      {/* â”€â”€ Commission To Receive â”€â”€ */}
+      {activeTab === 'commissionReceive' && (
+        <div className="fin-tab-content">
+          <div className="fin-stats fin-stats-4">
+            <div className="fin-stat fin-stat--green">
+              <span className="fin-stat-label">Total Commission to Receive</span>
+              <span className="fin-stat-value">{formatCurrency(commissionReceivableBreakdown.total)}</span>
+              <span className="fin-stat-sub">From {agentFlowMetrics.agentCards} agent job{agentFlowMetrics.agentCards !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="fin-stat">
+              <span className="fin-stat-label">RMP External DC - Leaf Bhai</span>
+              <span className="fin-stat-value">{formatCurrency(commissionReceivableBreakdown.rmpExternalLeafBhai)}</span>
+              <span className="fin-stat-sub">Agent flow / external DC</span>
+            </div>
+            <div className="fin-stat">
+              <span className="fin-stat-label">RMP No External DC - Bhai/Raja</span>
+              <span className="fin-stat-value">{formatCurrency(commissionReceivableBreakdown.rmpInternalBhaiRaja)}</span>
+              <span className="fin-stat-sub">Agent flow / no external DC</span>
+            </div>
+            <div className="fin-stat">
+              <span className="fin-stat-label">WW - Palanisamy</span>
+              <span className="fin-stat-value">{formatCurrency(commissionReceivableBreakdown.wwPalanisamy)}</span>
+              <span className="fin-stat-sub">Agent flow for WW</span>
+            </div>
+          </div>
+
+          <div className="fin-table-tile">
+            <div className="fin-chart-title">Commission Receivable Details</div>
+            <div className="fin-table-wrap">
+              <table className="fin-table">
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th className="text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="fw-600">Leaf Bhai - RMP External DC</td>
+                    <td className="text-right color-green">{formatCurrency(commissionReceivableBreakdown.rmpExternalLeafBhai)}</td>
+                  </tr>
+                  <tr>
+                    <td className="fw-600">Bhai / Raja - RMP No External DC</td>
+                    <td className="text-right color-green">{formatCurrency(commissionReceivableBreakdown.rmpInternalBhaiRaja)}</td>
+                  </tr>
+                  <tr>
+                    <td className="fw-600">WW - Palanisamy</td>
+                    <td className="text-right color-green">{formatCurrency(commissionReceivableBreakdown.wwPalanisamy)}</td>
+                  </tr>
+                  {commissionReceivableBreakdown.other > 0 && (
+                    <tr>
+                      <td className="fw-600">Other Agent Commission</td>
+                      <td className="text-right color-muted">{formatCurrency(commissionReceivableBreakdown.other)}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="fw-600">Total</td>
+                    <td className="text-right color-green fw-600">{formatCurrency(commissionReceivableBreakdown.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'externalDcPayments' && (
+        <div className="fin-tab-content">
+          <div className="fin-stats fin-stats-4">
+            <div className="fin-stat">
+              <span className="fin-stat-label">Agent Work Cards</span>
+              <span className="fin-stat-value">{externalDcPaymentsBreakdown.totalAgentCards}</span>
+              <span className="fin-stat-sub">External + no external DC</span>
+            </div>
+            <div className="fin-stat fin-stat--green">
+              <span className="fin-stat-label">Agent Commission to Receive</span>
+              <span className="fin-stat-value">{formatCurrency(externalDcPaymentsBreakdown.totalCommissionToReceive)}</span>
+              <span className="fin-stat-sub">Income from agent work</span>
+            </div>
+            <div className={`fin-stat${externalDcPaymentsBreakdown.totalAgentSettlementPending > 0 ? ' fin-stat--red' : ' fin-stat--green'}`}>
+              <span className="fin-stat-label">Agent Settlement to Pay</span>
+              <span className="fin-stat-value">{formatCurrency(externalDcPaymentsBreakdown.totalAgentSettlementPending)}</span>
+              <span className="fin-stat-sub">Pending transfer to agents</span>
+            </div>
+            <div className={`fin-stat${externalDcPaymentsBreakdown.workerPaymentToPay > 0 ? ' fin-stat--red' : ' fin-stat--green'}`}>
+              <span className="fin-stat-label">Workers Payment to Pay</span>
+              <span className="fin-stat-value">{formatCurrency(externalDcPaymentsBreakdown.workerPaymentToPay)}</span>
+              <span className="fin-stat-sub">Outstanding worker commission</span>
+            </div>
+          </div>
+
+          <div className="fin-table-tile">
+            <div className="fin-chart-title">External DC vs No External DC</div>
+            <div className="fin-table-wrap">
+              <table className="fin-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th className="text-right">Cards</th>
+                    <th className="text-right">Commission to Receive</th>
+                    <th className="text-right">Agent Settlement to Pay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="fw-600">Agent Work - External DC</td>
+                    <td className="text-right">{externalDcPaymentsBreakdown.externalDc.cards}</td>
+                    <td className="text-right color-green">{formatCurrency(externalDcPaymentsBreakdown.externalDc.commissionToReceive)}</td>
+                    <td className={`text-right${externalDcPaymentsBreakdown.externalDc.settlementPending > 0 ? ' color-red' : ' color-green'}`}>
+                      {formatCurrency(externalDcPaymentsBreakdown.externalDc.settlementPending)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="fw-600">Agent Work - No External DC</td>
+                    <td className="text-right">{externalDcPaymentsBreakdown.noExternalDc.cards}</td>
+                    <td className="text-right color-green">{formatCurrency(externalDcPaymentsBreakdown.noExternalDc.commissionToReceive)}</td>
+                    <td className={`text-right${externalDcPaymentsBreakdown.noExternalDc.settlementPending > 0 ? ' color-red' : ' color-green'}`}>
+                      {formatCurrency(externalDcPaymentsBreakdown.noExternalDc.settlementPending)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="fw-600">Total Agent Work</td>
+                    <td className="text-right fw-600">{externalDcPaymentsBreakdown.totalAgentCards}</td>
+                    <td className="text-right color-green fw-600">{formatCurrency(externalDcPaymentsBreakdown.totalCommissionToReceive)}</td>
+                    <td className={`text-right fw-600${externalDcPaymentsBreakdown.totalAgentSettlementPending > 0 ? ' color-red' : ' color-green'}`}>
+                      {formatCurrency(externalDcPaymentsBreakdown.totalAgentSettlementPending)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="fw-600">Workers Payment to Pay</td>
+                    <td className="text-right">-</td>
+                    <td className="text-right">-</td>
+                    <td className={`text-right fw-600${externalDcPaymentsBreakdown.workerPaymentToPay > 0 ? ' color-red' : ' color-green'}`}>
+                      {formatCurrency(externalDcPaymentsBreakdown.workerPaymentToPay)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="fin-table-tile">
+            <div className="fin-chart-title">Split by Worker Name</div>
+            <div className="fin-table-wrap">
+              <table className="fin-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Worker Name</th>
+                    <th className="text-right">Cards</th>
+                    <th className="text-right">Commission to Receive</th>
+                    <th className="text-right">Agent Settlement to Pay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {externalDcPaymentsBreakdown.externalDcWorkers.map((row) => (
+                    <tr key={`ext-${row.workerName}`}>
+                      <td className="fw-600">External DC</td>
+                      <td>{row.workerName}</td>
+                      <td className="text-right">{row.cards}</td>
+                      <td className="text-right color-green">{formatCurrency(row.commissionToReceive)}</td>
+                      <td className={`text-right${row.settlementPending > 0 ? ' color-red' : ' color-green'}`}>
+                        {formatCurrency(row.settlementPending)}
+                      </td>
+                    </tr>
+                  ))}
+                  {externalDcPaymentsBreakdown.noExternalDcWorkers.map((row) => (
+                    <tr key={`noext-${row.workerName}`}>
+                      <td className="fw-600">No External DC</td>
+                      <td>{row.workerName}</td>
+                      <td className="text-right">{row.cards}</td>
+                      <td className="text-right color-green">{formatCurrency(row.commissionToReceive)}</td>
+                      <td className={`text-right${row.settlementPending > 0 ? ' color-red' : ' color-green'}`}>
+                        {formatCurrency(row.settlementPending)}
+                      </td>
+                    </tr>
+                  ))}
+                  {externalDcPaymentsBreakdown.externalDcWorkers.length === 0 &&
+                    externalDcPaymentsBreakdown.noExternalDcWorkers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="color-muted">No agent work rows for this period</td>
+                      </tr>
+                    )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Customers ── */}
       {activeTab === 'customers' && (
         <div className="fin-tab-content">
@@ -847,9 +1303,33 @@ export function FinanceReports() {
                       >
                         Revenue {sortMark(customerSort, 'revenue')}
                       </th>
-                      <th className="text-right">Commission</th>
-                      <th className="text-right">Profit</th>
-                      <th className="text-right">Received</th>
+                      <th
+                        className={`text-right slw-sortable-th${customerSort?.key === 'commission' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCustomerSort((prev) => nextSortState(prev, 'commission', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCustomerSort((prev) => nextSortState(prev, 'commission', 'desc')); } }}
+                      >
+                        Commission {sortMark(customerSort, 'commission')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${customerSort?.key === 'profit' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCustomerSort((prev) => nextSortState(prev, 'profit', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCustomerSort((prev) => nextSortState(prev, 'profit', 'desc')); } }}
+                      >
+                        Profit {sortMark(customerSort, 'profit')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${customerSort?.key === 'received' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCustomerSort((prev) => nextSortState(prev, 'received', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCustomerSort((prev) => nextSortState(prev, 'received', 'desc')); } }}
+                      >
+                        Received {sortMark(customerSort, 'received')}
+                      </th>
                       <th
                         className={`text-right slw-sortable-th${customerSort?.key === 'outstanding' ? ' is-active' : ''}`}
                         role="button"
@@ -859,7 +1339,15 @@ export function FinanceReports() {
                       >
                         Outstanding {sortMark(customerSort, 'outstanding')}
                       </th>
-                      <th className="text-right">Coll. Rate</th>
+                      <th
+                        className={`text-right slw-sortable-th${customerSort?.key === 'collectionRate' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCustomerSort((prev) => nextSortState(prev, 'collectionRate', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCustomerSort((prev) => nextSortState(prev, 'collectionRate', 'desc')); } }}
+                      >
+                        Coll. Rate {sortMark(customerSort, 'collectionRate')}
+                      </th>
                       <th
                         className={`text-right slw-sortable-th${customerSort?.key === 'cards' ? ' is-active' : ''}`}
                         role="button"
@@ -894,7 +1382,7 @@ export function FinanceReports() {
         </div>
       )}
 
-      {/* ── Rankings ── */}
+      {/* â”€â”€ Rankings â”€â”€ */}
       {activeTab === 'rankings' && (
         <div className="fin-tab-content">
           <CustomerRankingTable rankings={customerRankings} />
@@ -917,7 +1405,15 @@ export function FinanceReports() {
                 <table className="fin-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
+                      <th
+                        className={`slw-sortable-th${cashflowSort?.key === 'date' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCashflowSort((prev) => nextSortState(prev, 'date', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCashflowSort((prev) => nextSortState(prev, 'date', 'desc')); } }}
+                      >
+                        Date {sortMark(cashflowSort, 'date')}
+                      </th>
                       <th
                         className={`text-right slw-sortable-th${cashflowSort?.key === 'revenue' ? ' is-active' : ''}`}
                         role="button"
@@ -927,11 +1423,51 @@ export function FinanceReports() {
                       >
                         Revenue {sortMark(cashflowSort, 'revenue')}
                       </th>
-                      <th className="text-right">Commission</th>
-                      <th className="text-right">Net Income</th>
-                      <th className="text-right">Expenses</th>
-                      <th className="text-right">Net Profit</th>
-                      <th className="text-right">Received</th>
+                      <th
+                        className={`text-right slw-sortable-th${cashflowSort?.key === 'commission' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCashflowSort((prev) => nextSortState(prev, 'commission', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCashflowSort((prev) => nextSortState(prev, 'commission', 'desc')); } }}
+                      >
+                        Commission {sortMark(cashflowSort, 'commission')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${cashflowSort?.key === 'netIncome' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCashflowSort((prev) => nextSortState(prev, 'netIncome', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCashflowSort((prev) => nextSortState(prev, 'netIncome', 'desc')); } }}
+                      >
+                        Net Income {sortMark(cashflowSort, 'netIncome')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${cashflowSort?.key === 'expenses' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCashflowSort((prev) => nextSortState(prev, 'expenses', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCashflowSort((prev) => nextSortState(prev, 'expenses', 'desc')); } }}
+                      >
+                        Expenses {sortMark(cashflowSort, 'expenses')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${cashflowSort?.key === 'netProfit' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCashflowSort((prev) => nextSortState(prev, 'netProfit', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCashflowSort((prev) => nextSortState(prev, 'netProfit', 'desc')); } }}
+                      >
+                        Net Profit {sortMark(cashflowSort, 'netProfit')}
+                      </th>
+                      <th
+                        className={`text-right slw-sortable-th${cashflowSort?.key === 'received' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCashflowSort((prev) => nextSortState(prev, 'received', 'desc'))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCashflowSort((prev) => nextSortState(prev, 'received', 'desc')); } }}
+                      >
+                        Received {sortMark(cashflowSort, 'received')}
+                      </th>
                       <th
                         className={`text-right slw-sortable-th${cashflowSort?.key === 'outstanding' ? ' is-active' : ''}`}
                         role="button"
@@ -950,7 +1486,7 @@ export function FinanceReports() {
                         <td className="text-right">{formatCurrency(flow.revenue)}</td>
                         <td className="text-right color-muted">{formatCurrency(flow.commission)}</td>
                         <td className="text-right">{formatCurrency(flow.netIncome)}</td>
-                        <td className={`text-right${flow.expenses > 0 ? ' color-red' : ' color-muted'}`}>{flow.expenses > 0 ? `−${formatCurrency(flow.expenses)}` : '—'}</td>
+                        <td className={`text-right${flow.expenses > 0 ? ' color-red' : ' color-muted'}`}>{flow.expenses > 0 ? `-${formatCurrency(flow.expenses)}` : '-'}</td>
                         <td className={`text-right${flow.netProfit >= 0 ? ' color-green' : ' color-red'}`}>{formatCurrency(flow.netProfit)}</td>
                         <td className="text-right">{formatCurrency(flow.received)}</td>
                         <td className={`text-right${flow.outstanding > 0 ? ' color-red' : ' color-green'}`}>{formatCurrency(flow.outstanding)}</td>
@@ -966,15 +1502,15 @@ export function FinanceReports() {
         </div>
       )}
 
-      {/* ── Ten-Day Range ── */}
+      {/* â”€â”€ Ten-Day Range â”€â”€ */}
       {activeTab === 'tenday' && (
         <div className="fin-tab-content" onClick={() => setSelectedDay(null)}>
 
           {/* Month navigator */}
           <div className="td-month-nav">
-            <button type="button" className="td-month-btn" onClick={(e) => { e.stopPropagation(); navigateTenDayMonth(-1); }}>←</button>
+            <button type="button" className="td-month-btn" onClick={(e) => { e.stopPropagation(); navigateTenDayMonth(-1); }}>&lt;</button>
             <span className="td-month-label">{MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</span>
-            <button type="button" className="td-month-btn" onClick={(e) => { e.stopPropagation(); navigateTenDayMonth(1); }}>→</button>
+            <button type="button" className="td-month-btn" onClick={(e) => { e.stopPropagation(); navigateTenDayMonth(1); }}>&gt;</button>
           </div>
 
           {/* Month Total + Commission Summary */}
@@ -990,7 +1526,7 @@ export function FinanceReports() {
             return (
               <div className="td-summary-row">
 
-                {/* Card 1 — Month Total */}
+                {/* Card 1 â€” Month Total */}
                 <div className="td-sum-card">
                   <div className="td-sum-card-hd">
                     <span className="td-sum-card-title">Month Total</span>
@@ -1003,12 +1539,12 @@ export function FinanceReports() {
                     </div>
                     <div className="td-sum-stat">
                       <span className="td-sum-stat-lbl">Commission Out</span>
-                      <span className="td-sum-stat-val color-muted">−{formatCurrency(mCom)}</span>
+                      <span className="td-sum-stat-val color-muted">-{formatCurrency(mCom)}</span>
                     </div>
                     {mExp > 0 && (
                       <div className="td-sum-stat td-sum-stat--wide">
                         <span className="td-sum-stat-lbl">Expenses</span>
-                        <span className="td-sum-stat-val color-red">−{formatCurrency(mExp)}</span>
+                        <span className="td-sum-stat-val color-red">-{formatCurrency(mExp)}</span>
                       </div>
                     )}
                     <div className="td-sum-stat td-sum-stat--wide">
@@ -1033,7 +1569,7 @@ export function FinanceReports() {
                   </div>
                 </div>
 
-                {/* Card 2 — Commission & Payables */}
+                {/* Card 2 â€” Commission & Payables */}
                 <div className="td-sum-card">
                   <div className="td-sum-card-hd">
                     <span className="td-sum-card-title">Commission &amp; Payables</span>
@@ -1046,7 +1582,7 @@ export function FinanceReports() {
                       const entryLabel = (custId: number, sub: string) => {
                         const cust = getCustomer(custId);
                         const base = cust?.shortCode ? cust.shortCode.toUpperCase() : cust?.name ?? `#${custId}`;
-                        return sub ? `${base} — ${sub}` : base;
+                        return sub ? `${base} - ${sub}` : base;
                       };
                       const commEntries = Array.from(tenDayPayables.agentCommissionMap.values())
                         .filter(e => e.amount > 0 && getCustomer(e.custId)?.hasCommission);
@@ -1080,7 +1616,7 @@ export function FinanceReports() {
                       const entryLabel = (custId: number, sub: string) => {
                         const cust = getCustomer(custId);
                         const base = cust?.shortCode ? cust.shortCode.toUpperCase() : cust?.name ?? `#${custId}`;
-                        return sub ? `${base} — ${sub}` : base;
+                        return sub ? `${base} - ${sub}` : base;
                       };
                       const workerEntries = Array.from(tenDayPayables.slwWorkerMap.values())
                         .filter(e => e.amount > 0 && getCustomer(e.custId)?.hasCommission);
@@ -1089,7 +1625,7 @@ export function FinanceReports() {
                       return (
                         <div className="td-com-col td-com-col--out">
                           <div className="td-com-col-hd">To Pay</div>
-                          <div className="td-com-subhd">Worker — SLW Work</div>
+                          <div className="td-com-subhd">Worker - SLW Work</div>
                           {workerEntries.map(e => (
                             <div key={`slw-${e.custId}|${e.subLabel}`} className="td-com-row">
                               <span>{entryLabel(e.custId, e.subLabel)}</span>
@@ -1128,9 +1664,9 @@ export function FinanceReports() {
             );
           })()}
 
-          {/* Daily Revenue — 3-column breakdown */}
+          {/* Daily Revenue â€” 3-column breakdown */}
           <div className="fin-table-tile">
-            <div className="fin-chart-title">Daily Net Profit — {MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</div>
+            <div className="fin-chart-title">Daily Net Profit - {MONTH_NAMES[tenDayMonth - 1]} {tenDayYear}</div>
             <div className="td-daily-3col">
               {tenDaySets.map(set => {
                 const maxDayNet = Math.max(...set.days.map(d => Math.max(0, d.netProfit)), 1);
@@ -1140,7 +1676,7 @@ export function FinanceReports() {
                       <span className="td-daily-col-set">Set {set.setNumber}</span>
                       <span className="td-daily-col-range">
                         {new Date(`${set.fromDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        {' – '}
+                        {' - '}
                         {new Date(`${set.toDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       </span>
                     </div>
@@ -1224,7 +1760,7 @@ export function FinanceReports() {
                     </div>
                   </div>
 
-                  {/* Day detail panel — shown on tap/click */}
+                  {/* Day detail panel â€” shown on tap/click */}
                   {activeDay && (
                     <div className="td-day-detail">
                       <div className="td-day-detail-header">
@@ -1236,7 +1772,7 @@ export function FinanceReports() {
                           className="td-day-detail-close"
                           onClick={() => setSelectedDay(null)}
                           aria-label="Close"
-                        >×</button>
+                        >x</button>
                       </div>
                       <div className="td-day-detail-grid">
                         <div className="td-day-detail-item">
@@ -1258,7 +1794,7 @@ export function FinanceReports() {
                         {activeDay.expenses > 0 && (
                           <div className="td-day-detail-item">
                             <span>Expenses</span>
-                            <span className="color-red">−{formatCurrency(activeDay.expenses)}</span>
+                            <span className="color-red">-{formatCurrency(activeDay.expenses)}</span>
                           </div>
                         )}
                         <div className="td-day-detail-item">
@@ -1297,7 +1833,7 @@ export function FinanceReports() {
                         <div className="td-stat-divider" />
                         <div className="td-stat-row">
                           <span className="td-stat-key">Expenses</span>
-                          <span className="td-stat-val color-red">−{formatCurrency(set.totalExpenses)}</span>
+                          <span className="td-stat-val color-red">-{formatCurrency(set.totalExpenses)}</span>
                         </div>
                       </>
                     )}

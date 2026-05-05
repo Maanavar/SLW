@@ -13,6 +13,18 @@ const loginSchema = z.object({
 
 const router = Router();
 
+const SESSION_COOKIE = 'slw_session';
+
+function getSessionCookieOptions(expiresAt: string) {
+  return {
+    httpOnly: true,
+    sameSite: 'strict' as const,
+    secure: env.nodeEnv === 'production',
+    expires: new Date(expiresAt),
+    path: '/',
+  };
+}
+
 router.post(
   '/login',
   asyncHandler(async (req, res) => {
@@ -32,6 +44,10 @@ router.post(
       role: 'admin' as const,
     };
     const session = createAuthToken(claims);
+
+    // Set httpOnly cookie (secure) in addition to returning the token in the body
+    // The body token is kept for backward compatibility with the existing localStorage flow
+    res.cookie(SESSION_COOKIE, session.token, getSessionCookieOptions(session.expiresAt));
 
     res.json({
       token: session.token,
@@ -64,6 +80,7 @@ router.post(
   '/logout',
   requireAuth,
   asyncHandler(async (_req, res) => {
+    res.clearCookie(SESSION_COOKIE, { path: '/', httpOnly: true, sameSite: 'strict' });
     res.status(204).send();
   })
 );

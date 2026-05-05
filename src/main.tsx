@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider, createHashRouter } from 'react-router-dom';
 import App from './App';
 import { AppErrorBoundary } from './components/ui/AppErrorBoundary';
+import { ScreenErrorBoundary } from './components/ui/ScreenErrorBoundary';
 import { RequireAuth } from './components/auth/RequireAuth';
 import { DashboardScreen } from './screens/dashboard/DashboardScreen';
 import { CustomersScreen } from './screens/customers/CustomersScreen';
@@ -16,6 +17,7 @@ import { ExpenseManager } from './screens/ExpenseManager';
 import { CommissionDcScreen } from './screens/commission-dc/CommissionDcScreen';
 import { LoggerScreen } from './screens/logger/LoggerScreen';
 import { InvoiceScreen } from './screens/invoice/InvoiceScreen';
+import { OwnerReportScreen } from './screens/owner-report/OwnerReportScreen';
 import { LoginScreen } from './screens/auth/LoginScreen';
 import './styles/index.css';
 
@@ -34,51 +36,55 @@ const router = createHashRouter([
     children: [
       {
         path: '/',
-        element: <JobsScreen />,
+        element: <ScreenErrorBoundary screenName="Jobs"><JobsScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/dashboard',
-        element: <DashboardScreen />,
+        element: <ScreenErrorBoundary screenName="Dashboard"><DashboardScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/customers',
-        element: <CustomersScreen />,
+        element: <ScreenErrorBoundary screenName="Customers"><CustomersScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/work-types',
-        element: <WorkTypesScreen />,
+        element: <ScreenErrorBoundary screenName="Work Types"><WorkTypesScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/payments',
-        element: <PaymentsScreen />,
+        element: <ScreenErrorBoundary screenName="Payments"><PaymentsScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/history',
-        element: <HistoryScreen />,
+        element: <ScreenErrorBoundary screenName="History"><HistoryScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/records',
-        element: <RecordsScreen />,
+        element: <ScreenErrorBoundary screenName="Records"><RecordsScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/finance',
-        element: <FinanceReports />,
+        element: <ScreenErrorBoundary screenName="Audit"><FinanceReports /></ScreenErrorBoundary>,
       },
       {
         path: '/expenses',
-        element: <ExpenseManager />,
+        element: <ScreenErrorBoundary screenName="Expenses"><ExpenseManager /></ScreenErrorBoundary>,
       },
       {
         path: '/commission-dc',
-        element: <CommissionDcScreen />,
+        element: <ScreenErrorBoundary screenName="Commission DC"><CommissionDcScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/logger',
-        element: <LoggerScreen />,
+        element: <ScreenErrorBoundary screenName="Logger"><LoggerScreen /></ScreenErrorBoundary>,
       },
       {
         path: '/invoice',
-        element: <InvoiceScreen />,
+        element: <ScreenErrorBoundary screenName="Invoice"><InvoiceScreen /></ScreenErrorBoundary>,
+      },
+      {
+        path: '/owner-report',
+        element: <ScreenErrorBoundary screenName="Monthly Audit"><OwnerReportScreen /></ScreenErrorBoundary>,
       },
     ],
   },

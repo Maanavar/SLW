@@ -16,6 +16,13 @@
   flex-wrap: wrap;
 }
 
+.trend-chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .trend-chart-title {
   font-size: 13px;
   font-weight: 600;
@@ -47,6 +54,36 @@
   background: var(--bg-elev);
   color: var(--text);
   box-shadow: var(--shadow-sm);
+}
+
+.trend-metric-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trend-metric-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trend-metric-select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.trend-metric-select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .trend-chart-wrap {

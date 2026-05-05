@@ -22,10 +22,25 @@ interface NavSection {
   items: NavItem[];
 }
 
+type SyncStatus = 'ok' | 'offline' | 'error' | 'unknown';
+
+function useSyncInfo(lastSyncAt: string | null, backendConnected: boolean, syncError: string | null): { label: string; status: SyncStatus } {
+  if (syncError) return { label: 'Sync failed', status: 'error' };
+  if (!backendConnected) return { label: 'Offline', status: 'offline' };
+  if (!lastSyncAt) return { label: 'Not synced', status: 'unknown' };
+  const diff = Date.now() - new Date(lastSyncAt).getTime();
+  const mins = Math.floor(diff / 60000);
+  const label = mins < 1 ? 'Synced just now' : mins < 60 ? `Synced ${mins}m ago` : 'Synced';
+  return { label, status: 'ok' };
+}
+
 export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const jobs = useDataStore((s) => s.jobs);
+  const lastSyncAt = useDataStore((s) => s.lastSyncAt);
+  const backendConnected = useDataStore((s) => s.backendConnected);
+  const syncError = useDataStore((s) => s.syncError);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const mobileDrawerOpen = useUIStore((s) => s.mobileDrawerOpen);
   const closeMobileDrawer = useUIStore((s) => s.closeMobileDrawer);
@@ -42,6 +57,7 @@ export function Sidebar() {
   };
   const today = getLocalDateString(new Date());
   const todayCount = groupJobsByCard(jobs.filter((j) => j.date === today)).length;
+  const sync = useSyncInfo(lastSyncAt, backendConnected, syncError);
 
   const navSections: NavSection[] = [
     {
@@ -65,6 +81,19 @@ export function Sidebar() {
         { path: '/invoice', label: 'Invoice', tamil: '??????', icon: <Icon name="invoice" width={15} height={15} /> },
         { path: '/payments', label: 'Record Payments', tamil: '?????????', icon: <Icon name="payments" width={15} height={15} /> },
         { path: '/finance', label: 'Audit', tamil: '????', icon: <Icon name="finance" width={15} height={15} /> },
+        {
+          path: '/owner-report',
+          label: 'Monthly Report',
+          icon: (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <line x1="10" y1="9" x2="8" y2="9" />
+            </svg>
+          ),
+        },
       ],
     },
     {
@@ -132,6 +161,11 @@ export function Sidebar() {
           </section>
         ))}
       </nav>
+
+      <div className="sidebar-sync" data-sync={sync.status} title={syncError ?? sync.label}>
+        <span className="sidebar-sync-dot" />
+        <span className="sidebar-sync-label">{sync.label}</span>
+      </div>
 
       <footer className="sidebar-footer">
         <span className="sidebar-avatar numeric" aria-hidden="true">SA</span>

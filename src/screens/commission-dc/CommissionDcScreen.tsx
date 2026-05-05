@@ -27,7 +27,19 @@ type CustomerFilter = 'all' | 'ww' | 'rmp';
 type WorkerSortKey     = 'customer' | 'outstanding' | 'status';
 type WorkerCardSortKey = 'date' | 'billNo' | 'dcNo' | 'workerName' | 'invoice' | 'commission' | 'pending';
 type WorkerRowStatus   = 'Pending' | 'Settled';
-type AgentSortKey   = 'date' | 'dcNo' | 'billNo' | 'agentName' | 'customer';
+type AgentSortKey =
+  | 'date'
+  | 'card'
+  | 'dcNo'
+  | 'billNo'
+  | 'agentName'
+  | 'customer'
+  | 'type'
+  | 'invoice'
+  | 'commission'
+  | 'netPayable'
+  | 'settled'
+  | 'pending';
 
 interface WorkerRow {
   workerId: number;
@@ -455,11 +467,17 @@ export function CommissionDcScreen() {
     const dir = agentSort.order === 'asc' ? 1 : -1;
     return base.sort((a, b) => {
       if (agentSort.key === 'date')      return a.date.localeCompare(b.date) * dir;
+      if (agentSort.key === 'card')      return col.compare(a.jobCardId, b.jobCardId) * dir;
       if (agentSort.key === 'dcNo')      return col.compare(a.dcNo, b.dcNo) * dir;
       if (agentSort.key === 'billNo')    return col.compare(a.billNo, b.billNo) * dir;
       if (agentSort.key === 'agentName') return col.compare(a.agentName, b.agentName) * dir;
       if (agentSort.key === 'customer')  return col.compare(a.customerName, b.customerName) * dir;
-      return 0;
+      if (agentSort.key === 'type')      return (Number(a.externalDc) - Number(b.externalDc)) * dir;
+      if (agentSort.key === 'invoice')   return (a.invoice - b.invoice) * dir;
+      if (agentSort.key === 'commission') return (a.commission - b.commission) * dir;
+      if (agentSort.key === 'netPayable') return (a.netPayable - b.netPayable) * dir;
+      if (agentSort.key === 'settled')    return (a.settled - b.settled) * dir;
+      return (a.pending - b.pending) * dir;
     });
   }, [filteredAgentRows, agentSort]);
 
@@ -1262,7 +1280,11 @@ export function CommissionDcScreen() {
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('date'); } }}>
                       Date{agentSortMark('date')}
                     </th>
-                    <th>Card</th>
+                    <th className={`slw-sortable-th${agentSort?.key === 'card' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('card')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('card'); } }}>
+                      Card{agentSortMark('card')}
+                    </th>
                     <th className={`slw-sortable-th${agentSort?.key === 'customer' ? ' is-active' : ''}`}
                       role="button" tabIndex={0} onClick={() => toggleAgentSort('customer')}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('customer'); } }}>
@@ -1283,12 +1305,36 @@ export function CommissionDcScreen() {
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('billNo'); } }}>
                       Bill No{agentSortMark('billNo')}
                     </th>
-                    <th className="ta-c">Type</th>
-                    <th className="numeric">Invoice</th>
-                    <th className="numeric">SLW Income</th>
-                    <th className="numeric">Net Payable</th>
-                    <th className="numeric">Sent</th>
-                    <th className="numeric">Pending</th>
+                    <th className={`ta-c slw-sortable-th${agentSort?.key === 'type' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('type')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('type'); } }}>
+                      Type{agentSortMark('type')}
+                    </th>
+                    <th className={`numeric slw-sortable-th${agentSort?.key === 'invoice' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('invoice')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('invoice'); } }}>
+                      Invoice{agentSortMark('invoice')}
+                    </th>
+                    <th className={`numeric slw-sortable-th${agentSort?.key === 'commission' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('commission')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('commission'); } }}>
+                      SLW Income{agentSortMark('commission')}
+                    </th>
+                    <th className={`numeric slw-sortable-th${agentSort?.key === 'netPayable' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('netPayable')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('netPayable'); } }}>
+                      Net Payable{agentSortMark('netPayable')}
+                    </th>
+                    <th className={`numeric slw-sortable-th${agentSort?.key === 'settled' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('settled')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('settled'); } }}>
+                      Sent{agentSortMark('settled')}
+                    </th>
+                    <th className={`numeric slw-sortable-th${agentSort?.key === 'pending' ? ' is-active' : ''}`}
+                      role="button" tabIndex={0} onClick={() => toggleAgentSort('pending')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentSort('pending'); } }}>
+                      Pending{agentSortMark('pending')}
+                    </th>
                     <th className="ta-c">Action</th>
                   </tr>
                 </thead>

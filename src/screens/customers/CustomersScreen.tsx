@@ -136,11 +136,13 @@ export function CustomersScreen() {
     {
       key: 'type',
       label: 'Type',
+      sortable: true,
       render: (value) => <TypeBadge type={value as Customer['type']} />,
     },
     {
       key: 'hasCommission',
       label: 'Commission',
+      sortable: true,
       render: (value) =>
         value ? (
           <span className="badge badge-primary badge-sm">Yes</span>
@@ -151,6 +153,7 @@ export function CustomersScreen() {
     {
       key: 'requiresDc',
       label: 'DC Required',
+      sortable: true,
       render: (value) =>
         value ? (
           <span className="badge badge-warning badge-sm">DC</span>
@@ -161,6 +164,7 @@ export function CustomersScreen() {
     {
       key: 'hasBillNo',
       label: 'Bill No',
+      sortable: true,
       render: (value) =>
         value ? (
           <span className="badge badge-info badge-sm">Required</span>
@@ -171,6 +175,7 @@ export function CustomersScreen() {
     {
       key: 'advanceBalance',
       label: 'Advance',
+      sortable: true,
       render: (value) =>
         value ? (
           <span className="cust-advance-val">{formatCurrency(value as number)}</span>
@@ -181,6 +186,7 @@ export function CustomersScreen() {
     {
       key: 'isActive',
       label: 'Status',
+      sortable: true,
       render: (value) => (
         <span className={`badge badge-sm status-badge ${value ? 'badge-success' : 'badge-default'}`}>
           <span className="status-dot" aria-hidden="true" />

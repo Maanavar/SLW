@@ -170,6 +170,7 @@ async function request<T = void>(path: string, options: RequestOptions = {}): Pr
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
       ...options,
       headers,
+      credentials: 'include', // send httpOnly session cookie on every request
       signal: controller.signal,
     });
 
