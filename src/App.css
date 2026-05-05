@@ -85,3 +85,49 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* ── Session Timeout Modal ───────────────────────────────── */
+.session-timeout-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  animation: backdrop-in 0.2s ease;
+}
+
+.session-timeout-modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-xl);
+}
+
+.session-timeout-title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.session-timeout-body {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.session-timeout-countdown {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-timeout-actions {
+  display: flex;
+  gap: 10px;
+}

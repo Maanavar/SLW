@@ -78,7 +78,7 @@ function formatCustomerLabel(customer: Customer) {
   return customer.name;
 }
 
-type SubmittedSortKey = 'customer' | 'lines' | 'finalBill' | 'status';
+type SubmittedSortKey = 'card' | 'customer' | 'lines' | 'finalBill' | 'commission' | 'paid' | 'status';
 
 const paymentStatusOrder: Record<'Paid' | 'Pending' | 'Partially Paid', number> = {
   Pending: 0,
@@ -329,6 +329,12 @@ export function JobForm() {
     const collator = new Intl.Collator('en-IN', { sensitivity: 'base' });
     const direction = submittedSort.order === 'asc' ? 1 : -1;
     return [...todayJobCards].sort((a, b) => {
+      if (submittedSort.key === 'card') {
+        const aCard = a.primary.jobCardId || `LEGACY-${a.primary.id}`;
+        const bCard = b.primary.jobCardId || `LEGACY-${b.primary.id}`;
+        return collator.compare(aCard, bCard) * direction;
+      }
+
       if (submittedSort.key === 'customer') {
         const aName = getCustomer(a.primary.customerId)?.name || 'Unknown';
         const bName = getCustomer(b.primary.customerId)?.name || 'Unknown';
@@ -345,6 +351,18 @@ export function JobForm() {
         return (aBill - bBill) * direction;
       }
 
+      if (submittedSort.key === 'commission') {
+        const aComm = a.jobs.reduce((sum, job) => sum + (job.commissionAmount || 0), 0);
+        const bComm = b.jobs.reduce((sum, job) => sum + (job.commissionAmount || 0), 0);
+        return (aComm - bComm) * direction;
+      }
+
+      if (submittedSort.key === 'paid') {
+        const aPaid = getJobCardPaymentSummary(a.jobs).paid;
+        const bPaid = getJobCardPaymentSummary(b.jobs).paid;
+        return (aPaid - bPaid) * direction;
+      }
+
       const aStatus = getJobCardPaymentSummary(a.jobs).status;
       const bStatus = getJobCardPaymentSummary(b.jobs).status;
       return (paymentStatusOrder[aStatus] - paymentStatusOrder[bStatus]) * direction;
@@ -354,7 +372,7 @@ export function JobForm() {
     setSubmittedSort((prev) =>
       prev.key === key
         ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
-        : { key, order: key === 'finalBill' ? 'desc' : 'asc' }
+        : { key, order: key === 'finalBill' || key === 'commission' || key === 'paid' ? 'desc' : 'asc' }
     );
   };
   const submittedSortMark = (key: SubmittedSortKey) => {
@@ -904,11 +922,15 @@ export function JobForm() {
   const handleQuickAddCustomerSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!qaCustomerName.trim()) return;
+    if (!qaCustomerCode.trim()) {
+      toast.error('Error', 'Short code is required');
+      return;
+    }
     setQaSubmitting(true);
     try {
       const newCustomer = await addCustomer({
         name: qaCustomerName.trim(),
-        shortCode: qaCustomerCode.trim(),
+        shortCode: qaCustomerCode.trim().toUpperCase(),
         type: qaCustomerType,
         hasCommission: qaCustomerHasComm,
         requiresDc: qaCustomerRequiresDc,
@@ -920,8 +942,9 @@ export function JobForm() {
       setSelectedCustomer(newCustomer);
       setQuickAddMode(null);
       toast.success('Customer added', `"${newCustomer.name}" created and selected`);
-    } catch {
-      toast.error('Error', 'Failed to create customer');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create customer';
+      toast.error('Error', message);
     } finally {
       setQaSubmitting(false);
     }
@@ -1681,7 +1704,20 @@ export function JobForm() {
           <table className="submitted-table">
             <thead>
               <tr>
-                <th>CARD</th>
+                <th
+                  className={`slw-sortable-th${submittedSort.key === 'card' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('card')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('card');
+                    }
+                  }}
+                >
+                  CARD {submittedSortMark('card')}
+                </th>
                 <th
                   className={`slw-sortable-th${submittedSort.key === 'customer' ? ' is-active' : ''}`}
                   role="button"
@@ -1724,8 +1760,34 @@ export function JobForm() {
                 >
                   FINAL BILL {submittedSortMark('finalBill')}
                 </th>
-                <th className="numeric">COMMISSION</th>
-                <th className="numeric">PAID</th>
+                <th
+                  className={`numeric slw-sortable-th${submittedSort.key === 'commission' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('commission')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('commission');
+                    }
+                  }}
+                >
+                  COMMISSION {submittedSortMark('commission')}
+                </th>
+                <th
+                  className={`numeric slw-sortable-th${submittedSort.key === 'paid' ? ' is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSubmittedSort('paid')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSubmittedSort('paid');
+                    }
+                  }}
+                >
+                  PAID {submittedSortMark('paid')}
+                </th>
                 <th
                   className={`slw-sortable-th${submittedSort.key === 'status' ? ' is-active' : ''}`}
                   role="button"
@@ -1839,7 +1901,7 @@ export function JobForm() {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Short code</label>
+                  <label className="form-label">Short code <span className="req-star">*</span></label>
                   <input
                     className="form-input mono"
                     type="text"
@@ -1847,6 +1909,7 @@ export function JobForm() {
                     onChange={(e) => setQaCustomerCode(e.target.value.toUpperCase())}
                     placeholder="e.g. ABC"
                     maxLength={6}
+                    required
                   />
                 </div>
               </div>

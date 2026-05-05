@@ -29,8 +29,10 @@ model Customer {
   hasCommission  Boolean   @default(false)
   requiresDc     Boolean   @default(false)
   hasBillNo      Boolean   @default(false)
-  advanceBalance Float     @default(0)
-  notes          String    @default("")
+  advanceBalance  Float     @default(0)
+  openingBalance  Float     @default(0)
+  invoiceGroup    String?   @db.VarChar(10)
+  notes           String    @default("")
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

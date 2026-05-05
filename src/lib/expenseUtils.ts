@@ -8,13 +8,13 @@ import { getLocalDateString } from './dateUtils';
 
 // Standard expense categories with icons and descriptions
 export const EXPENSE_CATEGORIES = {
-  EB: { label: '⚡ EB (Electricity)', description: 'Electricity bill' },
-  Rent: { label: '🏢 Rent', description: 'Workshop rent' },
-  Salary: { label: '👤 Salary', description: 'Employee salary' },
-  Material: { label: '📦 Material', description: 'Raw materials & supplies' },
-  Fuel: { label: '⛽ Fuel', description: 'Vehicle fuel & travel' },
-  Union: { label: '🏭 Union', description: 'Sangam workshop union payment' },
-  Other: { label: '📌 Other', description: 'Other expenses' },
+  EB: { label: '⚡ EB - மின்சாரம்', description: 'Electricity bill' },
+  Rent: { label: '🏢 Rent - வாடகை', description: 'Workshop rent' },
+  Salary: { label: '👤 Salary - சம்பளம்', description: 'Employee salary' },
+  Material: { label: '📦 Material - சரக்கு', description: 'Raw materials & supplies' },
+  Fuel: { label: '⛽ Fuel - பெட்ரோல்', description: 'Vehicle fuel & travel' },
+  Union: { label: '🏭 Union - சங்கம்', description: 'Sangam workshop union payment' },
+  Other: { label: '📌 Other - மத்தது', description: 'Other expenses' },
 };
 
 export interface ExpenseMetrics {

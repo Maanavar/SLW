@@ -35,17 +35,21 @@ export function CustomerModal() {
   const [hasCommission, setHasCommission] = useState(false);
   const [requiresDc, setRequiresDc] = useState(false);
   const [hasBillNo, setHasBillNo] = useState(false);
+  const [invoiceGroup, setInvoiceGroup] = useState<'rmp' | 'ww' | 'nm' | null>(null);
+  const [openingBalance, setOpeningBalance] = useState('');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
 
   const [commissionWorkers, setCommissionWorkers] = useState<CommissionWorker[]>([]);
   const [newWorkerName, setNewWorkerName] = useState('');
   const [newWorkerActive, setNewWorkerActive] = useState(true);
+  const [newWorkerIsAgent, setNewWorkerIsAgent] = useState(false);
   const [editingWorkerId, setEditingWorkerId] = useState<number | null>(null);
 
   const resetWorkerForm = () => {
     setNewWorkerName('');
     setNewWorkerActive(true);
+    setNewWorkerIsAgent(false);
     setEditingWorkerId(null);
   };
 
@@ -59,6 +63,8 @@ export function CustomerModal() {
         setHasCommission(customer.hasCommission);
         setRequiresDc(customer.requiresDc);
         setHasBillNo(customer.hasBillNo === true);
+        setInvoiceGroup(customer.invoiceGroup ?? null);
+        setOpeningBalance(customer.openingBalance ? String(customer.openingBalance) : '');
         setNotes(customer.notes);
         setIsActive(customer.isActive);
 
@@ -72,6 +78,8 @@ export function CustomerModal() {
       setHasCommission(false);
       setRequiresDc(false);
       setHasBillNo(false);
+      setInvoiceGroup(null);
+      setOpeningBalance('');
       setNotes('');
       setIsActive(true);
       setCommissionWorkers([]);
@@ -100,6 +108,7 @@ export function CustomerModal() {
       const workerPatch = {
         name: newWorkerName.trim(),
         isActive: newWorkerActive,
+        isAgent: newWorkerIsAgent,
         shareType: 'fixed' as const,
         shareValue: 0,
       };
@@ -144,6 +153,7 @@ export function CustomerModal() {
     setEditingWorkerId(worker.id);
     setNewWorkerName(worker.name);
     setNewWorkerActive(worker.isActive);
+    setNewWorkerIsAgent(worker.isAgent ?? false);
   };
 
   const handleDeleteWorker = async (workerId: number) => {
@@ -199,6 +209,8 @@ export function CustomerModal() {
         hasCommission,
         requiresDc,
         hasBillNo,
+        invoiceGroup: invoiceGroup ?? undefined,
+        openingBalance: parseFloat(openingBalance) || 0,
         notes: notes.trim(),
         isActive,
       };
@@ -225,8 +237,9 @@ export function CustomerModal() {
       }
 
       closeModal();
-    } catch {
-      toast.error('Error', 'Failed to save customer');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save customer';
+      toast.error('Error', message);
     }
   };
 
@@ -324,6 +337,39 @@ export function CustomerModal() {
         </div>
 
         <div className="form-group">
+          <label className="form-label" htmlFor="invoice-group">Invoice Billing Group</label>
+          <select
+            id="invoice-group"
+            className="form-input"
+            value={invoiceGroup ?? ''}
+            onChange={(e) => setInvoiceGroup((e.target.value as 'rmp' | 'ww' | 'nm') || null)}
+          >
+            <option value="">Auto-detect (default)</option>
+            <option value="rmp">RMP — DC invoice with RMP handler</option>
+            <option value="ww">WW — DC invoice (Ramani Cars)</option>
+            <option value="nm">NM — DC invoice (N Mahalingam)</option>
+          </select>
+          <p className="form-hint">Set explicitly to override shortCode-based group detection in Invoice screen.</p>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="opening-balance">
+            Opening Balance (₹)
+          </label>
+          <input
+            id="opening-balance"
+            type="number"
+            className="form-input"
+            value={openingBalance}
+            onChange={(e) => setOpeningBalance(e.target.value)}
+            placeholder="0"
+            min="0"
+            step="0.01"
+          />
+          <p className="form-hint">Old dues carried forward from before Apr 2026. Leave 0 if none.</p>
+        </div>
+
+        <div className="form-group">
           <label className="form-label" htmlFor="notes">
             Notes
           </label>
@@ -357,6 +403,9 @@ export function CustomerModal() {
                       <span className={`worker-status ${worker.isActive ? 'active' : 'inactive'}`}>
                         {worker.isActive ? 'Active' : 'Inactive'}
                       </span>
+                      {worker.isAgent && (
+                        <span className="worker-badge-agent">Agent</span>
+                      )}
                     </div>
                     <div className="commission-worker-actions">
                       <button
@@ -405,6 +454,18 @@ export function CustomerModal() {
                       id="worker-active"
                     />
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <div className="checkbox-group">
+                    <ToggleSwitch
+                      checked={newWorkerIsAgent}
+                      onChange={setNewWorkerIsAgent}
+                      label="External Agent"
+                      id="worker-is-agent"
+                    />
+                  </div>
+                  <p className="form-hint">Agents receive commission as income (not expense)</p>
                 </div>
               </div>
 

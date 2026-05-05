@@ -57,7 +57,17 @@ export function DataTable<T extends { id?: string | number }>({
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
 
-      return 0;
+      if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+        return sortOrder === 'asc'
+          ? Number(aVal) - Number(bVal)
+          : Number(bVal) - Number(aVal);
+      }
+
+      const aText = String(aVal);
+      const bText = String(bVal);
+      return sortOrder === 'asc'
+        ? aText.localeCompare(bText, undefined, { numeric: true, sensitivity: 'base' })
+        : bText.localeCompare(aText, undefined, { numeric: true, sensitivity: 'base' });
     });
   }, [data, sortBy, sortOrder]);
 

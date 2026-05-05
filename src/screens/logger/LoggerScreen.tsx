@@ -507,6 +507,7 @@ export function LoggerScreen() {
     {
       key: 'entityId',
       label: 'Entity ID',
+      sortable: true,
       render: (value, row) =>
         value ? (
           <button
@@ -526,11 +527,13 @@ export function LoggerScreen() {
     {
       key: 'actorName',
       label: 'Actor',
+      sortable: true,
       render: (value) => String(value || 'System'),
     },
     {
       key: 'message',
       label: 'Message',
+      sortable: true,
       render: (value) => (
         <span className="logger-message" title={String(value || '-')}>
           {String(value || '-')}

@@ -566,11 +566,12 @@
   right: 0;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-md);
-  min-width: 180px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  min-width: 210px;
   z-index: 200;
   overflow: hidden;
+  padding: 4px 0;
   animation: exportMenuIn 0.12s ease-out;
 }
 
@@ -579,25 +580,41 @@
   to   { opacity: 1; translate: 0 0; }
 }
 
+.records-export-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  padding: 8px 14px 4px;
+}
+
 .records-export-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 9px 14px;
+  padding: 8px 14px;
   border: none;
   background: transparent;
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
+  font-family: var(--font-sans);
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
+.records-export-item svg { opacity: 0.55; flex-shrink: 0; }
 .records-export-item:hover { background: var(--bg-hover); }
+.records-export-item:hover svg { opacity: 0.8; }
 .records-export-item--muted { color: var(--text-muted); font-size: 12px; }
+.records-export-item--green { color: #1a6e3c; }
+.records-export-item--green svg { color: #1a6e3c; opacity: 0.8; }
+.records-export-item--green:hover { background: var(--green-soft); }
 
-.records-export-divider { height: 1px; background: var(--border); margin: 2px 0; }
+.records-export-divider { height: 1px; background: var(--border); margin: 4px 0; }
 
 /* ── Export fields panel ─────────────────────────────────────── */
 .records-export-fields {
@@ -658,6 +675,59 @@
   width: 13px;
   height: 13px;
   margin: 0;
+}
+
+.records-export-col-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.records-export-col-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.records-export-col-row .records-field-check {
+  flex: 1;
+  min-width: 0;
+}
+
+.records-export-col-moves {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.records-export-col-moves button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.records-export-col-moves button:hover:not(:disabled) {
+  background: var(--bg-hover, var(--bg-sunk));
+  color: var(--text);
+  border-color: var(--border-strong, var(--accent-border));
+}
+
+.records-export-col-moves button:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 
 /* ── Main table ──────────────────────────────────────────────── */

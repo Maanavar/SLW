@@ -752,6 +752,29 @@ export interface TenDaySet {
   totalCards: number;
 }
 
+function toCanonicalLocalDate(dateValue: string | null | undefined): string | null {
+  const raw = String(dateValue || '').trim();
+  if (!raw) return null;
+
+  const ymd = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(raw);
+  if (ymd) {
+    const year = ymd[1];
+    const month = String(Number(ymd[2])).padStart(2, '0');
+    const day = String(Number(ymd[3])).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const dmy = /^(\d{1,2})-(\d{1,2})-(\d{4})/.exec(raw);
+  if (dmy) {
+    const day = String(Number(dmy[1])).padStart(2, '0');
+    const month = String(Number(dmy[2])).padStart(2, '0');
+    const year = dmy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
+}
+
 export function calculateTenDayBreakdown(
   jobs: Job[],
   expenses: Expense[],
@@ -762,8 +785,21 @@ export function calculateTenDayBreakdown(
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const monthName = MONTH_NAMES[month - 1];
   const monthStr = `${year}-${String(month).padStart(2, '0')}`;
-  const jobsInMonth = jobs.filter(j => j.date.startsWith(monthStr));
-  const expensesInMonth = expenses.filter(e => e.date.startsWith(monthStr));
+  const jobsByDate = new Map<string, Job[]>();
+  const expensesByDate = new Map<string, number>();
+
+  jobs.forEach((job) => {
+    const normalized = toCanonicalLocalDate(job.date);
+    if (!normalized || !normalized.startsWith(monthStr)) return;
+    if (!jobsByDate.has(normalized)) jobsByDate.set(normalized, []);
+    jobsByDate.get(normalized)!.push(job);
+  });
+
+  expenses.forEach((expense) => {
+    const normalized = toCanonicalLocalDate(expense.date);
+    if (!normalized || !normalized.startsWith(monthStr)) return;
+    expensesByDate.set(normalized, (expensesByDate.get(normalized) || 0) + (expense.amount || 0));
+  });
 
   const sets: Array<{ setNumber: 1 | 2 | 3; from: number; to: number }> = [
     { setNumber: 1, from: 1,  to: 10 },
@@ -774,17 +810,17 @@ export function calculateTenDayBreakdown(
   return sets.map(({ setNumber, from, to }) => {
     const fromDate = `${monthStr}-${String(from).padStart(2, '0')}`;
     const toDate   = `${monthStr}-${String(to).padStart(2, '0')}`;
-    const label    = `Set ${setNumber} — ${monthName} ${from}–${to}`;
+    const label    = `Set ${setNumber} - ${monthName} ${from}-${to}`;
 
     const days: TenDayDayData[] = [];
     for (let d = from; d <= to; d++) {
       const dateStr = `${monthStr}-${String(d).padStart(2, '0')}`;
-      const dayJobs = jobsInMonth.filter(j => j.date === dateStr);
+      const dayJobs = jobsByDate.get(dateStr) || [];
       const slwNetProfit   = dayJobs.filter(j => !isAgentWorkJob(j)).reduce((s, j) => s + getJobNetValue(j), 0);
       const agentNetProfit = dayJobs.filter(j =>  isAgentWorkJob(j)).reduce((s, j) => s + getJobAgentCommissionIncome(j), 0);
       const agentTds       = dayJobs.filter(j =>  isAgentWorkJob(j)).reduce((s, j) => s + getJobAgentTdsAmount(j), 0);
       const agentSettlementPending = dayJobs.reduce((s, j) => s + getJobAgentSettlementPending(j), 0);
-      const dayExpenses    = expensesInMonth.filter(e => e.date === dateStr).reduce((s, e) => s + (e.amount || 0), 0);
+      const dayExpenses    = expensesByDate.get(dateStr) || 0;
       days.push({
         date: dateStr,
         dayNum: d,

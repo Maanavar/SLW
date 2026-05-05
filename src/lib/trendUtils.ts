@@ -59,8 +59,8 @@ function formatLabel(key: string, groupBy: GroupBy): string {
   if (groupBy === 'set') {
     // key format: YYYY-MM-1/2/3
     const parts = key.split('-');
-    const set = parts[3];
-    const ym = parts.slice(0, 3).join('-').slice(0, 7);
+    const set = parts[2];
+    const ym = parts.slice(0, 2).join('-');
     const [year, month] = ym.split('-').map(Number);
     const monthStr = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'short' });
     if (set === '1') return `${monthStr} 1-10`;

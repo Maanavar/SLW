@@ -56,15 +56,17 @@ export function WorkTypesScreen() {
     { key: 'category', label: 'Category', sortable: true },
     { key: 'name', label: 'Name', sortable: true },
     { key: 'shortCode', label: 'Code', sortable: true },
-    { key: 'defaultUnit', label: 'Unit' },
+    { key: 'defaultUnit', label: 'Unit', sortable: true },
     {
       key: 'defaultRate',
       label: 'Default Rate',
+      sortable: true,
       render: (value) => formatCurrency(value as number),
     },
     {
       key: 'isActive',
       label: 'Status',
+      sortable: true,
       render: (value) => (
         <span className={`badge badge-sm status-badge ${value !== false ? 'badge-success' : 'badge-default'}`}>
           <span className="status-dot" aria-hidden="true" />

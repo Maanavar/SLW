@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import { useDataStore } from '@/stores/dataStore';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -9,6 +9,9 @@ import { ToastContainer } from '@/components/ui/ToastContainer';
 import { CustomerModal } from '@/components/modals/CustomerModal';
 import { WorkTypeModal } from '@/components/modals/WorkTypeModal';
 import { CategoryModal } from '@/components/modals/CategoryModal';
+import { SessionTimeoutModal } from '@/components/ui/SessionTimeoutModal';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
+import { apiClient } from '@/lib/apiClient';
 import './App.css';
 
 export default function App() {
@@ -17,6 +20,14 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const hasRestoredRoute = useRef(false);
+
+  const handleSessionLogout = useCallback(async () => {
+    await apiClient.logout();
+    window.dispatchEvent(new Event('slw-auth-changed'));
+    navigate('/login', { replace: true });
+  }, [navigate]);
+
+  const { showWarning, secondsLeft, stayActive } = useSessionTimeout(handleSessionLogout);
 
   useEffect(() => {
     void initializeData();
@@ -76,6 +87,14 @@ export default function App() {
       <CustomerModal />
       <WorkTypeModal />
       <CategoryModal />
+
+      {showWarning && (
+        <SessionTimeoutModal
+          secondsLeft={secondsLeft}
+          onStayActive={stayActive}
+          onLogout={() => void handleSessionLogout()}
+        />
+      )}
     </div>
   );
 }
