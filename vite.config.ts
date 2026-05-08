@@ -24,5 +24,15 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+          charts: ['recharts'],
+          excel: ['exceljs'],
+          exportPdf: ['jspdf', 'jspdf-autotable', 'html-to-image'],
+        },
+      },
+    },
   },
 });

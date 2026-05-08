@@ -28,6 +28,7 @@ export default function App() {
   }, [navigate]);
 
   const { showWarning, secondsLeft, stayActive } = useSessionTimeout(handleSessionLogout);
+  const isDev = import.meta.env.DEV;
 
   useEffect(() => {
     void initializeData();
@@ -45,7 +46,9 @@ export default function App() {
             return;
           }
         } catch (error) {
-          console.error('Failed to restore route:', error);
+          if (isDev) {
+            console.error('Failed to restore route:', error);
+          }
         }
       }
     }
@@ -55,15 +58,31 @@ export default function App() {
         localStorage.setItem(key, location.pathname);
       }
     } catch (error) {
-      console.error('Failed to persist route:', error);
+      if (isDev) {
+        console.error('Failed to persist route:', error);
+      }
     }
-  }, [location.pathname, navigate]);
+  }, [isDev, location.pathname, navigate]);
+
+  useEffect(() => {
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (target.type !== 'number' || target.disabled || target.readOnly) return;
+      const value = target.value.trim();
+      if (!/^0(?:\.0+)?$/.test(value)) return;
+      requestAnimationFrame(() => target.select());
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, []);
 
   return (
     <div className={`app-container ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <Sidebar />
 
-      {/* Backdrop — dims content when mobile drawer is open, tap to close */}
+      {/* Backdrop - dims content when mobile drawer is open, tap to close */}
       {mobileDrawerOpen && (
         <div
           className="mobile-drawer-backdrop"

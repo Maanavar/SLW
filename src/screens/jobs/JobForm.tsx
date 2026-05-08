@@ -6,7 +6,7 @@ import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { StatusBadge } from '@/components/ui/Badge';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
-import { JobLine, JobLineState } from './JobLine';
+import { JobLine, type JobLineState } from './JobLine';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { groupJobsByCard } from '@/lib/reportUtils';
@@ -16,6 +16,12 @@ import {
   isDcApplicableCustomer,
   isCommissionApplicableCustomer,
 } from '@/lib/jobUtils';
+import {
+  isMahalingamCustomerLabel,
+  isRmpCustomer as isRmpCustomerLabel,
+  isWagenAutosCustomerLabel,
+  isWwCustomer as isWwCustomerLabel,
+} from '@/constants/customers';
 import type { CommissionWorker, Customer, Job } from '@/types';
 import './JobForm.css';
 
@@ -35,34 +41,20 @@ function generateJobCardId(jobDate: string, existingJobs: Job[]) {
   return `${prefix}${String(maxSerial + 1).padStart(3, '0')}`;
 }
 
-function normalizeCustomerValue(value?: string) {
-  return (value || '').trim().toLowerCase();
-}
-
 function isWagenAutosCustomer(customer?: Customer | null) {
-  if (!customer) return false;
-  const name = normalizeCustomerValue(customer.name);
-  const shortCode = normalizeCustomerValue(customer.shortCode);
-  return shortCode === 'wgn' || name === 'wagen autos';
+  return Boolean(customer && isWagenAutosCustomerLabel(customer.name, customer.shortCode));
 }
 
 function isRmpCustomer(customer?: Customer | null) {
-  if (!customer) return false;
-  const shortCode = normalizeCustomerValue(customer.shortCode);
-  const name = normalizeCustomerValue(customer.name);
-  return shortCode === 'rmp' || name.includes('ramani motors');
+  return Boolean(customer && isRmpCustomerLabel(customer.shortCode, customer.name));
 }
 
 function isNmCustomer(customer?: Customer | null) {
-  if (!customer) return false;
-  return normalizeCustomerValue(customer.shortCode) === 'nm';
+  return Boolean(customer && isMahalingamCustomerLabel(customer.shortCode, customer.name));
 }
 
 function isRamaniCarsCustomer(customer?: Customer | null) {
-  if (!customer) return false;
-  const shortCode = normalizeCustomerValue(customer.shortCode);
-  const name = normalizeCustomerValue(customer.name);
-  return shortCode === 'ww' || name.includes('ramani cars');
+  return Boolean(customer && isWwCustomerLabel(customer.shortCode, customer.name));
 }
 
 function isAgentFlowCustomer(customer?: Customer | null) {
@@ -187,9 +179,15 @@ export function JobForm() {
   const showAgentFlowFields = isAgentFlowCustomer(selectedCustomer);
   const useWorkerCommission = showCommissionFields && jobFlowType === 'slw_work';
   const useAgentCommission = showAgentFlowFields && jobFlowType === 'agent_work';
-  const commissionWorkersForCustomer = useWorkerCommission && selectedCustomer
-    ? getCommissionWorkersForCustomer(selectedCustomer.id)
-    : [];
+  const selectedCustomerId = selectedCustomer?.id ?? null;
+  const selectedCustomerType = selectedCustomer?.type ?? null;
+  const commissionWorkersForCustomer = useMemo(
+    () =>
+      useWorkerCommission && selectedCustomerId !== null
+        ? getCommissionWorkersForCustomer(selectedCustomerId)
+        : [],
+    [useWorkerCommission, selectedCustomerId, getCommissionWorkersForCustomer]
+  );
   const sortedCommissionWorkers = useMemo(
     () => [...commissionWorkersForCustomer].sort((a, b) => a.name.localeCompare(b.name)),
     [commissionWorkersForCustomer]
@@ -287,11 +285,11 @@ export function JobForm() {
   }, [showVehicleNoField, vehicleNo]);
 
   useEffect(() => {
-    if (!selectedCustomer) return;
+    if (!selectedCustomerType) return;
     const deferredTypes = ['Monthly', 'Invoice', 'Party-Credit'];
-    setPaymentIntent(deferredTypes.includes(selectedCustomer.type) ? 'later' : 'now');
+    setPaymentIntent(deferredTypes.includes(selectedCustomerType) ? 'later' : 'now');
     setPaidAmount('');
-  }, [selectedCustomer?.id]);
+  }, [selectedCustomerId, selectedCustomerType]);
 
   useEffect(() => {
     if (paymentIntent === 'later') {
@@ -1850,7 +1848,7 @@ export function JobForm() {
                           <button type="button" className="row-act-btn" onClick={(e) => { e.stopPropagation(); handleEditCard(group); }} title="Edit">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           </button>
-                          <button type="button" className="row-act-btn row-act-btn--del" onClick={(e) => { e.stopPropagation(); handleDeleteCard(group); }} title="Delete">
+                          <button type="button" className="row-act-btn row-act-btn--del" onClick={(e) => { e.stopPropagation(); void handleDeleteCard(group); }} title="Delete">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                           </button>
                         </div>

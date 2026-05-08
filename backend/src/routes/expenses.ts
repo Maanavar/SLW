@@ -6,7 +6,12 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
 import { parseId } from '../utils/ids';
 import { isLocalDateString } from '../utils/date';
+import { getPagination } from '../utils/pagination';
 import { createActivityLog, getActorFromRequest } from '../services/activityLogService';
+import {
+  assertBulkMutationAllowed,
+  assertDateMutationAllowed,
+} from '../services/monthLockService';
 
 const localDateSchema = z.string().refine(isLocalDateString, {
   message: 'Date must be in YYYY-MM-DD format.',
@@ -93,6 +98,57 @@ router.get(
 );
 
 router.get(
+  '/page',
+  asyncHandler(async (req, res) => {
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
+    const categoryRaw =
+      typeof req.query.category === 'string' ? req.query.category : undefined;
+    const isRecurringRaw =
+      typeof req.query.isRecurring === 'string' ? req.query.isRecurring : undefined;
+    const { limit, offset } = getPagination(req);
+
+    const category =
+      categoryRaw &&
+      EXPENSE_CATEGORIES.includes(categoryRaw as ExpenseCategory)
+        ? (categoryRaw as ExpenseCategory)
+        : undefined;
+    const isRecurring =
+      isRecurringRaw === 'true' ? true : isRecurringRaw === 'false' ? false : undefined;
+
+    const where = {
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+      ...(category ? { category } : {}),
+      ...(typeof isRecurring === 'boolean' ? { isRecurring } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      prisma.expense.findMany({
+        where,
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: limit,
+        skip: offset,
+      }),
+      prisma.expense.count({ where }),
+    ]);
+
+    res.json({
+      total,
+      limit,
+      offset,
+      items,
+    });
+  })
+);
+
+router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const expenseId = parseId(req.params.id);
@@ -113,6 +169,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createExpenseSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    await assertDateMutationAllowed(payload.date, 'Expense creation');
     const normalized = normalizeExpensePayload(payload);
 
     const created = await prisma.expense.create({
@@ -147,6 +204,8 @@ router.put(
       throw new HttpError(404, 'Expense not found');
     }
 
+    await assertDateMutationAllowed(existing.date, 'Expense update');
+
     const merged = createExpenseSchema.parse({
       category: patch.category ?? existing.category,
       description: patch.description ?? existing.description,
@@ -159,6 +218,10 @@ router.put(
           : existing.recurringDay ?? undefined,
       notes: patch.notes !== undefined ? patch.notes : existing.notes ?? undefined,
     });
+
+    if (merged.date !== existing.date) {
+      await assertDateMutationAllowed(merged.date, 'Expense date update');
+    }
 
     const updated = await prisma.expense.update({
       where: { id: expenseId },
@@ -193,6 +256,8 @@ router.delete(
       throw new HttpError(404, 'Expense not found');
     }
 
+    await assertDateMutationAllowed(existing.date, 'Expense delete');
+
     await prisma.expense.delete({
       where: { id: expenseId },
     });
@@ -221,6 +286,7 @@ router.delete(
     }
 
     const actor = getActorFromRequest(req);
+    await assertBulkMutationAllowed('expenses', 'Bulk delete of expenses');
     const deleted = await prisma.expense.deleteMany({});
 
     await createActivityLog({

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
-import { DataTable, Column } from '@/components/ui/DataTable';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { WorkType } from '@/types';
+import { type WorkType } from '@/types';
 import '../customers/CustomersScreen.css';
 import './WorkTypesScreen.css';
 

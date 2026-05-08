@@ -93,7 +93,7 @@ export function WorkTypeModal() {
       }
 
       closeModal();
-    } catch (error) {
+    } catch {
       toast.error('Error', 'Failed to save work type');
     }
   };

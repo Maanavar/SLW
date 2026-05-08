@@ -12,7 +12,7 @@ model User {
   name         String        @db.VarChar(120)
   email        String        @unique @db.VarChar(160)
   role         String        @default("admin") @db.VarChar(20)
-  passwordHash String?       @db.VarChar(255)
+  passwordHash String        @db.VarChar(255)
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -29,16 +29,17 @@ model Customer {
   hasCommission  Boolean   @default(false)
   requiresDc     Boolean   @default(false)
   hasBillNo      Boolean   @default(false)
-  advanceBalance  Float     @default(0)
-  openingBalance  Float     @default(0)
+  advanceBalance  Decimal   @default(0) @db.Decimal(14, 2)
+  openingBalance  Decimal   @default(0) @db.Decimal(14, 2)
   invoiceGroup    String?   @db.VarChar(10)
   notes           String    @default("")
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-  jobs               Job[]
-  payments           Payment[]
-  commissionWorkers  CommissionWorker[]
+  jobs            Job[]
+  payments        Payment[]
+  commissionWorkers CommissionWorker[]
+  followUp       CustomerFollowUp?
 
   @@index([name])
   @@index([shortCode])
@@ -51,7 +52,7 @@ model WorkType {
   name        String   @db.VarChar(120)
   shortCode   String   @db.VarChar(20)
   defaultUnit String   @db.VarChar(30)
-  defaultRate Float
+  defaultRate Decimal  @db.Decimal(14, 2)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -62,39 +63,39 @@ model WorkType {
 }
 
 model Job {
-  id               Int       @id @default(autoincrement())
-  customerId       Int
-  workTypeName     String    @db.VarChar(120)
-  workName         String?   @db.VarChar(60)
-  quantity         Float
-  amount           Float
-  commissionAmount Float     @default(0)
-  commissionWorkerId   Int?
-  commissionWorkerName String?   @db.VarChar(120)
-  netAmount        Float?
-  date             String    @db.VarChar(10)
-  paymentStatus    String?   @db.VarChar(20)
-  paymentMode      String?   @db.VarChar(20)
-  paidAmount       Float?
-  workMode         String?   @db.VarChar(20)
-  isSpotWork       Boolean   @default(false)
-  jobCardId        String?   @db.VarChar(30)
-  jobCardLine      Int?
-  billNo           String?   @db.VarChar(40)
-  dcNo             String?   @db.VarChar(40)
-  vehicleNo        String?   @db.VarChar(40)
-  dcDate           String?   @db.VarChar(10)
+  id                        Int       @id @default(autoincrement())
+  customerId                Int
+  workTypeName              String    @db.VarChar(120)
+  workName                  String?   @db.VarChar(60)
+  quantity                  Float
+  amount                    Decimal   @db.Decimal(14, 2)
+  commissionAmount          Decimal   @default(0) @db.Decimal(14, 2)
+  commissionWorkerId        Int?
+  commissionWorkerName      String?   @db.VarChar(120)
+  netAmount                 Decimal?  @db.Decimal(14, 2)
+  date                      String    @db.VarChar(10)
+  paymentStatus             String?   @db.VarChar(20)
+  paymentMode               String?   @db.VarChar(20)
+  paidAmount                Decimal?  @db.Decimal(14, 2)
+  workMode                  String?   @db.VarChar(20)
+  isSpotWork                Boolean   @default(false)
+  jobCardId                 String?   @db.VarChar(30)
+  jobCardLine               Int?
+  billNo                    String?   @db.VarChar(40)
+  dcNo                      String?   @db.VarChar(40)
+  vehicleNo                 String?   @db.VarChar(40)
+  dcDate                    String?   @db.VarChar(10)
   dcApproval       Boolean?
   rmpHandler       String?   @db.VarChar(20)
-  jobFlowType          String?   @db.VarChar(20)
-  externalDc           Boolean?  @default(false)
-  agentName            String?   @db.VarChar(120)
-  agentCommissionAmount Float?   @default(0)
-  agentTdsAmount        Float?   @default(0)
-  agentSettlementPaidAmount Float? @default(0)
-  notes            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  jobFlowType               String?   @db.VarChar(20)
+  externalDc                Boolean?  @default(false)
+  agentName                 String?   @db.VarChar(120)
+  agentCommissionAmount     Decimal?  @default(0) @db.Decimal(14, 2)
+  agentTdsAmount            Decimal?  @default(0) @db.Decimal(14, 2)
+  agentSettlementPaidAmount Decimal?  @default(0) @db.Decimal(14, 2)
+  notes                     String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
@@ -109,7 +110,7 @@ model Job {
 model Payment {
   id                 Int      @id @default(autoincrement())
   customerId         Int
-  amount             Float
+  amount             Decimal  @db.Decimal(14, 2)
   date               String   @db.VarChar(10)
   paymentMode        String   @db.VarChar(20)
   breakdown          Json?
@@ -150,7 +151,7 @@ model CommissionPayment {
   workerName String   @db.VarChar(120)
   customerId Int
   jobIds     Json
-  amount     Float
+  amount     Decimal  @db.Decimal(14, 2)
   date       String   @db.VarChar(10)
   notes      String?
   createdAt  DateTime @default(now())
@@ -166,7 +167,7 @@ model Expense {
   id           Int      @id @default(autoincrement())
   category     String   @db.VarChar(20)
   description  String   @db.VarChar(255)
-  amount       Float
+  amount       Decimal  @db.Decimal(14, 2)
   date         String   @db.VarChar(10)
   isRecurring  Boolean  @default(false)
   recurringDay Int?
@@ -198,4 +199,37 @@ model ActivityLog {
   @@index([createdAt])
   @@index([entityType, createdAt])
   @@map("activity_logs")
+}
+
+model CustomerFollowUp {
+  customerId        Int      @id
+  nextFollowUpDate  String   @db.VarChar(10)
+  notes             String?  @db.VarChar(1000)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([nextFollowUpDate])
+  @@map("customer_followups")
+}
+
+model MonthLock {
+  monthKey       String   @id @db.VarChar(7)
+  notes          String?  @db.VarChar(500)
+  lockedByUserId Int?
+  lockedByName   String?  @db.VarChar(120)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("month_locks")
+}
+
+model SystemSetting {
+  key       String   @id @db.VarChar(80)
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }

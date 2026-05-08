@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+backend/node_modules
+dist
+coverage
+backups
+certs
+*.log
+*.tmp
+*.swp
+.DS_Store

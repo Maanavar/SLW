@@ -726,3 +726,23 @@
 }
 
 .hist-dc-banner-clear:hover { opacity: 1; }
+
+.hist-dc-banner-action {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  opacity: 0.8;
+  border: 1px solid currentColor;
+}
+
+.hist-dc-banner-action:hover { opacity: 1; }
+
+.hist-dc-banner-note {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.85;
+}

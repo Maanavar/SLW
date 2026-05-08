@@ -81,6 +81,11 @@ export function DataTable<T extends { id?: string | number }>({
     setSortOrder('asc');
   };
 
+  const getSortMark = (key: keyof T): string => {
+    if (sortBy !== key) return '\u2195';
+    return sortOrder === 'asc' ? '\u2191' : '\u2193';
+  };
+
   return (
     <div className={`data-table-shell ${className}`}>
       {loading ? (
@@ -108,11 +113,13 @@ export function DataTable<T extends { id?: string | number }>({
                   >
                     <span className="header-content">
                       {col.label}
-                      {col.sortable && sortBy === col.key ? (
+                      {col.sortable ? (
                         <span
-                          className={`sort-icon ${sortOrder}`}
+                          className={`sort-icon ${sortBy === col.key ? 'is-active' : ''}`}
                           aria-hidden="true"
-                        />
+                        >
+                          {getSortMark(col.key)}
+                        </span>
                       ) : null}
                     </span>
                   </th>

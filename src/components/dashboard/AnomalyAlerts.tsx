@@ -11,7 +11,7 @@ function loadDismissedIds(): string[] {
     if (!raw) {
       return [];
     }
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
   } catch {
     return [];

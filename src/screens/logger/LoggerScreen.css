@@ -100,6 +100,119 @@
   background: var(--bg-elev);
 }
 
+.lgr-admin-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  background: var(--bg-elev);
+}
+
+.lgr-admin-panel h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lgr-admin-panel p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.lgr-admin-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.lgr-admin-block {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: var(--bg-sunk);
+}
+
+.lgr-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lgr-admin-status {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lgr-lock-list {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.lgr-lock-list h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.lgr-lock-row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elev);
+}
+
+.lgr-lock-row + .lgr-lock-row {
+  margin-top: 8px;
+}
+
+.lgr-backup-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.lgr-backup-row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elev);
+}
+
+.lgr-backup-name {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.lgr-backup-meta {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lgr-admin-empty {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 /* ── Link button inside table ────────────────────────────── */
 .logger-link-btn {
   border: none;
@@ -321,5 +434,11 @@
   .lgr-search,
   .lgr-select {
     width: 100%;
+  }
+
+  .lgr-lock-row,
+  .lgr-backup-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

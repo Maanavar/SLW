@@ -5,8 +5,12 @@ import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { getJobPaidAmount, getPaymentStatusFromAmounts, isDcApplicableCustomer, isCommissionApplicableCustomer } from '@/lib/jobUtils';
+import {
+  isRmpCustomer as isRmpCustomerLabel,
+  isWwCustomer as isWwCustomerLabel,
+} from '@/constants/customers';
 import type { Customer, Job } from '@/types';
-import { JobLine, JobLineState } from '@/screens/jobs/JobLine';
+import { JobLine, type JobLineState } from '@/screens/jobs/JobLine';
 import './JobCardEditOverlay.css';
 
 interface JobCardEditOverlayProps {
@@ -66,25 +70,22 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   const showCommissionFields = isCommissionApplicableCustomer(selectedCustomer);
   const showAgentFlowFields = Boolean(
     selectedCustomer &&
-    (
-      ['rmp', 'ww'].includes((selectedCustomer.shortCode || '').toLowerCase()) ||
-      (selectedCustomer.name || '').toLowerCase().includes('ramani motors') ||
-      (selectedCustomer.name || '').toLowerCase().includes('ramani cars')
-    )
+    (isRmpCustomerLabel(selectedCustomer.shortCode, selectedCustomer.name) ||
+      isWwCustomerLabel(selectedCustomer.shortCode, selectedCustomer.name))
   );
   const useWorkerCommission = showCommissionFields && jobFlowType === 'slw_work';
   const useAgentCommission = showAgentFlowFields && jobFlowType === 'agent_work';
+  const selectedCustomerId = selectedCustomer?.id ?? null;
   const showRmpHandlerField = Boolean(
     selectedCustomer &&
-    ((selectedCustomer.shortCode || '').toLowerCase() === 'rmp' ||
-     (selectedCustomer.name || '').toLowerCase().includes('ramani motors'))
+    isRmpCustomerLabel(selectedCustomer.shortCode, selectedCustomer.name)
   );
   const commissionWorkersForCustomer = useMemo(
     () =>
-      useWorkerCommission && selectedCustomer
-        ? getCommissionWorkersForCustomer(selectedCustomer.id)
+      useWorkerCommission && selectedCustomerId !== null
+        ? getCommissionWorkersForCustomer(selectedCustomerId)
         : [],
-    [useWorkerCommission, selectedCustomer?.id, getCommissionWorkersForCustomer]
+    [useWorkerCommission, selectedCustomerId, getCommissionWorkersForCustomer]
   );
   const sortedCommissionWorkers = useMemo(
     () => [...commissionWorkersForCustomer].sort((a, b) => a.name.localeCompare(b.name)),

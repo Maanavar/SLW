@@ -11,14 +11,10 @@ export interface ActorContext {
 
 export function getActorFromRequest(req: Request): ActorContext {
   const authUser = getAuthUser(req);
-  const actorNameHeader = req.header('x-actor-name');
-  const actorIdHeader = req.header('x-actor-user-id');
-  const parsedId = actorIdHeader ? Number(actorIdHeader) : NaN;
 
   return {
-    actorUserId:
-      Number.isInteger(parsedId) && parsedId > 0 ? parsedId : (authUser?.id ?? null),
-    actorName: actorNameHeader?.trim() ? actorNameHeader.trim() : (authUser?.name ?? null),
+    actorUserId: authUser?.id ?? null,
+    actorName: authUser?.name ?? null,
   };
 }
 

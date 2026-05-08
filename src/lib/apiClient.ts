@@ -1,19 +1,20 @@
-import type {
+﻿import type {
   ActivityLog,
   AuthUser,
+  BackupListItem,
   CommissionPayment,
   CommissionWorker,
   Customer,
   Expense,
+  FollowUpOverview,
   Job,
+  MonthLockStateResponse,
   Payment,
   WorkType,
 } from '@/types';
 import ENV from './envConfig';
 
-interface RequestOptions extends RequestInit {
-  includeAdminKey?: boolean;
-}
+type RequestOptions = RequestInit;
 
 interface LogsResponse {
   total: number;
@@ -23,13 +24,38 @@ interface LogsResponse {
 }
 
 interface LoginResponse {
-  token: string;
   expiresAt: string;
   user: AuthUser;
 }
 
 interface SessionResponse {
   user: AuthUser;
+}
+
+interface DateWindowParams {
+  from?: string;
+  to?: string;
+}
+
+interface CustomerScopedParams extends DateWindowParams {
+  customerId?: number;
+}
+
+interface ExpenseQueryParams extends DateWindowParams {
+  category?: string;
+  isRecurring?: boolean;
+}
+
+interface PaginationParams {
+  limit?: number;
+  offset?: number;
+}
+
+interface PaginatedResponse<T> {
+  total: number;
+  limit: number;
+  offset: number;
+  items: T[];
 }
 
 export interface LegacyImportPayload {
@@ -51,12 +77,6 @@ export interface PurgeScope {
   logs?: boolean;
 }
 
-const ADMIN_KEY_STORAGE = 'slw_admin_api_key';
-const AUTH_TOKEN_STORAGE = 'slw_auth_token';
-const OFFLINE_AUTH_PREFIX = 'slw-offline::';
-let runtimeAdminApiKey = '';
-let runtimeAuthToken = '';
-
 function emitAuthChange() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('slw-auth-changed'));
@@ -67,104 +87,59 @@ function getApiBaseUrl(): string {
   return `${ENV.apiBaseUrl.replace(/\/+$/, '')}/api`;
 }
 
-function getAdminApiKey(): string {
-  if (runtimeAdminApiKey) {
-    return runtimeAdminApiKey;
-  }
-
-  const fromStorage =
-    typeof window !== 'undefined' ? window.localStorage.getItem(ADMIN_KEY_STORAGE) : '';
-  if (fromStorage) {
-    runtimeAdminApiKey = fromStorage;
-    return runtimeAdminApiKey;
-  }
-
-  return ENV.adminApiKey || '';
-}
-
-function setAdminApiKey(apiKey: string) {
-  runtimeAdminApiKey = apiKey.trim();
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(ADMIN_KEY_STORAGE, runtimeAdminApiKey);
-  }
-}
-
-function clearAdminApiKey() {
-  runtimeAdminApiKey = '';
-  if (typeof window !== 'undefined') {
-    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
-  }
-}
-
-function getAuthToken(): string {
-  if (runtimeAuthToken) {
-    return runtimeAuthToken;
-  }
-
-  const fromStorage =
-    typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_TOKEN_STORAGE) : '';
-  if (fromStorage) {
-    runtimeAuthToken = fromStorage;
-    return runtimeAuthToken;
-  }
-
-  return '';
-}
-
-function isOfflineAuthToken(token: string): boolean {
-  return token.startsWith(OFFLINE_AUTH_PREFIX);
-}
-
-function createOfflineSession(displayName?: string) {
-  const name = (displayName || 'Offline Admin').trim() || 'Offline Admin';
-  const offlineToken = `${OFFLINE_AUTH_PREFIX}${encodeURIComponent(name)}`;
-  setAuthToken(offlineToken);
-}
-
-function setAuthToken(token: string) {
-  runtimeAuthToken = token.trim();
-  if (typeof window !== 'undefined') {
-    if (runtimeAuthToken) {
-      window.localStorage.setItem(AUTH_TOKEN_STORAGE, runtimeAuthToken);
-    } else {
-      window.localStorage.removeItem(AUTH_TOKEN_STORAGE);
+function appendQuery(path: string, params?: object) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value === undefined) {
+      continue;
     }
+    if (value === null) {
+      continue;
+    }
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+      continue;
+    }
+    search.set(key, String(value));
   }
-  emitAuthChange();
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
 }
 
-function clearAuthToken() {
-  runtimeAuthToken = '';
-  if (typeof window !== 'undefined') {
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE);
+function parseResponseBody(text: string): unknown {
+  if (!text) {
+    return null;
   }
-  emitAuthChange();
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { error: text };
+  }
+}
+
+function isErrorBody(body: unknown): body is { error: string } {
+  if (typeof body !== 'object' || body === null || !('error' in body)) {
+    return false;
+  }
+  const { error } = body;
+  return typeof error === 'string' && error.trim().length > 0;
+}
+
+function getErrorMessage(body: unknown, status: number): string {
+  if (isErrorBody(body)) {
+    return body.error;
+  }
+  return `Request failed (${status})`;
 }
 
 async function request<T = void>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), ENV.apiTimeout);
-  const method = (options.method || 'GET').toUpperCase();
-  const isMutation = method !== 'GET' && method !== 'HEAD';
 
   try {
     const headers = new Headers(options.headers || {});
     if (options.body !== undefined) {
       headers.set('Content-Type', 'application/json');
-    }
-    if (isMutation) {
-      headers.set('x-actor-name', 'SLW Frontend');
-    }
-    const authToken = getAuthToken();
-    if (authToken && !isOfflineAuthToken(authToken)) {
-      headers.set('authorization', `Bearer ${authToken}`);
-    }
-
-    if (options.includeAdminKey) {
-      const adminKey = getAdminApiKey();
-      if (adminKey) {
-        headers.set('x-admin-key', adminKey);
-      }
     }
 
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
@@ -179,16 +154,13 @@ async function request<T = void>(path: string, options: RequestOptions = {}): Pr
     }
 
     const text = await response.text();
-    const body = text ? JSON.parse(text) : null;
+    const body = parseResponseBody(text);
 
     if (!response.ok) {
-      if (response.status === 401 && authToken && !isOfflineAuthToken(authToken)) {
-        clearAuthToken();
+      if (response.status === 401) {
+        emitAuthChange();
       }
-      const message =
-        body && typeof body.error === 'string'
-          ? body.error
-          : `Request failed (${response.status})`;
+      const message = getErrorMessage(body, response.status);
       throw new Error(message);
     }
 
@@ -204,20 +176,23 @@ async function request<T = void>(path: string, options: RequestOptions = {}): Pr
 }
 
 export const apiClient = {
-  hasAuthToken: () => Boolean(getAuthToken()),
-  hasOfflineSession: () => isOfflineAuthToken(getAuthToken()),
-  createOfflineSession,
-  setAuthToken,
-  clearAuthToken,
-  hasAdminApiKey: () => Boolean(getAdminApiKey()),
-  setAdminApiKey,
-  clearAdminApiKey,
-  login: async (payload: { password: string; name?: string }) => {
+  hasAuthToken: () => false,
+  hasOfflineSession: () => false,
+  createOfflineSession: () => {
+    throw new Error('Offline login is disabled.');
+  },
+  setAuthToken: () => {
+    throw new Error('Direct auth token management is disabled.');
+  },
+  clearAuthToken: () => {
+    emitAuthChange();
+  },
+  login: async (payload: { password: string; name?: string; email?: string }) => {
     const response = await request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    setAuthToken(response.token);
+    emitAuthChange();
     return response;
   },
   getAuthSession: () => request<SessionResponse>('/auth/session'),
@@ -225,7 +200,7 @@ export const apiClient = {
     try {
       await request<void>('/auth/logout', { method: 'POST' });
     } finally {
-      clearAuthToken();
+      emitAuthChange();
     }
   },
 
@@ -233,154 +208,137 @@ export const apiClient = {
   createCustomer: (payload: Omit<Customer, 'id'>) =>
     request<Customer>('/customers', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   updateCustomer: (id: number, payload: Partial<Customer>) =>
     request<Customer>(`/customers/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deleteCustomer: (id: number) =>
     request<void>(`/customers/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
   getWorkTypes: () => request<WorkType[]>('/work-types'),
   createWorkType: (payload: Omit<WorkType, 'id'>) =>
     request<WorkType>('/work-types', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   updateWorkType: (id: number, payload: Partial<WorkType>) =>
     request<WorkType>(`/work-types/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deleteWorkType: (id: number) =>
     request<void>(`/work-types/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
-  getJobs: () => request<Job[]>('/jobs'),
+  getJobs: (params?: CustomerScopedParams) => request<Job[]>(appendQuery('/jobs', params ?? {})),
+  getJobsPage: (params?: CustomerScopedParams & PaginationParams) =>
+    request<PaginatedResponse<Job>>(appendQuery('/jobs/page', params ?? {})),
   createJob: (payload: Omit<Job, 'id' | 'createdAt'>) =>
     request<Job>('/jobs', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   createJobsBulk: (payload: Omit<Job, 'id' | 'createdAt'>[]) =>
     request<Job[]>('/jobs/bulk', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify({ jobs: payload }),
     }),
   updateJob: (id: number, payload: Partial<Job>) =>
     request<Job>(`/jobs/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deleteJob: (id: number) =>
     request<void>(`/jobs/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
   deleteAllJobs: () =>
     request<{ deleted: number }>('/jobs?all=true', {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
-  getPayments: () => request<Payment[]>('/payments'),
+  getPayments: (params?: CustomerScopedParams) =>
+    request<Payment[]>(appendQuery('/payments', params ?? {})),
+  getPaymentsPage: (params?: CustomerScopedParams & PaginationParams) =>
+    request<PaginatedResponse<Payment>>(appendQuery('/payments/page', params ?? {})),
   createPayment: (payload: Omit<Payment, 'id' | 'createdAt'>) =>
     request<Payment>('/payments', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   updatePayment: (id: number, payload: Partial<Payment>) =>
     request<Payment>(`/payments/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deletePayment: (id: number) =>
     request<void>(`/payments/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
   deleteAllPayments: () =>
     request<{ deleted: number }>('/payments?all=true', {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
-  getExpenses: () => request<Expense[]>('/expenses'),
+  getExpenses: (params?: ExpenseQueryParams) =>
+    request<Expense[]>(appendQuery('/expenses', params ?? {})),
+  getExpensesPage: (params?: ExpenseQueryParams & PaginationParams) =>
+    request<PaginatedResponse<Expense>>(appendQuery('/expenses/page', params ?? {})),
   createExpense: (payload: Omit<Expense, 'id' | 'createdAt'>) =>
     request<Expense>('/expenses', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   updateExpense: (id: number, payload: Partial<Expense>) =>
     request<Expense>(`/expenses/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deleteExpense: (id: number) =>
     request<void>(`/expenses/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
   deleteAllExpenses: () =>
     request<{ deleted: number }>('/expenses?all=true', {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
   getCommissionWorkers: () => request<CommissionWorker[]>('/commission-workers'),
   createCommissionWorker: (payload: Omit<CommissionWorker, 'id' | 'createdAt'>) =>
     request<CommissionWorker>('/commission-workers', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   updateCommissionWorker: (id: number, payload: Partial<CommissionWorker>) =>
     request<CommissionWorker>(`/commission-workers/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deleteCommissionWorker: (id: number) =>
     request<void>(`/commission-workers/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
   getCommissionPayments: () => request<CommissionPayment[]>('/commission-payments'),
   createCommissionPayment: (payload: Omit<CommissionPayment, 'id' | 'createdAt'>) =>
     request<CommissionPayment>('/commission-payments', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   updateCommissionPayment: (id: number, payload: Partial<CommissionPayment>) =>
     request<CommissionPayment>(`/commission-payments/${id}`, {
       method: 'PUT',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
   deleteCommissionPayment: (id: number) =>
     request<void>(`/commission-payments/${id}`, {
       method: 'DELETE',
-      includeAdminKey: true,
     }),
 
   getLogs: (params?: { limit?: number; offset?: number; entityType?: string; action?: string }) => {
@@ -397,17 +355,59 @@ export const apiClient = {
   importLegacyData: (payload: LegacyImportPayload) =>
     request<{ ok: boolean; imported: Record<string, number> }>('/admin/import-legacy', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify(payload),
     }),
 
   purgeData: (scope: PurgeScope) =>
     request<{ ok: boolean; summary: Record<string, number> }>('/admin/purge', {
       method: 'POST',
-      includeAdminKey: true,
       body: JSON.stringify({
         confirmText: 'DELETE ALL DATA',
         scope,
       }),
+    }),
+
+  getFollowUpOverview: () => request<FollowUpOverview>('/followups'),
+  upsertCustomerFollowUp: (customerId: number, payload: { nextFollowUpDate: string; notes?: string | null }) =>
+    request<void>(`/followups/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  clearCustomerFollowUp: (customerId: number) =>
+    request<void>(`/followups/${customerId}`, {
+      method: 'DELETE',
+    }),
+
+  getMonthLockState: () =>
+    request<MonthLockStateResponse>('/admin/month-locks'),
+  lockMonth: (payload: { monthKey: string; notes?: string | null }) =>
+    request<void>('/admin/month-locks', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  unlockMonth: (monthKey: string) =>
+    request<void>(`/admin/month-locks/${monthKey}`, {
+      method: 'DELETE',
+    }),
+  setMonthLockOverride: (payload: { minutes: number; reason?: string | null }) =>
+    request('/admin/month-locks/override', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  clearMonthLockOverride: () =>
+    request<void>('/admin/month-locks/override', {
+      method: 'DELETE',
+    }),
+
+  getBackups: () => request<BackupListItem[]>('/admin/backups'),
+  createBackup: () =>
+    request<BackupListItem>('/admin/backups/create', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  restoreBackup: (fileName: string) =>
+    request<{ ok: boolean; restoredFile: string }>('/admin/backups/restore', {
+      method: 'POST',
+      body: JSON.stringify({ fileName }),
     }),
 };

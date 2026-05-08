@@ -46,11 +46,11 @@ type SearchResult = CardResult | CustomerResult;
 
 function escapeHtml(text: string): string {
   return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function escapeRegExp(text: string): string {
@@ -90,7 +90,9 @@ function CardDetail({ card }: { card: CardResult }) {
             )}
             <span className="usearch-detail-amt">{formatCurrency(line.amount)}</span>
             {line.commissionAmount > 0 && (
-              <span className="usearch-detail-comm">comm {formatCurrency(line.commissionAmount)}</span>
+              <span className="usearch-detail-comm">
+                comm {formatCurrency(line.commissionAmount)}
+              </span>
             )}
             {line.dcNo && <span className="usearch-detail-dc">DC: {line.dcNo}</span>}
             {line.vehicleNo && <span className="usearch-detail-dc">{line.vehicleNo}</span>}
@@ -203,10 +205,7 @@ export function UniversalSearch() {
 
     for (const c of customers) {
       if (!c.isActive) continue;
-      if (
-        c.name.toLowerCase().includes(q) ||
-        (c.shortCode || '').toLowerCase().includes(q)
-      ) {
+      if (c.name.toLowerCase().includes(q) || (c.shortCode || '').toLowerCase().includes(q)) {
         out.push({
           type: 'customer',
           id: c.id,
@@ -238,7 +237,9 @@ export function UniversalSearch() {
   }, [query]);
 
   const openCard = (card: CardResult) => {
-    navigate(`/history?cardKey=${encodeURIComponent(card.key)}&date=${encodeURIComponent(card.date)}`);
+    navigate(
+      `/history?cardKey=${encodeURIComponent(card.key)}&date=${encodeURIComponent(card.date)}`
+    );
     setOpen(false);
   };
 
@@ -305,7 +306,9 @@ export function UniversalSearch() {
               }
             }}
           />
-          <kbd className="usearch-esc" onClick={() => setOpen(false)}>Esc</kbd>
+          <button type="button" className="usearch-esc" onClick={() => setOpen(false)}>
+            Esc
+          </button>
         </div>
 
         {query.trim().length >= 2 && (
@@ -316,7 +319,9 @@ export function UniversalSearch() {
 
             {cardResults.length > 0 && (
               <section className="usearch-group">
-                <p className="usearch-group-label">Job Cards - Enter/click opens card, chevron previews lines</p>
+                <p className="usearch-group-label">
+                  Job Cards - Enter/click opens card, chevron previews lines
+                </p>
                 {cardResults.map((r, idx) => (
                   <div key={r.key}>
                     <div className="usearch-card-row-wrap">
@@ -343,13 +348,17 @@ export function UniversalSearch() {
                         {r.dcNos.length > 0 && (
                           <span
                             className="usearch-dc"
-                            dangerouslySetInnerHTML={{ __html: `DC: ${highlight(r.dcNos.join(', '), query)}` }}
+                            dangerouslySetInnerHTML={{
+                              __html: `DC: ${highlight(r.dcNos.join(', '), query)}`,
+                            }}
                           />
                         )}
                         {r.vehicleNos.length > 0 && (
                           <span
                             className="usearch-dc"
-                            dangerouslySetInnerHTML={{ __html: `VH: ${highlight(r.vehicleNos.join(', '), query)}` }}
+                            dangerouslySetInnerHTML={{
+                              __html: `VH: ${highlight(r.vehicleNos.join(', '), query)}`,
+                            }}
                           />
                         )}
                         <span className="usearch-amount">{formatCurrency(r.finalBill)}</span>
@@ -406,7 +415,10 @@ export function UniversalSearch() {
         )}
 
         {query.trim().length < 2 && (
-          <p className="usearch-hint">Type at least 2 characters &middot; Ctrl+K to toggle &middot; &uarr;&darr; navigate &middot; &crarr; open</p>
+          <p className="usearch-hint">
+            Type at least 2 characters &middot; Ctrl+K to toggle &middot; &uarr;&darr; navigate
+            &middot; &crarr; open
+          </p>
         )}
       </div>
     </>

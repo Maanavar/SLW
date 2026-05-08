@@ -1,0 +1,288 @@
+.fup-screen {
+  display: grid;
+  gap: 14px;
+}
+
+.fup-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fup-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.fup-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.fup-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.fup-summary-card {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px;
+}
+
+.fup-summary-card--strong {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.fup-summary-label {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.fup-summary-value {
+  margin: 7px 0 0;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.fup-summary-amount {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.fup-call-list {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+}
+
+.fup-call-list h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.fup-call-note {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.fup-call-chips {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.fup-call-chip {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 10px;
+  background: var(--bg-sunk);
+}
+
+.fup-call-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.fup-call-code {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.fup-call-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.fup-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.fup-search {
+  width: 260px;
+  max-width: 100%;
+}
+
+.fup-filter {
+  width: 220px;
+  max-width: 100%;
+}
+
+.fup-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
+.fup-table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+}
+
+.fup-table th {
+  padding: 10px 14px;
+  background: var(--bg-sunk);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.fup-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+  vertical-align: top;
+}
+
+.fup-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fup-table tbody tr:hover td {
+  background: var(--bg-sunk);
+}
+
+.fup-table th.numeric,
+.fup-table td.numeric {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+
+.fup-customer-name {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.fup-customer-meta {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.fup-date-input,
+.fup-note-input {
+  width: 100%;
+}
+
+.fup-note-input {
+  min-width: 170px;
+}
+
+.fup-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.fup-empty {
+  margin: 0;
+  padding: 24px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 1024px) {
+  .fup-table {
+    min-width: 760px;
+  }
+
+  .fup-table th,
+  .fup-table td {
+    padding: 9px 10px;
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 768px) {
+  .fup-screen {
+    gap: 12px;
+  }
+
+  .fup-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fup-header .btn {
+    width: 100%;
+  }
+
+  .fup-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fup-search,
+  .fup-filter {
+    width: 100%;
+  }
+
+  .fup-title {
+    font-size: 19px;
+  }
+}
+
+@media (max-width: 480px) {
+  .fup-table {
+    min-width: 640px;
+  }
+
+  .fup-title {
+    font-size: 17px;
+  }
+}

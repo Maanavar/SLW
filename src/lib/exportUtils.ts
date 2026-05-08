@@ -1,84 +1,129 @@
-import * as XLSX from 'xlsx';
-import type { Job, Payment, Expense, Customer } from '@/types';
+import type { Workbook } from 'exceljs';
+import type { Customer, Expense, Job, Payment } from '@/types';
 import { getJobFinalBillValue } from '@/lib/jobUtils';
 
-function saveWorkbook(wb: XLSX.WorkBook, fileName: string) {
-  XLSX.writeFile(wb, fileName);
+type ExcelRow = Record<string, string | number>;
+
+async function loadExcelJs() {
+  return import('exceljs');
 }
 
-export function exportJobsToExcel(
+function toColumnWidth(header: string): number {
+  return Math.max(12, Math.min(40, header.length + 4));
+}
+
+function addSheet(workbook: Workbook, name: string, rows: ExcelRow[]) {
+  const sheet = workbook.addWorksheet(name);
+  if (rows.length === 0) {
+    sheet.addRow(['No data']);
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  sheet.columns = headers.map((header) => ({
+    header,
+    key: header,
+    width: toColumnWidth(header),
+  }));
+
+  rows.forEach((row) => {
+    sheet.addRow(row);
+  });
+
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true };
+}
+
+function downloadBuffer(buffer: ArrayBuffer, fileName: string) {
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+async function saveWorkbook(workbook: Workbook, fileName: string) {
+  const buffer = (await workbook.xlsx.writeBuffer()) as ArrayBuffer;
+  downloadBuffer(buffer, fileName);
+}
+
+export async function exportJobsToExcel(
   jobs: Job[],
   customers: Customer[],
   fileName = 'slw-jobs.xlsx'
 ) {
+  const { Workbook } = await loadExcelJs();
+  const workbook = new Workbook();
   const customerMap = new Map(customers.map((c) => [c.id, c.name]));
 
-  const rows = jobs.map((j) => ({
-    Date: j.date,
-    'Card ID': j.jobCardId ?? '',
-    Customer: customerMap.get(j.customerId) ?? j.customerId,
-    'Work Type': j.workTypeName,
-    Quantity: j.quantity,
-    Amount: getJobFinalBillValue(j),
-    Commission: j.commissionAmount ?? 0,
-    'Payment Status': j.paymentStatus ?? 'Pending',
-    'Paid Amount': j.paidAmount ?? 0,
-    'Payment Mode': j.paymentMode ?? '',
-    'Bill No': j.billNo ?? '',
-    'DC No': j.dcNo ?? '',
+  const rows: ExcelRow[] = jobs.map((job) => ({
+    Date: job.date,
+    'Card ID': job.jobCardId ?? '',
+    Customer: customerMap.get(job.customerId) ?? String(job.customerId),
+    'Work Type': job.workTypeName,
+    Quantity: Number(job.quantity ?? 0),
+    Amount: Number(getJobFinalBillValue(job)),
+    Commission: Number(job.commissionAmount ?? 0),
+    'Payment Status': job.paymentStatus ?? 'Pending',
+    'Paid Amount': Number(job.paidAmount ?? 0),
+    'Payment Mode': job.paymentMode ?? '',
+    'Bill No': job.billNo ?? '',
+    'DC No': job.dcNo ?? '',
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Jobs');
-  saveWorkbook(wb, fileName);
+  addSheet(workbook, 'Jobs', rows);
+  await saveWorkbook(workbook, fileName);
 }
 
-export function exportPaymentsToExcel(
+export async function exportPaymentsToExcel(
   payments: Payment[],
   customers: Customer[],
   fileName = 'slw-payments.xlsx'
 ) {
+  const { Workbook } = await loadExcelJs();
+  const workbook = new Workbook();
   const customerMap = new Map(customers.map((c) => [c.id, c.name]));
 
-  const rows = payments.map((p) => ({
-    Date: p.date,
-    Customer: customerMap.get(p.customerId) ?? p.customerId,
-    Amount: p.amount,
-    Mode: p.paymentMode,
-    'Cash': p.breakdown?.cash ?? '',
-    'UPI': p.breakdown?.upi ?? '',
-    'Bank': p.breakdown?.bank ?? '',
-    'Cheque': p.breakdown?.cheque ?? '',
-    Notes: p.notes ?? '',
+  const rows: ExcelRow[] = payments.map((payment) => ({
+    Date: payment.date,
+    Customer: customerMap.get(payment.customerId) ?? String(payment.customerId),
+    Amount: Number(payment.amount),
+    Mode: payment.paymentMode,
+    Cash: Number(payment.breakdown?.cash ?? 0),
+    UPI: Number(payment.breakdown?.upi ?? 0),
+    Bank: Number(payment.breakdown?.bank ?? 0),
+    Cheque: Number(payment.breakdown?.cheque ?? 0),
+    Notes: payment.notes ?? '',
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Payments');
-  saveWorkbook(wb, fileName);
+  addSheet(workbook, 'Payments', rows);
+  await saveWorkbook(workbook, fileName);
 }
 
-export function exportExpensesToExcel(
-  expenses: Expense[],
-  fileName = 'slw-expenses.xlsx'
-) {
-  const rows = expenses.map((e) => ({
-    Date: e.date,
-    Category: e.category,
-    Description: e.description,
-    Amount: e.amount,
-    Recurring: e.isRecurring ? 'Yes' : 'No',
-    Notes: e.notes ?? '',
+export async function exportExpensesToExcel(expenses: Expense[], fileName = 'slw-expenses.xlsx') {
+  const { Workbook } = await loadExcelJs();
+  const workbook = new Workbook();
+
+  const rows: ExcelRow[] = expenses.map((expense) => ({
+    Date: expense.date,
+    Category: expense.category,
+    Description: expense.description,
+    Amount: Number(expense.amount),
+    Recurring: expense.isRecurring ? 'Yes' : 'No',
+    Notes: expense.notes ?? '',
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
-  saveWorkbook(wb, fileName);
+  addSheet(workbook, 'Expenses', rows);
+  await saveWorkbook(workbook, fileName);
 }
 
-export function exportFinanceSummaryToExcel(
+export async function exportFinanceSummaryToExcel(
   params: {
     periodLabel: string;
     revenue: number;
@@ -95,52 +140,57 @@ export function exportFinanceSummaryToExcel(
   },
   fileName = 'slw-finance-summary.xlsx'
 ) {
-  const wb = XLSX.utils.book_new();
-
-  // Summary sheet
-  const summaryRows = [
-    { Metric: 'Period', Value: params.periodLabel },
-    { Metric: 'Revenue', Value: params.revenue },
-    { Metric: 'Gross Profit', Value: params.grossProfit },
-    { Metric: 'Total Expenses', Value: params.totalExpenses },
-    { Metric: 'Net Profit', Value: params.netProfit },
-    { Metric: 'Payments Received', Value: params.totalReceived },
-    { Metric: 'Outstanding', Value: params.outstanding },
-    { Metric: 'Collection Rate %', Value: `${params.collectionRate.toFixed(1)}%` },
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
-
-  // Jobs detail sheet
+  const { Workbook } = await loadExcelJs();
+  const workbook = new Workbook();
   const customerMap = new Map(params.customers.map((c) => [c.id, c.name]));
-  const jobRows = params.jobs.map((j) => ({
-    Date: j.date,
-    'Card ID': j.jobCardId ?? '',
-    Customer: customerMap.get(j.customerId) ?? j.customerId,
-    'Work Type': j.workTypeName,
-    Qty: j.quantity,
-    Amount: getJobFinalBillValue(j),
-    Commission: j.commissionAmount ?? 0,
-    Status: j.paymentStatus ?? 'Pending',
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(jobRows), 'Jobs');
 
-  // Payments detail sheet
-  const pmtRows = params.payments.map((p) => ({
-    Date: p.date,
-    Customer: customerMap.get(p.customerId) ?? p.customerId,
-    Amount: p.amount,
-    Mode: p.paymentMode,
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pmtRows), 'Payments');
+  addSheet(workbook, 'Summary', [
+    { Metric: 'Period', Value: params.periodLabel },
+    { Metric: 'Revenue', Value: Number(params.revenue) },
+    { Metric: 'Gross Profit', Value: Number(params.grossProfit) },
+    { Metric: 'Total Expenses', Value: Number(params.totalExpenses) },
+    { Metric: 'Net Profit', Value: Number(params.netProfit) },
+    { Metric: 'Payments Received', Value: Number(params.totalReceived) },
+    { Metric: 'Outstanding', Value: Number(params.outstanding) },
+    { Metric: 'Collection Rate %', Value: `${params.collectionRate.toFixed(1)}%` },
+  ]);
 
-  // Expenses detail sheet
-  const expRows = params.expenses.map((e) => ({
-    Date: e.date,
-    Category: e.category,
-    Description: e.description,
-    Amount: e.amount,
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expRows), 'Expenses');
+  addSheet(
+    workbook,
+    'Jobs',
+    params.jobs.map((job) => ({
+      Date: job.date,
+      'Card ID': job.jobCardId ?? '',
+      Customer: customerMap.get(job.customerId) ?? String(job.customerId),
+      'Work Type': job.workTypeName,
+      Qty: Number(job.quantity ?? 0),
+      Amount: Number(getJobFinalBillValue(job)),
+      Commission: Number(job.commissionAmount ?? 0),
+      Status: job.paymentStatus ?? 'Pending',
+    }))
+  );
 
-  saveWorkbook(wb, fileName);
+  addSheet(
+    workbook,
+    'Payments',
+    params.payments.map((payment) => ({
+      Date: payment.date,
+      Customer: customerMap.get(payment.customerId) ?? String(payment.customerId),
+      Amount: Number(payment.amount),
+      Mode: payment.paymentMode,
+    }))
+  );
+
+  addSheet(
+    workbook,
+    'Expenses',
+    params.expenses.map((expense) => ({
+      Date: expense.date,
+      Category: expense.category,
+      Description: expense.description,
+      Amount: Number(expense.amount),
+    }))
+  );
+
+  await saveWorkbook(workbook, fileName);
 }

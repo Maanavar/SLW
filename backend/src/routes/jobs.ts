@@ -10,7 +10,13 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
 import { parseId } from '../utils/ids';
 import { isLocalDateString } from '../utils/date';
+import { getPagination } from '../utils/pagination';
 import { createActivityLog, getActorFromRequest } from '../services/activityLogService';
+import {
+  assertBulkMutationAllowed,
+  assertDateMutationAllowed,
+  assertDatesMutationAllowed,
+} from '../services/monthLockService';
 
 const localDateSchema = z.string().refine(isLocalDateString, {
   message: 'Date must be in YYYY-MM-DD format.',
@@ -152,6 +158,50 @@ router.get(
 );
 
 router.get(
+  '/page',
+  asyncHandler(async (req, res) => {
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
+    const customerIdRaw =
+      typeof req.query.customerId === 'string' ? req.query.customerId : undefined;
+    const customerId =
+      customerIdRaw && Number.isInteger(Number(customerIdRaw))
+        ? Number(customerIdRaw)
+        : undefined;
+    const { limit, offset } = getPagination(req);
+
+    const where = {
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+      ...(customerId ? { customerId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      prisma.job.findMany({
+        where,
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: limit,
+        skip: offset,
+      }),
+      prisma.job.count({ where }),
+    ]);
+
+    res.json({
+      total,
+      limit,
+      offset,
+      items,
+    });
+  })
+);
+
+router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const jobId = parseId(req.params.id);
@@ -172,6 +222,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createJobSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    await assertDateMutationAllowed(payload.date, 'Job creation');
     const billNo = normalizeOptionalText(payload.billNo);
     const jobCardId = normalizeOptionalText(payload.jobCardId);
 
@@ -207,6 +258,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createBulkJobsSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    await assertDatesMutationAllowed(
+      payload.jobs.map((job) => job.date),
+      'Bulk job creation'
+    );
     const preparedJobs = payload.jobs.map((job) => ({
       ...job,
       billNo: normalizeOptionalText(job.billNo),
@@ -300,6 +355,11 @@ router.put(
       throw new HttpError(404, 'Job not found');
     }
 
+    await assertDateMutationAllowed(existing.date, 'Job update');
+    if (payload.date !== undefined) {
+      await assertDateMutationAllowed(payload.date, 'Job date update');
+    }
+
     const effectiveCustomerId = payload.customerId ?? existing.customerId;
     const effectiveBillNo =
       payload.billNo !== undefined
@@ -354,6 +414,8 @@ router.delete(
       throw new HttpError(404, 'Job not found');
     }
 
+    await assertDateMutationAllowed(existing.date, 'Job delete');
+
     await prisma.job.delete({
       where: { id: jobId },
     });
@@ -382,6 +444,7 @@ router.delete(
     }
 
     const actor = getActorFromRequest(req);
+    await assertBulkMutationAllowed('jobs', 'Bulk delete of jobs');
     const deleted = await prisma.job.deleteMany({});
 
     await createActivityLog({

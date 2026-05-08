@@ -17,35 +17,13 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       }
 
       setAuthState('checking');
-      if (!apiClient.hasAuthToken()) {
-        if (active) {
-          setAuthState('unauthenticated');
-        }
-        return;
-      }
 
       try {
         await apiClient.getAuthSession();
         if (active) {
           setAuthState('authenticated');
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message.toLowerCase() : '';
-        const isNetworkError =
-          message.includes('failed to fetch') ||
-          message.includes('network') ||
-          message.includes('timeout') ||
-          message.includes('unable to connect');
-
-        if (isNetworkError) {
-          apiClient.createOfflineSession('Offline Admin');
-          if (active) {
-            setAuthState('authenticated');
-          }
-          return;
-        }
-
-        apiClient.clearAuthToken();
+      } catch {
         if (active) {
           setAuthState('unauthenticated');
         }

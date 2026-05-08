@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Job } from '@/types';
+import { type Job } from '@/types';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
-import { CustomerBalance } from './CustomerBalancesTable';
+import { type CustomerBalance } from './CustomerBalancesTable';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 

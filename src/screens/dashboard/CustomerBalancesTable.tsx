@@ -4,7 +4,7 @@ import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
 import { rankCustomers } from '@/lib/customerRankingUtils';
-import { Customer } from '@/types';
+import { type Customer } from '@/types';
 import { CustomerBillsOverlay } from './CustomerBillsOverlay';
 
 type CustomerTypeFilter = 'All' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
@@ -42,7 +42,7 @@ function getTypeBadgeClass(type: Customer['type']): string {
 }
 
 export function CustomerBalancesTable({ showFilters = true, dateRange }: CustomerBalancesTableProps) {
-  const { getActiveCustomers, jobs, payments } = useDataStore();
+  const { customers: allCustomers, jobs, payments } = useDataStore();
   const [typeFilter, setTypeFilter] = useState<CustomerTypeFilter>('All');
   const [customerFilter, setCustomerFilter] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerBalance | null>(null);
@@ -51,10 +51,11 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
     order: 'desc',
   });
 
-  const customers = useMemo(
-    () => getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name)),
-    [getActiveCustomers]
-  );
+  const customers = useMemo(() => {
+    return allCustomers
+      .filter((customer) => customer.isActive !== false)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allCustomers]);
   const customerRankMap = useMemo(() => {
     const entries = rankCustomers(jobs, payments, customers);
     return new Map(entries.map((entry) => [entry.customerId, entry]));
@@ -89,7 +90,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
           advance,
         };
       })
-      .filter((customer) => customer.balance !== 0 || customer.advance > 0 || customer.openingBalanceAmt > 0);
+      .filter((customer) => customer.balance !== 0);
   }, [customers, scopedJobs]);
 
   const filtered = useMemo(() => {
@@ -100,7 +101,7 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
         if (!q) return true;
         return (
           customer.name.toLowerCase().includes(q) ||
-          customer.shortCode.toLowerCase().includes(q)
+          (customer.shortCode || '').toLowerCase().includes(q)
         );
       });
   }, [balances, customerFilter, typeFilter]);

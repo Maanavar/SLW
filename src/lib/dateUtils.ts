@@ -81,7 +81,7 @@ export function getTenDayRange(
   const baseDay = baseDate.getDate();
   const baseSet = baseDay <= 10 ? 0 : baseDay <= 20 ? 1 : 2;
 
-  let setIndex = baseYear * 36 + (baseMonth - 1) * 3 + baseSet + offset;
+  const setIndex = baseYear * 36 + (baseMonth - 1) * 3 + baseSet + offset;
   let targetYear = Math.floor(setIndex / 36);
   let rem = setIndex % 36;
   if (rem < 0) {
@@ -140,9 +140,10 @@ export function getReportRange(period: string): PeriodRange {
   const today = new Date();
 
   switch (period) {
-    case 'today':
+    case 'today': {
       const day = getLocalDateString(today);
       return { from: day, to: day };
+    }
     case 'week':
       return { from: getWeekStartDate(today), to: getLocalDateString(today) };
     case 'tenday':

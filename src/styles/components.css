@@ -214,6 +214,11 @@
   vertical-align: middle;
 }
 
+table th,
+table td {
+  vertical-align: middle;
+}
+
 .data-table tr:hover td {
   background: var(--bg-sunk);
 }

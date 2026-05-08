@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
 import { createActivityLog, getActorFromRequest } from '../services/activityLogService';
 import { getAuthUser } from '../middleware/auth';
+import { assertBulkMutationAllowed } from '../services/monthLockService';
 import {
   CUSTOMER_TYPES,
   EXPENSE_CATEGORIES,
@@ -146,6 +147,7 @@ function assertAdminKey(req: Request) {
 router.post(
   '/import-legacy',
   asyncHandler(async (req, res) => {
+    assertAdminKey(req);
     const payload = importLegacySchema.parse(req.body);
     const actor = getActorFromRequest(req);
 
@@ -337,6 +339,16 @@ router.post(
       !scope.logs
     ) {
       throw new HttpError(400, 'No scope selected for purge');
+    }
+
+    if (scope.jobs) {
+      await assertBulkMutationAllowed('jobs', 'Admin purge of jobs');
+    }
+    if (scope.payments) {
+      await assertBulkMutationAllowed('payments', 'Admin purge of payments');
+    }
+    if (scope.expenses) {
+      await assertBulkMutationAllowed('expenses', 'Admin purge of expenses');
     }
 
     const summary = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

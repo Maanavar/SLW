@@ -61,7 +61,7 @@ router.post(
       entityType: 'COMMISSION_PAYMENT',
       action: 'CREATE',
       entityId: String(created.id),
-      message: `Commission payment of ${created.amount} recorded for worker ${created.workerName}`,
+      message: `Commission payment of ${Number(created.amount)} recorded for worker ${created.workerName}`,
       after: created,
     });
 

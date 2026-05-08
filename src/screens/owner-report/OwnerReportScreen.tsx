@@ -1,18 +1,14 @@
-﻿import { useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import {
-  getJobWorkerCommissionExpense,
   getJobAgentCommissionIncome,
   getJobAgentNetPayable,
   isAgentWorkJob,
 } from '@/lib/jobUtils';
 import { calculateRevenueMetrics, calculateWorkerCommissionSummary } from '@/lib/financeUtils';
 import { useToast } from '@/hooks/useToast';
-import { toBlob } from 'html-to-image';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import './OwnerReportScreen.css';
 
 // â”€â”€â”€ Light theme tokens for PNG export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -72,7 +68,7 @@ const EXPENSE_LABEL: Record<string, string> = {
 // â”€â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function OwnerReportScreen() {
-  const { jobs, expenses, commissionWorkers, commissionPayments } = useDataStore();
+  const { jobs, expenses, commissionWorkers, commissionPayments, ensureRangeLoaded } = useDataStore();
   const reportRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
@@ -87,6 +83,10 @@ export function OwnerReportScreen() {
     [year, month]
   );
   const monthLabel = useMemo(() => getMonthLabel(year, month), [year, month]);
+
+  useEffect(() => {
+    void ensureRangeLoaded({ from: periodStart, to: periodEnd });
+  }, [ensureRangeLoaded, periodEnd, periodStart]);
 
   const monthJobs = useMemo(
     () => jobs.filter((j) => j.date >= periodStart && j.date <= periodEnd),
@@ -197,6 +197,7 @@ export function OwnerReportScreen() {
     try {
       const w = Math.ceil(clone.scrollWidth || 720);
       const h = Math.ceil(clone.scrollHeight || 1);
+      const { toBlob } = await import('html-to-image');
       const blob = await toBlob(clone, {
         backgroundColor: '#ffffff',
         cacheBust: true,
@@ -245,13 +246,17 @@ export function OwnerReportScreen() {
 
   // â”€â”€ PDF export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 16;
     let y = 18;
 
-    const getY = () => (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    const getY = () => (doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y;
 
     // â”€â”€ Header â”€â”€
     doc.setFontSize(18);
@@ -513,7 +518,7 @@ export function OwnerReportScreen() {
   };
 
   const handleSharePdf = () => {
-    handleDownloadPdf();
+    void handleDownloadPdf();
     window.setTimeout(() => {
       window.open(
         `https://wa.me/?text=${encodeURIComponent(`${monthLabel} Audit — Siva Lathe Works. PDF saved, attach in WhatsApp.`)}`,
@@ -587,7 +592,7 @@ export function OwnerReportScreen() {
             </svg>
             Share as PDF
           </button>
-          <button type="button" className="or-btn or-btn-dl" onClick={handleDownloadPdf}>
+          <button type="button" className="or-btn or-btn-dl" onClick={() => void handleDownloadPdf()}>
             Download PDF
           </button>
         </div>
@@ -815,6 +820,9 @@ export function OwnerReportScreen() {
     </div>
   );
 }
+
+
+
 
 
 
