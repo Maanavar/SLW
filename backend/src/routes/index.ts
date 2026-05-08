@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { healthRouter } from './health';
 import { authRouter } from './auth';
+import { docsRouter } from './docs';
 import { customersRouter } from './customers';
 import { workTypesRouter } from './workTypes';
 import { jobsRouter } from './jobs';
@@ -10,6 +11,9 @@ import { logsRouter } from './logs';
 import { adminRouter } from './admin';
 import { commissionWorkersRouter } from './commissionWorkers';
 import { commissionPaymentsRouter } from './commissionPayments';
+import { followUpsRouter } from './followups';
+import { monthLocksRouter } from './monthLocks';
+import { backupsRouter } from './backups';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -17,6 +21,7 @@ const router = Router();
 router.use('/health', healthRouter);
 router.use('/auth', authRouter);
 router.use(requireAuth);
+router.use('/docs', docsRouter);
 router.use('/customers', customersRouter);
 router.use('/work-types', workTypesRouter);
 router.use('/jobs', jobsRouter);
@@ -24,7 +29,10 @@ router.use('/payments', paymentsRouter);
 router.use('/expenses', expensesRouter);
 router.use('/commission-workers', commissionWorkersRouter);
 router.use('/commission-payments', commissionPaymentsRouter);
+router.use('/followups', followUpsRouter);
 router.use('/logs', logsRouter);
 router.use('/admin', adminRouter);
+router.use('/admin/month-locks', monthLocksRouter);
+router.use('/admin/backups', backupsRouter);
 
 export { router as apiRouter };

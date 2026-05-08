@@ -56,7 +56,14 @@ const ChevR = () => (
 export function HistoryScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { jobs, getCustomer, deleteJob } = useDataStore();
+  const {
+    jobs,
+    getCustomer,
+    deleteJob,
+    ensureRangeLoaded,
+    loadJobsBefore,
+    backendConnected,
+  } = useDataStore();
   const toast = useToast();
   const today = getLocalDateString(new Date());
 
@@ -66,6 +73,8 @@ export function HistoryScreen() {
   const [viewMode, setViewMode] = useState<HistoryViewMode>('table');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [dcSearch, setDcSearch] = useState('');
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [noMoreOlderData, setNoMoreOlderData] = useState(false);
   const appliedDateParamRef = useRef<string | null>(null);
   const openedCardParamRef = useRef<string | null>(null);
 
@@ -98,6 +107,14 @@ export function HistoryScreen() {
     setSelectedCardId(target.key);
     openedCardParamRef.current = deepLinkCardKey;
   }, [deepLinkCardKey, groups]);
+
+  useEffect(() => {
+    if (isDcMode) {
+      return;
+    }
+    setNoMoreOlderData(false);
+    void ensureRangeLoaded({ from: selectedDate, to: selectedDate });
+  }, [ensureRangeLoaded, isDcMode, selectedDate]);
 
   const filteredGroups = useMemo(
     () =>
@@ -192,6 +209,26 @@ export function HistoryScreen() {
       setSelectedCardId(null);
     } catch {
       toast.error('Error', 'Failed to delete job card');
+    }
+  };
+
+  const oldestLoadedDate = useMemo(() => {
+    if (jobs.length === 0) return null;
+    return jobs.reduce((oldest, job) => (job.date < oldest ? job.date : oldest), jobs[0].date);
+  }, [jobs]);
+
+  const handleLoadOlderData = async () => {
+    if (!oldestLoadedDate || isLoadingOlder) return;
+    setIsLoadingOlder(true);
+    try {
+      const loaded = await loadJobsBefore(shiftDate(oldestLoadedDate, -1), 200);
+      if (loaded === 0) {
+        setNoMoreOlderData(true);
+      }
+    } catch {
+      toast.error('Error', 'Failed to load older job cards');
+    } finally {
+      setIsLoadingOlder(false);
     }
   };
 
@@ -303,6 +340,19 @@ export function HistoryScreen() {
             <circle cx="6.5" cy="6.5" r="4"/><path d="M10 10l2.5 2.5" strokeLinecap="round"/>
           </svg>
           Searching all dates for DC No. <strong>"{dcSearch.trim()}"</strong> — {filteredGroups.length} result{filteredGroups.length !== 1 ? 's' : ''}
+          {backendConnected && !noMoreOlderData && (
+            <button
+              type="button"
+              className="hist-dc-banner-action"
+              onClick={() => void handleLoadOlderData()}
+              disabled={isLoadingOlder}
+            >
+              {isLoadingOlder ? 'Loading…' : 'Load older cards'}
+            </button>
+          )}
+          {backendConnected && noMoreOlderData && (
+            <span className="hist-dc-banner-note">All available older cards loaded</span>
+          )}
           <button type="button" className="hist-dc-banner-clear" onClick={() => setDcSearch('')}>Clear</button>
         </div>
       )}

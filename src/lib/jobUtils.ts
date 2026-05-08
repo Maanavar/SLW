@@ -4,27 +4,13 @@
  */
 
 import type { Job, Customer, JobGroup, JobSummary } from '@/types';
+import { isMahalingamCustomerLabel } from '@/constants/customers';
 
 export type PaymentStatus = 'Paid' | 'Pending' | 'Partially Paid';
 
-function normalizeCustomerToken(value?: string) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z]/g, '');
-}
-
 export function isMahalingamCustomer(customer?: Customer | null): boolean {
   if (!customer) return false;
-
-  const normalizedShortCode = normalizeCustomerToken(customer.shortCode);
-  const normalizedName = normalizeCustomerToken(customer.name);
-  return (
-    normalizedShortCode === 'nm' ||
-    normalizedName.includes('mahaling') ||
-    normalizedName.includes('mahalingam') ||
-    normalizedName.includes('mahalingham') ||
-    normalizedName.includes('mahalinham')
-  );
+  return isMahalingamCustomerLabel(customer.shortCode, customer.name);
 }
 
 /**

@@ -72,6 +72,7 @@ export function Sidebar() {
       items: [
         { path: '/history', label: 'History', tamil: '??????', icon: <Icon name="history" width={15} height={15} /> },
         { path: '/records', label: 'Records', tamil: '????????', icon: <Icon name="records" width={15} height={15} /> },
+        { path: '/follow-ups', label: 'Follow-ups', icon: <Icon name="bell" width={15} height={15} /> },
         { path: '/commission-dc', label: 'Commission DC', icon: <Icon name="commission" width={15} height={15} /> },
       ],
     },

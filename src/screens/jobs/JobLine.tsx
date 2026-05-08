@@ -2,7 +2,7 @@ import { useDataStore } from '@/stores/dataStore';
 import type { ChangeEvent } from 'react';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
-import { WorkType, CommissionWorker } from '@/types';
+import { type WorkType, type CommissionWorker } from '@/types';
 import './JobLine.css';
 
 export interface JobLineState {

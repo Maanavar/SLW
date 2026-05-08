@@ -17,15 +17,5 @@ services:
       timeout: 5s
       retries: 10
 
-  adminer:
-    image: adminer:4
-    container_name: slw-adminer
-    restart: unless-stopped
-    ports:
-      - '8081:8080'
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 volumes:
   slw_postgres_data:

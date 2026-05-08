@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Payment Utility Functions
  * Utilities for generating meaningful payment IDs and formatting payment data
  */
@@ -54,10 +54,10 @@ export function formatPaymentBreakdown(payment: Payment): string {
   }
 
   const parts: string[] = [];
-  if (payment.breakdown.cash) parts.push(`Cash: ₹${payment.breakdown.cash.toFixed(2)}`);
-  if (payment.breakdown.upi) parts.push(`UPI: ₹${payment.breakdown.upi.toFixed(2)}`);
-  if (payment.breakdown.bank) parts.push(`Bank: ₹${payment.breakdown.bank.toFixed(2)}`);
-  if (payment.breakdown.cheque) parts.push(`Cheque: ₹${payment.breakdown.cheque.toFixed(2)}`);
+  if (payment.breakdown.cash) parts.push(`Cash: INR ${payment.breakdown.cash.toFixed(2)}`);
+  if (payment.breakdown.upi) parts.push(`UPI: INR ${payment.breakdown.upi.toFixed(2)}`);
+  if (payment.breakdown.bank) parts.push(`Bank: INR ${payment.breakdown.bank.toFixed(2)}`);
+  if (payment.breakdown.cheque) parts.push(`Cheque: INR ${payment.breakdown.cheque.toFixed(2)}`);
 
   return parts.join(' + ');
 }

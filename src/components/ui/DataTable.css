@@ -53,17 +53,26 @@
   gap: 6px;
 }
 
-.sort-icon::before {
-  font-size: 10px;
-  opacity: 0.95;
+.sort-icon {
+  display: inline-block;
+  min-width: 1.1em;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-.sort-icon.asc::before {
-  content: '\25B2';
+.sort-icon.is-active {
+  color: var(--accent-text);
 }
 
-.sort-icon.desc::before {
-  content: '\25BC';
+.table-header.numeric,
+.table-cell.numeric,
+.table .text-right {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .table-cell {

@@ -43,7 +43,7 @@ export function CategoryModal() {
       addCategory(trimmed);
       toast.success('Success', `Category "${trimmed}" added successfully`);
       setNewCategoryName('');
-    } catch (error) {
+    } catch {
       toast.error('Error', 'Failed to add category');
     }
   };
@@ -78,7 +78,7 @@ export function CategoryModal() {
       setSelectedCategory('');
       setEditCategoryName('');
       setAction('add');
-    } catch (error) {
+    } catch {
       toast.error('Error', 'Failed to update category');
     }
   };
@@ -105,7 +105,7 @@ export function CategoryModal() {
       toast.success('Success', `Category "${selectedCategory}" deleted successfully`);
       setSelectedCategory('');
       setAction('add');
-    } catch (error) {
+    } catch {
       toast.error('Error', 'Failed to delete category');
     }
   };

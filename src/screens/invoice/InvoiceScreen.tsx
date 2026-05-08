@@ -1,17 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { getJobFinalBillValue, isMahalingamCustomer } from '@/lib/jobUtils';
+import { isWagenAutosCustomerLabel } from '@/constants/customers';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { useToast } from '@/hooks/useToast';
-import { toBlob } from 'html-to-image';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import type { Customer, Job, WorkType } from '@/types';
 import './InvoiceScreen.css';
 
-// ─── Customer group detection ─────────────────────────────────────────────────
+// â”€â”€â”€ Customer group detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type CustomerGroup = 'rmp' | 'ww' | 'nm' | 'default';
 
@@ -25,7 +23,7 @@ function getCustomerGroup(customer: Customer): CustomerGroup {
   return 'default';
 }
 
-// ─── Work type full name lookup ───────────────────────────────────────────────
+// â”€â”€â”€ Work type full name lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // job.workTypeName = full name (what we want to display)
 // job.workName     = shortCode (never use as display text)
 //
@@ -33,7 +31,7 @@ function getCustomerGroup(customer: Customer): CustomerGroup {
 // any shortCode or legacy abbreviated value is expanded to the current full name.
 
 function resolveWorkTypeName(rawName: string, workTypes: WorkType[]): string {
-  if (!rawName) return '—';
+  if (!rawName) return '-';
   const lower = rawName.toLowerCase().trim();
 
   // 1. Exact match on full name (most common path)
@@ -44,7 +42,7 @@ function resolveWorkTypeName(rawName: string, workTypes: WorkType[]): string {
   const byCode = workTypes.find((wt) => wt.shortCode.toLowerCase() === lower);
   if (byCode) return byCode.name;
 
-  // 3. Partial prefix match — handles cases where only the first word(s) were
+  // 3. Partial prefix match â€” handles cases where only the first word(s) were
   //    stored (e.g. "Surface" expanding to "Surface Grinding")
   const byPrefix = workTypes.find((wt) => wt.name.toLowerCase().startsWith(lower + ' '));
   if (byPrefix) return byPrefix.name;
@@ -58,7 +56,7 @@ function resolveWorkLabel(job: Job, workTypes: WorkType[]): string {
   return (job.workMode === 'Spot' || job.isSpotWork) ? `${base} (Spot)` : base;
 }
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Date helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getMonthRange(month: string): { start: string; end: string } {
   const [year, m] = month.split('-').map(Number);
@@ -74,7 +72,7 @@ function getMonthLabel(month: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -84,7 +82,7 @@ function formatDate(dateStr: string): string {
 }
 
 function formatDateShort(dateStr: string): string {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -101,13 +99,21 @@ function isWpCustomer(customer: Customer | null): boolean {
 
 function isWagenAutosCustomer(customer: Customer | null): boolean {
   if (!customer) return false;
-  return (customer.name || '').trim().toLowerCase().includes('wagen autos');
+  return isWagenAutosCustomerLabel(customer.name, customer.shortCode);
 }
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+function getBillNumberSortValue(value?: string): number {
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const match = value.match(/\d+/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+// â”€â”€â”€ Main screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function InvoiceScreen() {
-  const { customers, jobs, payments, workTypes } = useDataStore();
+  const { customers, jobs, payments, workTypes, ensureRangeLoaded } = useDataStore();
   const invoiceRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
@@ -163,6 +169,11 @@ export function InvoiceScreen() {
     return { periodStart: rangeFrom, periodEnd: rangeTo };
   }, [selectedCustomer, isMonthly, selectedMonth, rangeFrom, rangeTo]);
 
+  useEffect(() => {
+    if (!periodStart || !periodEnd) return;
+    void ensureRangeLoaded({ from: periodStart, to: periodEnd });
+  }, [ensureRangeLoaded, periodEnd, periodStart]);
+
   const customerJobs = useMemo(
     () => jobs.filter((j) => j.customerId === selectedCustomer?.id),
     [jobs, selectedCustomer]
@@ -185,9 +196,21 @@ export function InvoiceScreen() {
         return true;
       })].sort(
         (a, b) => {
+          if (customerGroup === 'rmp') {
+            const billDiff = getBillNumberSortValue(a.billNo) - getBillNumberSortValue(b.billNo);
+            if (billDiff !== 0) return billDiff;
+            const billLabelDiff = (a.billNo ?? '').localeCompare(b.billNo ?? '', undefined, {
+              numeric: true,
+              sensitivity: 'base',
+            });
+            if (billLabelDiff !== 0) return billLabelDiff;
+          }
           const d = a.date.localeCompare(b.date);
           if (d !== 0) return d;
-          return (a.billNo ?? '').localeCompare(b.billNo ?? '');
+          return (a.billNo ?? '').localeCompare(b.billNo ?? '', undefined, {
+            numeric: true,
+            sensitivity: 'base',
+          });
         }
       ),
     [customerJobs, periodStart, periodEnd, customerGroup, rmpHandlerFilter]
@@ -227,7 +250,7 @@ export function InvoiceScreen() {
   const periodLabel = useMemo(() => {
     if (!selectedCustomer) return '';
     if (isMonthly) return getMonthLabel(selectedMonth);
-    if (rangeFrom && rangeTo) return `${formatDate(rangeFrom)} – ${formatDate(rangeTo)}`;
+    if (rangeFrom && rangeTo) return `${formatDate(rangeFrom)} - ${formatDate(rangeTo)}`;
     return '';
   }, [selectedCustomer, isMonthly, selectedMonth, rangeFrom, rangeTo]);
 
@@ -314,6 +337,8 @@ export function InvoiceScreen() {
       const exportHeight = Math.ceil(exportNode.scrollHeight || exportNode.clientHeight || 1);
       const pixelRatio = getSafeExportPixelRatio(exportWidth, exportHeight);
 
+      const { toBlob } = await import('html-to-image');
+
       const blob = await toBlob(exportNode, {
         backgroundColor: '#ffffff',
         cacheBust: true,
@@ -383,8 +408,12 @@ export function InvoiceScreen() {
     toast.info('PDF Share', 'Use Print -> Save as PDF, then attach in WhatsApp.');
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!canGenerate || !selectedCustomer) return;
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 14;
@@ -415,7 +444,7 @@ export function InvoiceScreen() {
     const tableRows = periodJobs.map((j, idx) => [
       String(idx + 1),
       formatDate(j.date),
-      j.billNo || j.dcNo || '—',
+      j.billNo || j.dcNo || '-',
       resolveWorkLabel(j, workTypes),
       String(j.quantity),
       formatCurrency(getJobFinalBillValue(j)),
@@ -431,7 +460,8 @@ export function InvoiceScreen() {
       columnStyles: { 5: { halign: 'right' } },
     });
 
-    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+    const finalY =
+      ((doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 46) + 6;
 
     // Totals block
     const totalsX = pageW - margin - 60;
@@ -459,7 +489,7 @@ export function InvoiceScreen() {
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(150);
-    doc.text('Thank you for your business — Siva Lathe Works', margin, doc.internal.pageSize.getHeight() - 10);
+    doc.text('Thank you for your business - Siva Lathe Works', margin, doc.internal.pageSize.getHeight() - 10);
 
     const fileName = `${buildShareFileNameBase()}.pdf`;
     doc.save(fileName);
@@ -468,7 +498,7 @@ export function InvoiceScreen() {
 
   return (
     <div className="inv-screen">
-      {/* ── Control panel ──────────────────────────────────────────────────── */}
+      {/* â”€â”€ Control panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <aside className="inv-sidebar no-print">
         <div className="inv-sidebar-header">
           <h1 className="inv-sidebar-title">Invoice</h1>
@@ -484,7 +514,7 @@ export function InvoiceScreen() {
             getKey={(c) => String(c.id)}
             getLabel={(c) => `${c.name} (${c.type})`}
             getSearchText={(c) => `${c.name} ${c.shortCode} ${c.type}`}
-            placeholder="Select customer…"
+            placeholder="Select customer..."
             groupBy={(c) => c.type}
           />
           {selectedCustomer && (
@@ -622,7 +652,7 @@ export function InvoiceScreen() {
               </svg>
               Export / Print
             </button>
-            <button type="button" className="inv-print-btn" onClick={handleDownloadPdf}>
+            <button type="button" className="inv-print-btn" onClick={() => void handleDownloadPdf()}>
               Download PDF
             </button>
             <button type="button" className="inv-print-btn inv-share-btn" onClick={handleShareWhatsAppPng}>
@@ -635,11 +665,11 @@ export function InvoiceScreen() {
         )}
       </aside>
 
-      {/* ── Invoice canvas ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Invoice canvas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="inv-canvas">
         {canGenerate ? (
           <div className="inv-doc" ref={invoiceRef}>
-            {/* ── Header ───────────────────────────────────────────────────── */}
+            {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             <header className="inv-doc-header">
               <div className="inv-brand">
                 <div className="inv-brand-mark" aria-hidden="true">SLW</div>
@@ -656,13 +686,13 @@ export function InvoiceScreen() {
             <div className="inv-customer-date-row">
               <p className="inv-header-customer">
                 CUSTOMER: {selectedCustomer.name}
-                {periodLabel && <span className="inv-customer-period"> &nbsp;·&nbsp; {periodLabel}</span>}
+                {periodLabel && <span className="inv-customer-period"> &nbsp;|&nbsp; {periodLabel}</span>}
               </p>
               <div className={`inv-bal-badge${balanceDue <= 0 ? ' inv-bal-settled' : ''}`}>
                 <span className="inv-bal-tag">Balance Due</span>
                 <span className="inv-bal-amt">
                   {balanceDue < 0
-                    ? `Cr · ${formatCurrency(Math.abs(balanceDue))}`
+                    ? `Cr: ${formatCurrency(Math.abs(balanceDue))}`
                     : formatCurrency(balanceDue)}
                 </span>
               </div>
@@ -670,7 +700,7 @@ export function InvoiceScreen() {
 
             <div className="inv-rule" />
 
-            {/* ── Default table (not RMP / WW / NM) ────────────────────────── */}
+            {/* â”€â”€ Default table (not RMP / WW / NM) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             {!isDcGroup && (
               <>
                 {!hidePreviousBalance && (
@@ -713,7 +743,7 @@ export function InvoiceScreen() {
                             {resolveWorkLabel(job, workTypes)}
                           </td>
                           <td className="inv-td inv-col-qty inv-align-right numeric">
-                            {job.quantity ?? '—'}
+                            {job.quantity ?? '-'}
                           </td>
                           <td className="inv-td inv-col-amt inv-align-right numeric">
                             {formatCurrency(getJobFinalBillValue(job))}
@@ -726,7 +756,7 @@ export function InvoiceScreen() {
               </>
             )}
 
-            {/* ── DC-group table (RMP / WW / NM) ───────────────────────────── */}
+            {/* â”€â”€ DC-group table (RMP / WW / NM) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             {isDcGroup && (
               <table className="inv-table">
                 <thead>
@@ -749,10 +779,10 @@ export function InvoiceScreen() {
                   ) : (
                     periodJobs.map((job) => (
                       <tr key={job.id} className="inv-tr">
-                        <td className="inv-td inv-col-billno">{job.billNo || '—'}</td>
+                        <td className="inv-td inv-col-billno">{job.billNo || '-'}</td>
                         <td className="inv-td inv-col-date">{formatDateShort(job.date)}</td>
-                        <td className="inv-td inv-col-dcno">{job.dcNo || '—'}</td>
-                        <td className="inv-td inv-col-vehicle">{job.vehicleNo || '—'}</td>
+                        <td className="inv-td inv-col-dcno">{job.dcNo || '-'}</td>
+                        <td className="inv-td inv-col-vehicle">{job.vehicleNo || '-'}</td>
                         <td className="inv-td inv-col-wtype">
                           {resolveWorkLabel(job, workTypes)}
                         </td>
@@ -766,9 +796,9 @@ export function InvoiceScreen() {
               </table>
             )}
 
-            {/* ── Totals ───────────────────────────────────────────────────── */}
+            {/* â”€â”€ Totals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             <div className="inv-totals">
-              {/* Old balance line — default customers only */}
+              {/* Old balance line â€” default customers only */}
               {!isDcGroup && !hidePreviousBalance && oldBalance !== 0 && (
                 <div className={`inv-total-row ${oldBalance < 0 ? 'inv-total-credit' : ''}`}>
                   <span className="inv-total-label">Previous Balance</span>
@@ -802,11 +832,11 @@ export function InvoiceScreen() {
               </div>
             </div>
 
-            {/* ── Footer ───────────────────────────────────────────────────── */}
+            {/* â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             <footer className="inv-doc-footer">
               <p className="inv-footer-note">Thank you for your continued business.</p>
               <p className="inv-footer-generated">
-                Invoice Date: {formatDate(today)} · Siva Lathe Works
+                Invoice Date: {formatDate(today)} | Siva Lathe Works
               </p>
             </footer>
           </div>
@@ -842,3 +872,5 @@ export function InvoiceScreen() {
     </div>
   );
 }
+
+

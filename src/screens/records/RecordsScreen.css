@@ -739,6 +739,12 @@
   overflow-x: auto;
 }
 
+.records-table-virtual {
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  min-height: 200px;
+}
+
 .records-table {
   width: 100%;
   border-collapse: collapse;

@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { useUIStore } from '@/stores/uiStore';
-import { DataTable, Column } from '@/components/ui/DataTable';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { TypeBadge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { rankCustomers } from '@/lib/customerRankingUtils';
 import { calculateCustomerAgeing } from '@/lib/financeUtils';
-import { Customer } from '@/types';
+import { type Customer } from '@/types';
 import './CustomersScreen.css';
 
 type TypeFilter = 'all' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';

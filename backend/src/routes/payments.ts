@@ -7,7 +7,12 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
 import { parseId } from '../utils/ids';
 import { isLocalDateString } from '../utils/date';
+import { getPagination } from '../utils/pagination';
 import { createActivityLog, getActorFromRequest } from '../services/activityLogService';
+import {
+  assertBulkMutationAllowed,
+  assertDateMutationAllowed,
+} from '../services/monthLockService';
 
 const localDateSchema = z.string().refine(isLocalDateString, {
   message: 'Date must be in YYYY-MM-DD format.',
@@ -88,6 +93,50 @@ router.get(
 );
 
 router.get(
+  '/page',
+  asyncHandler(async (req, res) => {
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
+    const customerIdRaw =
+      typeof req.query.customerId === 'string' ? req.query.customerId : undefined;
+    const customerId =
+      customerIdRaw && Number.isInteger(Number(customerIdRaw))
+        ? Number(customerIdRaw)
+        : undefined;
+    const { limit, offset } = getPagination(req);
+
+    const where = {
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+      ...(customerId ? { customerId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: limit,
+        skip: offset,
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    res.json({
+      total,
+      limit,
+      offset,
+      items,
+    });
+  })
+);
+
+router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const paymentId = parseId(req.params.id);
@@ -108,6 +157,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = createPaymentSchema.parse(req.body);
     const actor = getActorFromRequest(req);
+    await assertDateMutationAllowed(payload.date, 'Payment creation');
     const data: Prisma.PaymentUncheckedCreateInput = {
       customerId: payload.customerId,
       amount: payload.amount,
@@ -151,6 +201,11 @@ router.put(
 
     if (!existing) {
       throw new HttpError(404, 'Payment not found');
+    }
+
+    await assertDateMutationAllowed(existing.date, 'Payment update');
+    if (payload.date !== undefined) {
+      await assertDateMutationAllowed(payload.date, 'Payment date update');
     }
 
     const data: Prisma.PaymentUncheckedUpdateInput = {};
@@ -201,6 +256,8 @@ router.delete(
       throw new HttpError(404, 'Payment not found');
     }
 
+    await assertDateMutationAllowed(existing.date, 'Payment delete');
+
     await prisma.payment.delete({
       where: { id: paymentId },
     });
@@ -229,6 +286,7 @@ router.delete(
     }
 
     const actor = getActorFromRequest(req);
+    await assertBulkMutationAllowed('payments', 'Bulk delete of payments');
     const outcome = await prisma.$transaction(async (tx) => {
       const deletedPayments = await tx.payment.deleteMany({});
       const resetJobs = await tx.job.updateMany({

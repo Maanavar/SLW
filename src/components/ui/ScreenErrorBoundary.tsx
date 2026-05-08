@@ -10,6 +10,14 @@ interface State {
   errorMessage: string;
 }
 
+const RUNTIME_RECOVERY_KEY = 'slw.runtime.recovered.once';
+const RECOVERABLE_RUNTIME_ERROR_RE =
+  /(Cannot read properties of null \(reading 'useRef'\)|Invalid hook call|Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk [\w-]+ failed)/i;
+
+function isRecoverableRuntimeError(message: string): boolean {
+  return RECOVERABLE_RUNTIME_ERROR_RE.test(message);
+}
+
 export class ScreenErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, errorMessage: '' };
 
@@ -19,6 +27,19 @@ export class ScreenErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error): void {
     console.error(`[${this.props.screenName ?? 'Screen'}] Unhandled error:`, error);
+
+    // Try a single self-heal reload for stale chunk/runtime mismatch issues.
+    if (typeof window !== 'undefined' && isRecoverableRuntimeError(error.message)) {
+      try {
+        const alreadyRecovered = sessionStorage.getItem(RUNTIME_RECOVERY_KEY) === '1';
+        if (!alreadyRecovered) {
+          sessionStorage.setItem(RUNTIME_RECOVERY_KEY, '1');
+          window.location.reload();
+        }
+      } catch {
+        // If storage is unavailable, keep the boundary fallback UI.
+      }
+    }
   }
 
   private handleReset = () => {

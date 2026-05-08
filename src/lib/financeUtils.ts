@@ -69,6 +69,12 @@ export interface PaymentMethodBreakdown {
   count: number;
 }
 
+type DirectPaymentMethod = PaymentMethodBreakdown['method'];
+
+function isDirectPaymentMethod(value: unknown): value is DirectPaymentMethod {
+  return value === 'Cash' || value === 'UPI' || value === 'Bank' || value === 'Cheque';
+}
+
 export interface AgeingBucket {
   range: string; // "0-7 days", "7-14 days", etc.
   amount: number;
@@ -321,7 +327,7 @@ export function calculateWorkerCommissionSummary(
     }
 
     let workerId = job.commissionWorkerId;
-    let workerName = job.commissionWorkerName?.trim() || '';
+    const workerName = job.commissionWorkerName?.trim() || '';
 
     if (typeof workerId !== 'number' && workerName) {
       const match = workers.find(
@@ -492,7 +498,7 @@ export function calculatePaymentMethodBreakdown(
         method.amount += payment.breakdown.cheque;
         method.count += 1;
       }
-    } else if (payment.paymentMode && methods.includes(payment.paymentMode as any)) {
+    } else if (isDirectPaymentMethod(payment.paymentMode)) {
       const existing = breakdown.get(payment.paymentMode)!;
       existing.amount += payment.amount || 0;
       existing.count += 1;
@@ -554,7 +560,7 @@ export function calculateCollectionMethodBreakdown(
       return;
     }
 
-    if (entry.paymentMode && methods.includes(entry.paymentMode as any)) {
+    if (isDirectPaymentMethod(entry.paymentMode)) {
       const existing = breakdown.get(entry.paymentMode)!;
       existing.amount += entry.amount || 0;
       existing.count += 1;

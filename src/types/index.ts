@@ -1,12 +1,32 @@
-/**
- * TypeScript Type Definitions for Siva Lathe Works
- */
+import type {
+  CustomerType,
+  ExpenseCategory,
+  InvoiceGroup,
+  JobFlowType,
+  PaymentMode,
+  PaymentStatus,
+  RmpHandler,
+  ShareType,
+  WorkMode,
+} from '@/constants/domain';
+
+export type {
+  CustomerType,
+  ExpenseCategory,
+  InvoiceGroup,
+  JobFlowType,
+  PaymentMode,
+  PaymentStatus,
+  RmpHandler,
+  ShareType,
+  WorkMode,
+};
 
 export interface Customer {
   id: number;
   name: string;
   shortCode: string;
-  type: 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
+  type: CustomerType;
   hasCommission: boolean;
   requiresDc: boolean;
   hasBillNo?: boolean;
@@ -15,7 +35,7 @@ export interface Customer {
   notes: string;
   isActive: boolean;
   /** Explicit invoice billing group. Overrides shortCode-based detection when set. */
-  invoiceGroup?: 'rmp' | 'ww' | 'nm' | null;
+  invoiceGroup?: InvoiceGroup | null;
 }
 
 export interface WorkType {
@@ -38,10 +58,10 @@ export interface Job {
   commissionAmount: number;
   netAmount?: number;
   date: string;
-  paymentStatus?: 'Paid' | 'Pending' | 'Partially Paid';
+  paymentStatus?: PaymentStatus;
   paymentMode?: string;
   paidAmount?: number;
-  workMode?: 'Workshop' | 'Spot';
+  workMode?: WorkMode;
   isSpotWork?: boolean;
   jobCardId?: string;
   jobCardLine?: number;
@@ -53,11 +73,11 @@ export interface Job {
   dcDate?: string;
   dcApproval?: boolean;
   // RMP handler tag (Bhai = people vehicles, Raja = commercial vehicles)
-  rmpHandler?: 'Bhai' | 'Raja' | null;
+  rmpHandler?: RmpHandler | null;
   // Job ownership and commission direction:
   // - slw_work: SLW did the work, worker commission is payable (expense)
   // - agent_work: external agent job routed via SLW, agent commission is receivable (income)
-  jobFlowType?: 'slw_work' | 'agent_work';
+  jobFlowType?: JobFlowType;
   externalDc?: boolean;
   agentName?: string;
   agentCommissionAmount?: number;
@@ -81,7 +101,7 @@ export interface Payment {
   customerId: number;
   amount: number;
   date: string;
-  paymentMode: 'Cash' | 'UPI' | 'Bank' | 'Cheque' | 'Mixed';
+  paymentMode: PaymentMode;
   breakdown?: PaymentBreakdown;
   referenceNumber?: string;
   paymentForMonth?: string;
@@ -93,7 +113,7 @@ export interface Payment {
 
 export interface Expense {
   id: number;
-  category: 'EB' | 'Rent' | 'Salary' | 'Material' | 'Fuel' | 'Union' | 'Other';
+  category: ExpenseCategory;
   description: string;
   amount: number;
   date: string;
@@ -170,7 +190,7 @@ export interface CommissionWorker {
   id: number;
   customerId: number;
   name: string;
-  shareType: 'percentage' | 'fixed';
+  shareType: ShareType;
   shareValue: number; // if percentage: 0-100, if fixed: fixed rupee amount
   isActive: boolean;
   isAgent?: boolean; // true = external agent (commission is income), false/undefined = worker (commission is expense)
@@ -195,4 +215,59 @@ export interface AuthUser {
   id: number | null;
   name: string;
   role: 'admin';
+}
+
+export interface FollowUpCustomerRow {
+  customerId: number;
+  customerName: string;
+  shortCode: string;
+  customerType: string;
+  outstanding: number;
+  oldestOutstandingDays: number;
+  ageingBucket: 'Current' | '8-30' | '31-60' | '61-90' | '90+';
+  nextFollowUpDate: string | null;
+  followUpNotes: string | null;
+  lastJobDate: string | null;
+  lastPaymentDate: string | null;
+}
+
+export interface FollowUpOverview {
+  asOfDate: string;
+  rows: FollowUpCustomerRow[];
+  ageingSummary: Array<{
+    bucket: FollowUpCustomerRow['ageingBucket'];
+    customerCount: number;
+    outstandingAmount: number;
+  }>;
+  callList: FollowUpCustomerRow[];
+}
+
+export interface MonthLockRecord {
+  monthKey: string;
+  notes: string | null;
+  lockedByUserId: number | null;
+  lockedByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MonthLockOverrideStatus {
+  active: boolean;
+  until: string | null;
+  reason: string | null;
+  setByName: string | null;
+  remainingMinutes: number;
+}
+
+export interface MonthLockStateResponse {
+  locks: MonthLockRecord[];
+  override: MonthLockOverrideStatus;
+}
+
+export interface BackupListItem {
+  fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+  mode: 'manual' | 'scheduled';
+  triggeredBy: string | null;
 }

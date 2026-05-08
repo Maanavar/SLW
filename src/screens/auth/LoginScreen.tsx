@@ -1,7 +1,7 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
-import { Icon } from '@/components/ui/Icon';
 import './LoginScreen.css';
 
 export function LoginScreen() {
@@ -21,16 +21,13 @@ export function LoginScreen() {
     let active = true;
 
     const checkSession = async () => {
-      if (!apiClient.hasAuthToken()) {
-        return;
-      }
       try {
         await apiClient.getAuthSession();
         if (active) {
           navigate(redirectPath, { replace: true });
         }
       } catch {
-        apiClient.clearAuthToken();
+        // Not authenticated yet.
       }
     };
 
@@ -58,28 +55,10 @@ export function LoginScreen() {
       navigate(redirectPath, { replace: true });
     } catch (loginError) {
       const message = loginError instanceof Error ? loginError.message : 'Login failed';
-      const normalized = message.toLowerCase();
-      const isNetworkError =
-        normalized.includes('failed to fetch') ||
-        normalized.includes('network') ||
-        normalized.includes('timeout') ||
-        normalized.includes('unable to connect');
-
-      if (isNetworkError) {
-        apiClient.createOfflineSession(name.trim() || 'Offline Admin');
-        navigate(redirectPath, { replace: true });
-        return;
-      }
-
       setError(message);
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleContinueOffline = () => {
-    apiClient.createOfflineSession(name.trim() || 'Offline Admin');
-    navigate(redirectPath, { replace: true });
   };
 
   return (
@@ -89,7 +68,11 @@ export function LoginScreen() {
           <div className="login-brand-mark">S</div>
           <div>
             <h1 className="login-brand-title">Siva Lathe Works</h1>
-            <p className="login-brand-sub tamil">சிவா லேத் வொர்க்ஸ்</p>
+            <p className="login-brand-sub tamil">
+              {
+                '\u0b9a\u0bbf\u0bb5\u0bbe \u0bb2\u0bc7\u0ba4\u0bcd \u0bb5\u0bca\u0bb0\u0bcd\u0b95\u0bcd\u0bb8\u0bcd'
+              }
+            </p>
           </div>
         </div>
 
@@ -101,7 +84,9 @@ export function LoginScreen() {
           </p>
         </div>
 
-        <p className="login-meta numeric">v1.0 · Apr 2026 · Works offline · INR ₹</p>
+        <p className="login-meta numeric">
+          {'v1.0 \u00b7 May 2026 \u00b7 Secure session \u00b7 INR \u20b9'}
+        </p>
       </section>
 
       <section className="login-right-panel" aria-label="Login form">
@@ -109,7 +94,12 @@ export function LoginScreen() {
           <h2 className="login-title">Sign in</h2>
           <p className="login-subtitle">Enter your credentials</p>
 
-          <form onSubmit={handleSubmit} className="login-form">
+          <form
+            onSubmit={(event) => {
+              void handleSubmit(event);
+            }}
+            className="login-form"
+          >
             <label className="login-label" htmlFor="login-name">
               Display name
             </label>
@@ -144,18 +134,6 @@ export function LoginScreen() {
 
             <button type="submit" className="btn btn-accent login-submit" disabled={submitting}>
               {submitting ? 'Signing in...' : 'Sign in'}
-            </button>
-
-            <div className="login-divider">or</div>
-
-            <button
-              type="button"
-              className="btn btn-secondary login-offline"
-              onClick={handleContinueOffline}
-              disabled={submitting}
-            >
-              <Icon name="offline" width={14} height={14} />
-              Continue offline
             </button>
           </form>
         </div>

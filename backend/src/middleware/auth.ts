@@ -1,5 +1,4 @@
 import type { NextFunction, Request, Response } from 'express';
-import { env } from '../config/env';
 import { HttpError } from './httpError';
 import { verifyAuthToken } from '../services/authService';
 
@@ -13,41 +12,9 @@ export interface AuthenticatedRequest extends Request {
   authUser?: AuthenticatedUser;
 }
 
-function parseBearerToken(req: Request): string | null {
-  const authorization = req.header('authorization');
-  if (!authorization) {
-    return null;
-  }
-
-  const [scheme, token] = authorization.split(' ');
-  if (!scheme || !token || scheme.toLowerCase() !== 'bearer') {
-    return null;
-  }
-
-  return token.trim() || null;
-}
-
 export function getAuthUser(req: Request): AuthenticatedUser | null {
   const authReq = req as AuthenticatedRequest;
   return authReq.authUser ?? null;
-}
-
-function getUserFromAdminKey(req: Request): AuthenticatedUser | null {
-  if (!env.adminApiKey) {
-    return null;
-  }
-
-  const provided = req.header('x-admin-key');
-  if (provided !== env.adminApiKey) {
-    return null;
-  }
-
-  const actorName = req.header('x-actor-name')?.trim();
-  return {
-    id: null,
-    name: actorName || 'Admin Key User',
-    role: 'admin',
-  };
 }
 
 function parseCookieToken(req: Request): string | null {
@@ -55,26 +22,23 @@ function parseCookieToken(req: Request): string | null {
 }
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
-  // Accept token from Bearer header OR httpOnly cookie (cookie takes priority when both present)
-  const token = parseCookieToken(req) || parseBearerToken(req);
-  if (token) {
-    const claims = verifyAuthToken(token);
+  void (async () => {
+    const token = parseCookieToken(req);
+    if (!token) {
+      throw new HttpError(401, 'Authentication required');
+    }
+
+    const claims = await verifyAuthToken(token);
     if (!claims) {
       throw new HttpError(401, 'Session expired or invalid token');
     }
+
     (req as AuthenticatedRequest).authUser = {
       id: claims.sub,
       name: claims.name,
       role: claims.role,
     };
-    return next();
-  }
 
-  const adminKeyUser = getUserFromAdminKey(req);
-  if (adminKeyUser) {
-    (req as AuthenticatedRequest).authUser = adminKeyUser;
-    return next();
-  }
-
-  throw new HttpError(401, 'Authentication required');
+    next();
+  })().catch(next);
 }

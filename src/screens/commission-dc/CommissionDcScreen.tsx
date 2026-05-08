@@ -26,6 +26,8 @@ type ExtDcFilter  = 'all' | 'external' | 'internal';
 type CustomerFilter = 'all' | 'ww' | 'rmp';
 type WorkerSortKey     = 'customer' | 'outstanding' | 'status';
 type WorkerCardSortKey = 'date' | 'billNo' | 'dcNo' | 'workerName' | 'invoice' | 'commission' | 'pending';
+type WorkerDetailSortKey = 'jobCardDate' | 'billNo' | 'dcNo' | 'dcDate' | 'commission';
+type AgentDetailSortKey = 'jobCardDate' | 'billNo' | 'dcNo' | 'dcDate' | 'commission';
 type WorkerRowStatus   = 'Pending' | 'Settled';
 type AgentSortKey =
   | 'date'
@@ -56,6 +58,7 @@ interface AgentCardRow {
   key: string;
   jobId: number;
   date: string;
+  dcDate: string;
   customerName: string;
   jobCardId: string;
   agentName: string;
@@ -71,8 +74,11 @@ interface AgentCardRow {
 }
 
 interface WorkerJobCardDetail {
-  jobCardId: string;
-  date: string;
+  key: string;
+  jobCardDate: string;
+  billNo: string;
+  dcNo: string;
+  dcDate: string;
   commission: number;
 }
 
@@ -86,10 +92,20 @@ interface WorkerCardRow {
   jobCardId: string;
   workTypeName: string;
   dcNo: string;
+  dcDate: string;
   billNo: string;
   invoice: number;
   commission: number;
   workerOutstanding: number;
+}
+
+interface AgentJobCardDetail {
+  key: string;
+  jobCardDate: string;
+  billNo: string;
+  dcNo: string;
+  dcDate: string;
+  commission: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -157,20 +173,23 @@ export function CommissionDcScreen() {
   const [workerForDetails, setWorkerForDetails] = useState<number | null>(null);
   const [workerSort] = useState<{ key: WorkerSortKey; order: 'asc' | 'desc' } | null>(null);
   const [workerCardSort, setWorkerCardSort] = useState<{ key: WorkerCardSortKey; order: 'asc' | 'desc' } | null>(null);
+  const [workerDetailSort, setWorkerDetailSort] = useState<{ key: WorkerDetailSortKey; order: 'asc' | 'desc' } | null>(null);
   const [workerOnlyPending, setWorkerOnlyPending] = useState(false);
   const [workerFilter, setWorkerFilter] = useState<string>('all');
   const [workerCustomerFilter, setWorkerCustomerFilter] = useState<CustomerFilter>('all');
-  const [workerPeriod, setWorkerPeriod] = useState<PeriodType>('all');
+  const [workerPeriod, setWorkerPeriod] = useState<PeriodType>('month');
   const [workerOffset, setWorkerOffset] = useState(0);
 
   // ── Agent work tab ────────────────────────────────────────────────────────────
   const [customerFilter, setCustomerFilter] = useState<CustomerFilter>('all');
   const [extDcFilter, setExtDcFilter]       = useState<ExtDcFilter>('all');
-  const [period, setPeriod]                 = useState<PeriodType>('all');
+  const [period, setPeriod]                 = useState<PeriodType>('month');
   const [offset, setOffset]                 = useState(0);
   const [agentFilter, setAgentFilter]       = useState<string>('all');
   const [onlyPending, setOnlyPending]       = useState(false);
   const [agentSort, setAgentSort] = useState<{ key: AgentSortKey; order: 'asc' | 'desc' } | null>(null);
+  const [agentForDetails, setAgentForDetails] = useState<string | null>(null);
+  const [agentDetailSort, setAgentDetailSort] = useState<{ key: AgentDetailSortKey; order: 'asc' | 'desc' } | null>(null);
 
   // ── Agent payment form ────────────────────────────────────────────────────────
   const [showAgentPayForm, setShowAgentPayForm]   = useState(false);
@@ -195,36 +214,6 @@ export function CommissionDcScreen() {
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers),
     [jobs, commissionPayments, commissionWorkers],
-  );
-
-  const workerJobCardDetails = useMemo(() => {
-    const byWorker = new Map<number, Map<string, WorkerJobCardDetail>>();
-    jobs.forEach(job => {
-      const commission = getJobWorkerCommissionExpense(job);
-      if (commission <= 0) return;
-      const wid = resolveCommissionWorkerId(job, commissionWorkers);
-      if (wid === null) return;
-      if (!byWorker.has(wid)) byWorker.set(wid, new Map());
-      const cardMap = byWorker.get(wid)!;
-      const cardId = job.jobCardId?.trim() || `LEGACY-${job.id}`;
-      const existing = cardMap.get(cardId);
-      if (existing) { existing.commission += commission; }
-      else { cardMap.set(cardId, { jobCardId: cardId, date: job.date, commission }); }
-    });
-    const result = new Map<number, WorkerJobCardDetail[]>();
-    byWorker.forEach((cardMap, wid) => {
-      result.set(wid, Array.from(cardMap.values()).sort((a, b) => b.date.localeCompare(a.date) || b.commission - a.commission));
-    });
-    return result;
-  }, [jobs, commissionWorkers]);
-
-  const detailWorkerSummary = useMemo(
-    () => workerSummary.find(w => w.workerId === workerForDetails) ?? null,
-    [workerSummary, workerForDetails],
-  );
-  const detailWorkerCards = useMemo(
-    () => workerForDetails === null ? [] : (workerJobCardDetails.get(workerForDetails) ?? []),
-    [workerJobCardDetails, workerForDetails],
   );
 
   const workerRows = useMemo<WorkerRow[]>(
@@ -285,6 +274,7 @@ export function CommissionDcScreen() {
         jobCardId: primary.jobCardId || `LEGACY-${primary.id}`,
         workTypeName: primary.workTypeName || '—',
         dcNo: primary.dcNo || '',
+        dcDate: primary.dcDate || '',
         billNo: primary.billNo || '',
         invoice: sorted.reduce((sum, j) => sum + getJobFinalBillValue(j), 0),
         commission: sorted.reduce((sum, j) => sum + getJobWorkerCommissionExpense(j), 0),
@@ -363,6 +353,51 @@ export function CommissionDcScreen() {
       .sort((a, b) => b.pending - a.pending || b.commission - a.commission);
   }, [filteredWorkerRows, filteredWorkerCardRows]);
 
+  const detailWorkerSummary = useMemo(() => {
+    if (workerForDetails === null) return null;
+    const filtered = workerBreakdown.find((row) => row.workerId === workerForDetails);
+    if (filtered) {
+      return {
+        workerId: filtered.workerId,
+        workerName: filtered.workerName,
+        customerId: 0,
+        totalDue: filtered.commission,
+        totalPaid: filtered.settled,
+        outstanding: filtered.pending,
+      };
+    }
+    return workerSummary.find((worker) => worker.workerId === workerForDetails) ?? null;
+  }, [workerForDetails, workerBreakdown, workerSummary]);
+
+  const detailWorkerCards = useMemo<WorkerJobCardDetail[]>(() => {
+    if (workerForDetails === null) return [];
+    return filteredWorkerCardRows
+      .filter((row) => row.workerId === workerForDetails)
+      .map((row) => ({
+        key: row.key,
+        jobCardDate: row.date,
+        billNo: row.billNo,
+        dcNo: row.dcNo,
+        dcDate: row.dcDate,
+        commission: row.commission,
+      }))
+      .sort((a, b) => b.jobCardDate.localeCompare(a.jobCardDate) || b.commission - a.commission);
+  }, [filteredWorkerCardRows, workerForDetails]);
+
+  const visibleDetailWorkerCards = useMemo(() => {
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base', numeric: true });
+    const base = [...detailWorkerCards];
+    if (!workerDetailSort) return base;
+    const dir = workerDetailSort.order === 'asc' ? 1 : -1;
+    return base.sort((a, b) => {
+      if (workerDetailSort.key === 'jobCardDate') return a.jobCardDate.localeCompare(b.jobCardDate) * dir;
+      if (workerDetailSort.key === 'billNo') return collator.compare(a.billNo || '', b.billNo || '') * dir;
+      if (workerDetailSort.key === 'dcNo') return collator.compare(a.dcNo || '', b.dcNo || '') * dir;
+      if (workerDetailSort.key === 'dcDate') return (a.dcDate || '').localeCompare(b.dcDate || '') * dir;
+      return (a.commission - b.commission) * dir;
+    });
+  }, [detailWorkerCards, workerDetailSort]);
+
   // ── Agent work data ───────────────────────────────────────────────────────────
   const periodRange = useMemo(() => getPeriodRange(period, offset), [period, offset]);
 
@@ -392,6 +427,7 @@ export function CommissionDcScreen() {
         key,
         jobId:        primary.id,
         date:         primary.date,
+        dcDate:       primary.dcDate || '',
         customerName: getCustomer(primary.customerId)?.name || '—',
         jobCardId:    primary.jobCardId || `LEGACY-${primary.id}`,
         agentName:    primary.agentName || primary.rmpHandler || 'Agent',
@@ -504,6 +540,40 @@ export function CommissionDcScreen() {
     { invoice: 0, commission: 0, tds: 0, netPayable: 0, settled: 0, pending: 0 },
   ), [visibleAgentRows]);
 
+  const detailAgentSummary = useMemo(() => {
+    if (!agentForDetails) return null;
+    return agentBreakdown.find((row) => row.name === agentForDetails) ?? null;
+  }, [agentBreakdown, agentForDetails]);
+
+  const detailAgentCards = useMemo<AgentJobCardDetail[]>(() => {
+    if (!agentForDetails) return [];
+    return filteredAgentRows
+      .filter((row) => row.agentName === agentForDetails)
+      .map((row) => ({
+        key: row.key,
+        jobCardDate: row.date,
+        billNo: row.billNo,
+        dcNo: row.dcNo,
+        dcDate: row.dcDate,
+        commission: row.commission,
+      }))
+      .sort((a, b) => b.jobCardDate.localeCompare(a.jobCardDate) || b.commission - a.commission);
+  }, [filteredAgentRows, agentForDetails]);
+
+  const visibleDetailAgentCards = useMemo(() => {
+    const collator = new Intl.Collator('en-IN', { sensitivity: 'base', numeric: true });
+    const base = [...detailAgentCards];
+    if (!agentDetailSort) return base;
+    const dir = agentDetailSort.order === 'asc' ? 1 : -1;
+    return base.sort((a, b) => {
+      if (agentDetailSort.key === 'jobCardDate') return a.jobCardDate.localeCompare(b.jobCardDate) * dir;
+      if (agentDetailSort.key === 'billNo') return collator.compare(a.billNo || '', b.billNo || '') * dir;
+      if (agentDetailSort.key === 'dcNo') return collator.compare(a.dcNo || '', b.dcNo || '') * dir;
+      if (agentDetailSort.key === 'dcDate') return (a.dcDate || '').localeCompare(b.dcDate || '') * dir;
+      return (a.commission - b.commission) * dir;
+    });
+  }, [detailAgentCards, agentDetailSort]);
+
 
   // ── Sort helpers ──────────────────────────────────────────────────────────────
   const toggleAgentSort = (key: AgentSortKey) =>
@@ -511,14 +581,32 @@ export function CommissionDcScreen() {
       ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
       : { key, order: key === 'date' ? 'desc' : 'asc' });
   const agentSortMark = (key: AgentSortKey) =>
-    !agentSort || agentSort.key !== key ? ' ↕' : agentSort.order === 'asc' ? ' ↑' : ' ↓';
+    !agentSort || agentSort.key !== key ? ' \u2195' : agentSort.order === 'asc' ? ' \u2191' : ' \u2193';
 
   const toggleWorkerCardSort = (key: WorkerCardSortKey) =>
     setWorkerCardSort(prev => prev?.key === key
       ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
       : { key, order: key === 'date' ? 'desc' : 'asc' });
   const wcSortMark = (key: WorkerCardSortKey) =>
-    !workerCardSort || workerCardSort.key !== key ? ' ↕' : workerCardSort.order === 'asc' ? ' ↑' : ' ↓';
+    !workerCardSort || workerCardSort.key !== key ? ' \u2195' : workerCardSort.order === 'asc' ? ' \u2191' : ' \u2193';
+
+  const toggleWorkerDetailSort = (key: WorkerDetailSortKey) =>
+    setWorkerDetailSort((prev) =>
+      prev?.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'jobCardDate' || key === 'dcDate' || key === 'commission' ? 'desc' : 'asc' },
+    );
+  const workerDetailSortMark = (key: WorkerDetailSortKey) =>
+    !workerDetailSort || workerDetailSort.key !== key ? ' \u2195' : workerDetailSort.order === 'asc' ? ' \u2191' : ' \u2193';
+
+  const toggleAgentDetailSort = (key: AgentDetailSortKey) =>
+    setAgentDetailSort((prev) =>
+      prev?.key === key
+        ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { key, order: key === 'jobCardDate' || key === 'dcDate' || key === 'commission' ? 'desc' : 'asc' },
+    );
+  const agentDetailSortMark = (key: AgentDetailSortKey) =>
+    !agentDetailSort || agentDetailSort.key !== key ? ' \u2195' : agentDetailSort.order === 'asc' ? ' \u2191' : ' \u2193';
 
   // ── Payment handlers ──────────────────────────────────────────────────────────
   const handleRecordPayment = async () => {
@@ -812,7 +900,16 @@ export function CommissionDcScreen() {
                   <tbody>
                     {workerBreakdown.map((row) => (
                       <tr key={row.workerId}>
-                        <td className="fw-600">{row.workerName}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="cd-worker-link"
+                            onClick={() => setWorkerForDetails(row.workerId)}
+                            title={`View ${row.workerName} commission details`}
+                          >
+                            {row.workerName}
+                          </button>
+                        </td>
                         <td className="numeric">{row.cards}</td>
                         <td className="numeric">{formatCurrency(row.commission)}</td>
                         <td className="numeric rec-paid">{formatCurrency(row.settled)}</td>
@@ -1234,7 +1331,16 @@ export function CommissionDcScreen() {
                   <tbody>
                     {agentBreakdown.map(row => (
                       <tr key={row.name}>
-                        <td className="fw-600">{row.name}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="cd-worker-link"
+                            onClick={() => setAgentForDetails(row.name)}
+                            title={`View ${row.name} commission details`}
+                          >
+                            {row.name}
+                          </button>
+                        </td>
                         <td className="numeric">{row.cards}</td>
                         <td className="numeric rec-paid">{formatCurrency(row.commission)}</td>
                         <td className="numeric rec-paid">{formatCurrency(row.tds)}</td>
@@ -1424,7 +1530,7 @@ export function CommissionDcScreen() {
       <Modal
         isOpen={workerForDetails !== null}
         onClose={() => setWorkerForDetails(null)}
-        title={detailWorkerSummary ? `${detailWorkerSummary.workerName} — Job Card Commission` : 'Worker Details'}
+        title={detailWorkerSummary ? `${detailWorkerSummary.workerName} — Commission Details` : 'Worker Details'}
         size="lg"
       >
         {detailWorkerSummary && (
@@ -1452,16 +1558,207 @@ export function CommissionDcScreen() {
                 <table className="records-table">
                   <thead>
                     <tr>
-                      <th>Job Card</th>
-                      <th>Date</th>
-                      <th className="numeric">Commission</th>
+                      <th
+                        className={`slw-sortable-th${workerDetailSort?.key === 'jobCardDate' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleWorkerDetailSort('jobCardDate')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleWorkerDetailSort('jobCardDate');
+                          }
+                        }}
+                      >
+                        Job Card Date{workerDetailSortMark('jobCardDate')}
+                      </th>
+                      <th
+                        className={`slw-sortable-th${workerDetailSort?.key === 'billNo' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleWorkerDetailSort('billNo')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleWorkerDetailSort('billNo');
+                          }
+                        }}
+                      >
+                        Bill No{workerDetailSortMark('billNo')}
+                      </th>
+                      <th
+                        className={`slw-sortable-th${workerDetailSort?.key === 'dcNo' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleWorkerDetailSort('dcNo')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleWorkerDetailSort('dcNo');
+                          }
+                        }}
+                      >
+                        DC No{workerDetailSortMark('dcNo')}
+                      </th>
+                      <th
+                        className={`slw-sortable-th${workerDetailSort?.key === 'dcDate' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleWorkerDetailSort('dcDate')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleWorkerDetailSort('dcDate');
+                          }
+                        }}
+                      >
+                        DC Date{workerDetailSortMark('dcDate')}
+                      </th>
+                      <th
+                        className={`numeric slw-sortable-th${workerDetailSort?.key === 'commission' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleWorkerDetailSort('commission')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleWorkerDetailSort('commission');
+                          }
+                        }}
+                      >
+                        Commission Amt{workerDetailSortMark('commission')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detailWorkerCards.map(jc => (
-                      <tr key={jc.jobCardId}>
-                        <td><span className="rec-card-id">{jc.jobCardId}</span></td>
-                        <td><span className="rec-date-cell">{new Date(jc.date).toLocaleDateString('en-IN')}</span></td>
+                    {visibleDetailWorkerCards.map(jc => (
+                      <tr key={jc.key}>
+                        <td><span className="rec-date-cell">{new Date(jc.jobCardDate).toLocaleDateString('en-IN')}</span></td>
+                        <td><span className="mono">{jc.billNo || '—'}</span></td>
+                        <td><span className="mono">{jc.dcNo || '—'}</span></td>
+                        <td><span className="rec-date-cell">{jc.dcDate ? new Date(jc.dcDate).toLocaleDateString('en-IN') : '—'}</span></td>
+                        <td className="numeric">{formatCurrency(jc.commission)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Agent detail modal ── */}
+      <Modal
+        isOpen={agentForDetails !== null}
+        onClose={() => setAgentForDetails(null)}
+        title={detailAgentSummary ? `${detailAgentSummary.name} — Commission Details` : 'Agent Details'}
+        size="lg"
+      >
+        {detailAgentSummary && (
+          <div className="cd-detail">
+            <div className="cd-detail-tiles">
+              <div className="cd-detail-tile">
+                <span className="cd-detail-tile-label">SLW Commission</span>
+                <strong className="cd-detail-tile-val rec-paid">{formatCurrency(detailAgentSummary.commission)}</strong>
+              </div>
+              <div className="cd-detail-tile">
+                <span className="cd-detail-tile-label">Sent</span>
+                <strong className="cd-detail-tile-val rec-paid">{formatCurrency(detailAgentSummary.settled)}</strong>
+              </div>
+              <div className="cd-detail-tile">
+                <span className="cd-detail-tile-label">Balance Due</span>
+                <strong className={`cd-detail-tile-val${detailAgentSummary.pending > 0 ? ' rec-pending-val' : ' rec-paid'}`}>
+                  {formatCurrency(detailAgentSummary.pending)}
+                </strong>
+              </div>
+            </div>
+            {detailAgentCards.length === 0 ? (
+              <div className="cd-empty"><p className="cd-empty-title">No agent commission entries found.</p></div>
+            ) : (
+              <div className="records-table-wrap">
+                <table className="records-table">
+                  <thead>
+                    <tr>
+                      <th
+                        className={`slw-sortable-th${agentDetailSort?.key === 'jobCardDate' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleAgentDetailSort('jobCardDate')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleAgentDetailSort('jobCardDate');
+                          }
+                        }}
+                      >
+                        Job Card Date{agentDetailSortMark('jobCardDate')}
+                      </th>
+                      <th
+                        className={`slw-sortable-th${agentDetailSort?.key === 'billNo' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleAgentDetailSort('billNo')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleAgentDetailSort('billNo');
+                          }
+                        }}
+                      >
+                        Bill No{agentDetailSortMark('billNo')}
+                      </th>
+                      <th
+                        className={`slw-sortable-th${agentDetailSort?.key === 'dcNo' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleAgentDetailSort('dcNo')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleAgentDetailSort('dcNo');
+                          }
+                        }}
+                      >
+                        DC No{agentDetailSortMark('dcNo')}
+                      </th>
+                      <th
+                        className={`slw-sortable-th${agentDetailSort?.key === 'dcDate' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleAgentDetailSort('dcDate')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleAgentDetailSort('dcDate');
+                          }
+                        }}
+                      >
+                        DC Date{agentDetailSortMark('dcDate')}
+                      </th>
+                      <th
+                        className={`numeric slw-sortable-th${agentDetailSort?.key === 'commission' ? ' is-active' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleAgentDetailSort('commission')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleAgentDetailSort('commission');
+                          }
+                        }}
+                      >
+                        Commission Amt{agentDetailSortMark('commission')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleDetailAgentCards.map((jc) => (
+                      <tr key={jc.key}>
+                        <td><span className="rec-date-cell">{new Date(jc.jobCardDate).toLocaleDateString('en-IN')}</span></td>
+                        <td><span className="mono">{jc.billNo || '—'}</span></td>
+                        <td><span className="mono">{jc.dcNo || '—'}</span></td>
+                        <td><span className="rec-date-cell">{jc.dcDate ? new Date(jc.dcDate).toLocaleDateString('en-IN') : '—'}</span></td>
                         <td className="numeric">{formatCurrency(jc.commission)}</td>
                       </tr>
                     ))}
@@ -1476,3 +1773,4 @@ export function CommissionDcScreen() {
     </div>
   );
 }
+

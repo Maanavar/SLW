@@ -417,7 +417,7 @@ export function PaymentForm() {
                     className="icon-btn icon-delete"
                     title={isJobPayment ? 'Clear job payment' : 'Delete payment'}
                     aria-label="Delete"
-                    onClick={e => { e.stopPropagation(); handleDeletePayment(row); }}
+                    onClick={e => { e.stopPropagation(); void handleDeletePayment(row); }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="3 6 5 6 21 6" />

@@ -4,6 +4,13 @@ import type { Customer, Expense, Job, Payment, WorkType, CommissionWorker, Commi
 import { defaultCustomers, defaultWorkTypes, defaultCommissionWorkers } from '@/lib/seedData';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { apiClient } from '@/lib/apiClient';
+import {
+  CUSTOMER_SHORT_CODES,
+  isMahalingamCustomerLabel,
+  isRmpCustomer,
+  isWagenAutosCustomerLabel,
+  normalizeCustomerCode,
+} from '@/constants/customers';
 import ENV from '@/lib/envConfig';
 
 const LEGACY_KEYS = {
@@ -31,9 +38,13 @@ interface DataStore {
   backendConnected: boolean;
   lastSyncAt: string | null;
   syncError: string | null;
+  loadedDataFrom: string | null;
+  loadedDataTo: string | null;
 
   initializeData: () => Promise<void>;
   refreshData: () => Promise<void>;
+  ensureRangeLoaded: (range: { from: string; to: string }) => Promise<void>;
+  loadJobsBefore: (beforeDate: string, limit?: number) => Promise<number>;
 
   addCustomer: (customer: Omit<Customer, 'id'>) => Promise<Customer>;
   updateCustomer: (id: number, updates: Partial<Customer>) => Promise<Customer>;
@@ -88,7 +99,7 @@ function parseJsonArray<T>(raw: string | null): T[] {
     return [];
   }
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
@@ -128,17 +139,12 @@ function normalizeLegacyJob(job: LegacyJobLike): Job {
 
 function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
   return customers.map((customer) => {
-    const normalizedShortCode = String(customer.shortCode || '').trim().toLowerCase();
-    const normalizedName = String(customer.name || '').trim().toLowerCase();
-    const normalizedNameToken = normalizedName.replace(/[^a-z]/g, '');
-    const isRmp = normalizedShortCode === 'rmp' || normalizedName.includes('ramani motors');
-    const isNm =
-      normalizedShortCode === 'nm' ||
-      normalizedNameToken.includes('mahaling') ||
-      normalizedNameToken.includes('mahalinham');
+    const normalizedShortCode = normalizeCustomerCode(customer.shortCode);
+    const isRmp = isRmpCustomer(customer.shortCode, customer.name);
+    const isNm = isMahalingamCustomerLabel(customer.shortCode, customer.name);
     const hasBillNo = customer.hasBillNo === true || isRmp || isNm;
 
-    if (normalizedShortCode === 'wp' || normalizedName === 'wagen autos') {
+    if (isWagenAutosCustomerLabel(customer.name, customer.shortCode)) {
       return {
         ...customer,
         hasBillNo,
@@ -162,7 +168,7 @@ function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
     }
 
     // AKR has commission but does NOT require DC
-    if (normalizedShortCode === 'akr') {
+    if (normalizedShortCode === CUSTOMER_SHORT_CODES.AKR) {
       return {
         ...customer,
         hasBillNo,
@@ -233,6 +239,34 @@ function getNextId(items: Array<{ id: number }>) {
   return items.length > 0 ? Math.max(...items.map((item) => item.id), 0) + 1 : 1;
 }
 
+const INITIAL_HISTORY_MONTHS = 3;
+
+function getInitialDataWindow(): { from: string; to: string } {
+  const today = new Date();
+  const fromDate = new Date(today.getFullYear(), today.getMonth() - INITIAL_HISTORY_MONTHS, 1);
+  return {
+    from: getLocalDateString(fromDate),
+    to: getLocalDateString(today),
+  };
+}
+
+function shiftLocalDate(dateStr: string, deltaDays: number): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + deltaDays);
+  return getLocalDateString(date);
+}
+
+function mergeById<T extends { id: number }>(existing: T[], incoming: T[]): T[] {
+  if (incoming.length === 0) {
+    return existing;
+  }
+  const map = new Map<number, T>();
+  existing.forEach((item) => map.set(item.id, item));
+  incoming.forEach((item) => map.set(item.id, item));
+  return Array.from(map.values());
+}
+
 export const useDataStore = create<DataStore>()(
   persist(
     (set, get) => ({
@@ -248,6 +282,8 @@ export const useDataStore = create<DataStore>()(
       backendConnected: false,
       lastSyncAt: null,
       syncError: null,
+      loadedDataFrom: null,
+      loadedDataTo: null,
 
       initializeData: async () => {
         if (get().isLoading) {
@@ -266,48 +302,37 @@ export const useDataStore = create<DataStore>()(
               expenses: persistedExpenses,
               backendConnected: false,
               lastSyncAt: new Date().toISOString(),
+              loadedDataFrom: null,
+              loadedDataTo: null,
               isLoading: false,
             });
             return;
           }
 
+          const initialWindow = getInitialDataWindow();
+
           const hydrateFromApi = async () => {
-            const [customers, workTypes, jobs, payments, expenses, commissionWorkers, commissionPayments] = await Promise.all([
+            const [
+              customers,
+              workTypes,
+              jobs,
+              payments,
+              expenses,
+              commissionWorkers,
+              commissionPayments,
+            ] = await Promise.all([
               apiClient.getCustomers(),
               apiClient.getWorkTypes(),
-              apiClient.getJobs(),
-              apiClient.getPayments(),
-              apiClient.getExpenses(),
+              apiClient.getJobs(initialWindow),
+              apiClient.getPayments(initialWindow),
+              apiClient.getExpenses(initialWindow),
               apiClient.getCommissionWorkers(),
               apiClient.getCommissionPayments(),
             ]);
             return { customers, workTypes, jobs, payments, expenses, commissionWorkers, commissionPayments };
           };
 
-          let data = await hydrateFromApi();
-          data.jobs = data.jobs.map((job) => normalizeLegacyJob(job as LegacyJobLike));
-          const isBackendEmpty =
-            data.customers.length === 0 &&
-            data.workTypes.length === 0 &&
-            data.jobs.length === 0 &&
-            data.payments.length === 0 &&
-            data.expenses.length === 0;
-
-          if (isBackendEmpty && localStorage.getItem(LEGACY_KEYS.importedFlag) !== 'true') {
-            const persistedExpenses =
-              legacy.expenses.length > 0 ? legacy.expenses : get().expenses;
-            await apiClient.importLegacyData({
-              overwrite: false,
-              customers: legacy.customers,
-              workTypes: legacy.workTypes,
-              jobs: legacy.jobs,
-              payments: legacy.payments,
-              expenses: persistedExpenses,
-            });
-            localStorage.setItem(LEGACY_KEYS.importedFlag, 'true');
-            data = await hydrateFromApi();
-          }
-
+          const data = await hydrateFromApi();
           data.customers = patchCommissionDcCustomers(data.customers);
 
           set({
@@ -315,6 +340,8 @@ export const useDataStore = create<DataStore>()(
             backendConnected: true,
             lastSyncAt: new Date().toISOString(),
             syncError: null,
+            loadedDataFrom: initialWindow.from,
+            loadedDataTo: initialWindow.to,
             isLoading: false,
           });
         } catch (error) {
@@ -328,6 +355,8 @@ export const useDataStore = create<DataStore>()(
             backendConnected: false,
             lastSyncAt: new Date().toISOString(),
             syncError: error instanceof Error ? error.message : 'Sync failed',
+            loadedDataFrom: null,
+            loadedDataTo: null,
             isLoading: false,
           });
         }
@@ -338,12 +367,28 @@ export const useDataStore = create<DataStore>()(
           return;
         }
 
-        const [customers, workTypes, jobs, payments, expenses, commissionWorkers, commissionPayments] = await Promise.all([
+        const window = (() => {
+          const state = get();
+          if (state.loadedDataFrom && state.loadedDataTo) {
+            return { from: state.loadedDataFrom, to: state.loadedDataTo };
+          }
+          return getInitialDataWindow();
+        })();
+
+        const [
+          customers,
+          workTypes,
+          jobs,
+          payments,
+          expenses,
+          commissionWorkers,
+          commissionPayments,
+        ] = await Promise.all([
           apiClient.getCustomers(),
           apiClient.getWorkTypes(),
-          apiClient.getJobs(),
-          apiClient.getPayments(),
-          apiClient.getExpenses(),
+          apiClient.getJobs(window),
+          apiClient.getPayments(window),
+          apiClient.getExpenses(window),
           apiClient.getCommissionWorkers(),
           apiClient.getCommissionPayments(),
         ]);
@@ -351,14 +396,126 @@ export const useDataStore = create<DataStore>()(
         set({
           customers: patchCommissionDcCustomers(customers),
           workTypes,
-          jobs: jobs.map((job) => normalizeLegacyJob(job as LegacyJobLike)),
+          jobs,
           payments,
           expenses,
           commissionWorkers,
           commissionPayments,
           lastSyncAt: new Date().toISOString(),
           syncError: null,
+          loadedDataFrom: window.from,
+          loadedDataTo: window.to,
         });
+      },
+
+      ensureRangeLoaded: async (range) => {
+        const state = get();
+        if (!state.backendConnected) {
+          return;
+        }
+
+        const normalizedRange = {
+          from: range.from <= range.to ? range.from : range.to,
+          to: range.from <= range.to ? range.to : range.from,
+        };
+
+        const loadedFrom = state.loadedDataFrom;
+        const loadedTo = state.loadedDataTo;
+        if (
+          loadedFrom &&
+          loadedTo &&
+          normalizedRange.from >= loadedFrom &&
+          normalizedRange.to <= loadedTo
+        ) {
+          return;
+        }
+
+        const segments: Array<{ from: string; to: string }> = [];
+        if (!loadedFrom || !loadedTo) {
+          segments.push(normalizedRange);
+        } else {
+          if (normalizedRange.from < loadedFrom) {
+            segments.push({
+              from: normalizedRange.from,
+              to: shiftLocalDate(loadedFrom, -1),
+            });
+          }
+          if (normalizedRange.to > loadedTo) {
+            segments.push({
+              from: shiftLocalDate(loadedTo, 1),
+              to: normalizedRange.to,
+            });
+          }
+        }
+
+        if (segments.length === 0) {
+          return;
+        }
+
+        let mergedJobs = state.jobs;
+        let mergedPayments = state.payments;
+        let mergedExpenses = state.expenses;
+
+        for (const segment of segments) {
+          const [jobs, payments, expenses] = await Promise.all([
+            apiClient.getJobs(segment),
+            apiClient.getPayments(segment),
+            apiClient.getExpenses(segment),
+          ]);
+          mergedJobs = mergeById(mergedJobs, jobs);
+          mergedPayments = mergeById(mergedPayments, payments);
+          mergedExpenses = mergeById(mergedExpenses, expenses);
+        }
+
+        set({
+          jobs: mergedJobs,
+          payments: mergedPayments,
+          expenses: mergedExpenses,
+          loadedDataFrom:
+            loadedFrom && loadedFrom < normalizedRange.from
+              ? loadedFrom
+              : normalizedRange.from,
+          loadedDataTo:
+            loadedTo && loadedTo > normalizedRange.to
+              ? loadedTo
+              : normalizedRange.to,
+          lastSyncAt: new Date().toISOString(),
+          syncError: null,
+        });
+      },
+
+      loadJobsBefore: async (beforeDate, limit = 250) => {
+        const state = get();
+        if (!state.backendConnected) {
+          return 0;
+        }
+
+        const page = await apiClient.getJobsPage({
+          to: beforeDate,
+          limit,
+          offset: 0,
+        });
+        const mergedJobs = mergeById(state.jobs, page.items);
+
+        const incomingEarliest = page.items.reduce<string | null>(
+          (earliest, job) => (earliest === null || job.date < earliest ? job.date : earliest),
+          null
+        );
+
+        set({
+          jobs: mergedJobs,
+          loadedDataFrom:
+            incomingEarliest && state.loadedDataFrom
+              ? incomingEarliest < state.loadedDataFrom
+                ? incomingEarliest
+                : state.loadedDataFrom
+              : incomingEarliest ?? state.loadedDataFrom,
+          loadedDataTo: state.loadedDataTo,
+          lastSyncAt: new Date().toISOString(),
+          syncError: null,
+        });
+
+        return page.items.length;
       },
 
       addCustomer: async (customer) => {
@@ -823,31 +980,64 @@ export const useDataStore = create<DataStore>()(
     {
       name: 'siva_data',
       partialize: (state) => ({
-        customers: state.customers,
-        jobs: state.jobs,
-        payments: state.payments,
-        workTypes: state.workTypes,
-        expenses: state.expenses,
         categories: state.categories,
-        commissionWorkers: state.commissionWorkers,
-        commissionPayments: state.commissionPayments,
+        backendConnected: state.backendConnected,
+        lastSyncAt: state.lastSyncAt,
+        loadedDataFrom: state.loadedDataFrom,
+        loadedDataTo: state.loadedDataTo,
       }),
     }
   )
 );
 
-useDataStore.subscribe((state) => {
-  try {
-    localStorage.setItem(LEGACY_KEYS.customers, JSON.stringify(state.customers));
-    localStorage.setItem(LEGACY_KEYS.jobs, JSON.stringify(state.jobs));
-    localStorage.setItem(LEGACY_KEYS.payments, JSON.stringify(state.payments));
-    localStorage.setItem(LEGACY_KEYS.workTypes, JSON.stringify(state.workTypes));
-    localStorage.setItem(LEGACY_KEYS.expenses, JSON.stringify(state.expenses));
-    localStorage.setItem(LEGACY_KEYS.categories, JSON.stringify(state.categories));
-    localStorage.setItem(LEGACY_KEYS.commissionWorkers, JSON.stringify(state.commissionWorkers));
-    localStorage.setItem(LEGACY_KEYS.commissionPayments, JSON.stringify(state.commissionPayments));
-  } catch (error) {
-    console.error('Failed to sync compatibility localStorage keys:', error);
-  }
-});
+// Debounced offline snapshot — writes large arrays to localStorage only when
+// backend is unavailable, and at most once per 2 s to avoid thrashing on
+// rapid mutations (e.g. bulk job import).
+let offlineSnapshotTimer: ReturnType<typeof setTimeout> | null = null;
 
+function scheduleOfflineSnapshot(state: ReturnType<typeof useDataStore.getState>) {
+  if (offlineSnapshotTimer !== null) {
+    clearTimeout(offlineSnapshotTimer);
+  }
+  offlineSnapshotTimer = setTimeout(() => {
+    offlineSnapshotTimer = null;
+    try {
+      localStorage.setItem(LEGACY_KEYS.customers, JSON.stringify(state.customers));
+      localStorage.setItem(LEGACY_KEYS.jobs, JSON.stringify(state.jobs));
+      localStorage.setItem(LEGACY_KEYS.payments, JSON.stringify(state.payments));
+      localStorage.setItem(LEGACY_KEYS.workTypes, JSON.stringify(state.workTypes));
+      localStorage.setItem(LEGACY_KEYS.expenses, JSON.stringify(state.expenses));
+      localStorage.setItem(LEGACY_KEYS.categories, JSON.stringify(state.categories));
+      localStorage.setItem(LEGACY_KEYS.commissionWorkers, JSON.stringify(state.commissionWorkers));
+      localStorage.setItem(LEGACY_KEYS.commissionPayments, JSON.stringify(state.commissionPayments));
+    } catch {
+      // Quota exceeded or private-browsing restriction — safe to ignore
+    }
+  }, 2000);
+}
+
+let previousBackendConnected = useDataStore.getState().backendConnected;
+
+useDataStore.subscribe((state) => {
+  if (state.backendConnected) {
+    if (!previousBackendConnected) {
+      // Clean up old offline snapshot keys only on offline -> online transition.
+      if (offlineSnapshotTimer !== null) {
+        clearTimeout(offlineSnapshotTimer);
+        offlineSnapshotTimer = null;
+      }
+      try {
+        for (const key of Object.values(LEGACY_KEYS)) {
+          localStorage.removeItem(key);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    previousBackendConnected = true;
+    return;
+  }
+
+  previousBackendConnected = false;
+  scheduleOfflineSnapshot(state);
+});
