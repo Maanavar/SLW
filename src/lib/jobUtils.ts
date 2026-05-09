@@ -111,8 +111,9 @@ export function getJobPaymentMode(job: Job): string {
  * Get paid amount for job
  */
 export function getJobPaidAmount(job: Job): number {
-  if (typeof job.paidAmount === 'number') {
-    return job.paidAmount;
+  // paidAmount arrives as a Prisma Decimal string from the API — use Number() not typeof check
+  if (job.paidAmount != null) {
+    return Number(job.paidAmount) || 0;
   }
 
   if ((job.paymentStatus || '').toLowerCase() === 'paid') {

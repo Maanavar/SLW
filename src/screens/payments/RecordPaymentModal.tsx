@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { z } from 'zod';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { useToast } from '@/hooks/useToast';
 import { useFormErrors } from '@/hooks/useFormErrors';
 
@@ -41,11 +42,12 @@ interface RecordPaymentModalProps {
 }
 
 export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps) {
-  const { getActiveCustomers, payments, addPayment, jobs, updateJob, updateCustomer } = useDataStore();
+  const { payments, addPayment, jobs, updateJob, updateCustomer } = useDataStore();
+  const { data: allCustomers = [] } = useCustomersQuery();
   const toast = useToast();
   const { errors: fieldErrors, validate: validateFields, clearError, clearAll: clearFieldErrors } = useFormErrors<z.infer<typeof corePaymentSchema>>();
 
-  const customers = getActiveCustomers().sort((a, b) => a.name.localeCompare(b.name));
+  const customers = allCustomers.filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name));
   const today = getLocalDateString(new Date());
   const currentMonth = getMonthInputString(new Date());
 

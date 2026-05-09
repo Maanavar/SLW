@@ -24,7 +24,7 @@ export function sumExpenses(expenses: Expense[], filterByDate?: { from: string; 
   const filtered = filterByDate
     ? expenses.filter((e) => e.date >= filterByDate.from && e.date <= filterByDate.to)
     : expenses;
-  return filtered.reduce((sum, e) => sum + (e.amount || 0), 0);
+  return filtered.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 
 export interface PaymentMetrics {
@@ -281,7 +281,7 @@ export function calculateCommissionMetrics(
     ? commissionPayments.filter((p) => p.date >= filterByDate.from && p.date <= filterByDate.to)
     : commissionPayments;
 
-  const commissionPaid = paymentsInRange.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const commissionPaid = paymentsInRange.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   return {
     commissionDue,
@@ -378,7 +378,7 @@ export function calculateWorkerCommissionSummary(
 
     const paymentSummary = summaryMap.get(payment.workerId);
     if (paymentSummary) {
-      paymentSummary.totalPaid += payment.amount || 0;
+      paymentSummary.totalPaid += Number(payment.amount) || 0;
     }
   });
 
@@ -500,7 +500,7 @@ export function calculatePaymentMethodBreakdown(
       }
     } else if (isDirectPaymentMethod(payment.paymentMode)) {
       const existing = breakdown.get(payment.paymentMode)!;
-      existing.amount += payment.amount || 0;
+      existing.amount += Number(payment.amount) || 0;
       existing.count += 1;
     }
   });
@@ -804,7 +804,7 @@ export function calculateTenDayBreakdown(
   expenses.forEach((expense) => {
     const normalized = toCanonicalLocalDate(expense.date);
     if (!normalized || !normalized.startsWith(monthStr)) return;
-    expensesByDate.set(normalized, (expensesByDate.get(normalized) || 0) + (expense.amount || 0));
+    expensesByDate.set(normalized, (expensesByDate.get(normalized) || 0) + (Number(expense.amount) || 0));
   });
 
   const sets: Array<{ setNumber: 1 | 2 | 3; from: number; to: number }> = [
@@ -919,7 +919,7 @@ export function calculateDailyCashFlow(
   expenses.forEach((expense) => {
     const flow = cashFlows.get(expense.date);
     if (flow) {
-      flow.expenses += expense.amount || 0;
+      flow.expenses += Number(expense.amount) || 0;
     }
   });
 

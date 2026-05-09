@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
+import { useCommissionWorkersQuery } from '@/hooks/useCommissionWorkersQuery';
+import { useCommissionPaymentsQuery } from '@/hooks/useCommissionPaymentsQuery';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/lib/currencyUtils';
@@ -153,9 +156,12 @@ function getPeriodRange(period: PeriodType, offset: number): { start: string | n
 
 export function CommissionDcScreen() {
   const {
-    jobs, commissionWorkers, commissionPayments, customers,
+    jobs,
     addCommissionPayment, deleteCommissionPayment, getCustomer, updateJob,
   } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
+  const { data: commissionWorkers = [] } = useCommissionWorkersQuery();
+  const { data: commissionPayments = [] } = useCommissionPaymentsQuery();
   const toast = useToast();
   const today = getLocalDateString(new Date());
 

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
+import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { getJobFinalBillValue, isMahalingamCustomer } from '@/lib/jobUtils';
@@ -113,7 +115,9 @@ function getBillNumberSortValue(value?: string): number {
 // â”€â”€â”€ Main screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function InvoiceScreen() {
-  const { customers, jobs, payments, workTypes, ensureRangeLoaded } = useDataStore();
+  const { jobs, payments, ensureRangeLoaded } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
+  const { data: workTypes = [] } = useWorkTypesQuery();
   const invoiceRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 

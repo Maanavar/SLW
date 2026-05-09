@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useDataStore } from '@/stores/dataStore';
+import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { useUIStore } from '@/stores/uiStore';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { formatCurrency } from '@/lib/currencyUtils';
@@ -8,7 +8,7 @@ import '../customers/CustomersScreen.css';
 import './WorkTypesScreen.css';
 
 export function WorkTypesScreen() {
-  const { workTypes } = useDataStore();
+  const { data: workTypes = [], isLoading, isError } = useWorkTypesQuery();
   const { openModal } = useUIStore();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
@@ -75,6 +75,9 @@ export function WorkTypesScreen() {
       ),
     },
   ];
+
+  if (isLoading) return <div className="loading-screen"><p>Loading work types…</p></div>;
+  if (isError) return <div className="loading-screen"><p className="text-danger">Failed to load work types.</p></div>;
 
   return (
     <div className="wt-screen">

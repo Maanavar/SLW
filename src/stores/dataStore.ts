@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Customer, Expense, Job, Payment, WorkType, CommissionWorker, CommissionPayment } from '@/types';
+import { queryClient } from '@/lib/queryClient';
+import { CUSTOMERS_KEY } from '@/hooks/useCustomersQuery';
+import { WORK_TYPES_KEY } from '@/hooks/useWorkTypesQuery';
+import { COMMISSION_WORKERS_KEY } from '@/hooks/useCommissionWorkersQuery';
+import { COMMISSION_PAYMENTS_KEY } from '@/hooks/useCommissionPaymentsQuery';
+import { JOBS_KEY } from '@/hooks/useJobsQuery';
+import { PAYMENTS_KEY } from '@/hooks/usePaymentsQuery';
+import { EXPENSES_KEY } from '@/hooks/useExpensesQuery';
 import { defaultCustomers, defaultWorkTypes, defaultCommissionWorkers } from '@/lib/seedData';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { apiClient } from '@/lib/apiClient';
@@ -92,6 +100,12 @@ interface DataStore {
   deleteCommissionPayment: (id: number) => Promise<void>;
   getCommissionPaymentsForWorker: (workerId: number) => CommissionPayment[];
   getCommissionPaymentsForCustomer: (customerId: number) => CommissionPayment[];
+
+  // Bulk setters for React Query bridge (replaces the full array when React Query returns fresh data)
+  setBulkCustomers: (customers: Customer[]) => void;
+  setBulkWorkTypes: (workTypes: WorkType[]) => void;
+  setBulkCommissionWorkers: (workers: CommissionWorker[]) => void;
+  setBulkCommissionPayments: (payments: CommissionPayment[]) => void;
 }
 
 function parseJsonArray<T>(raw: string | null): T[] {
@@ -531,6 +545,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createCustomer(customer);
         set((state) => ({ customers: [...state.customers, created] }));
+        void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY });
         return created;
       },
 
@@ -549,6 +564,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           customers: state.customers.map((c) => (c.id === id ? updated : c)),
         }));
+        void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY });
         return updated;
       },
 
@@ -564,6 +580,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           customers: state.customers.filter((c) => c.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY });
       },
 
       getCustomer: (id) => get().customers.find((c) => c.id === id),
@@ -582,6 +599,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createWorkType(workType);
         set((state) => ({ workTypes: [...state.workTypes, created] }));
+        void queryClient.invalidateQueries({ queryKey: WORK_TYPES_KEY });
         return created;
       },
 
@@ -600,6 +618,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           workTypes: state.workTypes.map((wt) => (wt.id === id ? updated : wt)),
         }));
+        void queryClient.invalidateQueries({ queryKey: WORK_TYPES_KEY });
         return updated;
       },
 
@@ -615,6 +634,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           workTypes: state.workTypes.filter((wt) => wt.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: WORK_TYPES_KEY });
       },
 
       getWorkType: (id) => get().workTypes.find((wt) => wt.id === id),
@@ -634,6 +654,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createJob(job);
         set((state) => ({ jobs: [...state.jobs, created] }));
+        void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
         return created;
       },
 
@@ -660,6 +681,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createJobsBulk(jobs);
         set((state) => ({ jobs: [...state.jobs, ...created] }));
+        void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
         return created;
       },
 
@@ -678,6 +700,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           jobs: state.jobs.map((j) => (j.id === id ? updated : j)),
         }));
+        void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
         return updated;
       },
 
@@ -693,6 +716,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           jobs: state.jobs.filter((j) => j.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
       },
 
       getJob: (id) => get().jobs.find((j) => j.id === id),
@@ -722,6 +746,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createPayment(payment);
         set((state) => ({ payments: [...state.payments, created] }));
+        void queryClient.invalidateQueries({ queryKey: PAYMENTS_KEY });
         return created;
       },
 
@@ -740,6 +765,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           payments: state.payments.map((p) => (p.id === id ? updated : p)),
         }));
+        void queryClient.invalidateQueries({ queryKey: PAYMENTS_KEY });
         return updated;
       },
 
@@ -755,6 +781,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           payments: state.payments.filter((p) => p.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: PAYMENTS_KEY });
       },
 
       getPayment: (id) => get().payments.find((p) => p.id === id),
@@ -774,6 +801,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createExpense(expense);
         set((state) => ({ expenses: [...state.expenses, created] }));
+        void queryClient.invalidateQueries({ queryKey: EXPENSES_KEY });
         return created;
       },
 
@@ -792,6 +820,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           expenses: state.expenses.map((e) => (e.id === id ? updated : e)),
         }));
+        void queryClient.invalidateQueries({ queryKey: EXPENSES_KEY });
         return updated;
       },
 
@@ -807,6 +836,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           expenses: state.expenses.filter((e) => e.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: EXPENSES_KEY });
       },
 
       getExpense: (id) => get().expenses.find((e) => e.id === id),
@@ -885,6 +915,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createCommissionWorker(worker);
         set((state) => ({ commissionWorkers: [...state.commissionWorkers, created] }));
+        void queryClient.invalidateQueries({ queryKey: COMMISSION_WORKERS_KEY });
         return created;
       },
 
@@ -903,6 +934,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           commissionWorkers: state.commissionWorkers.map((w) => (w.id === id ? updated : w)),
         }));
+        void queryClient.invalidateQueries({ queryKey: COMMISSION_WORKERS_KEY });
         return updated;
       },
 
@@ -918,6 +950,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           commissionWorkers: state.commissionWorkers.filter((w) => w.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: COMMISSION_WORKERS_KEY });
       },
 
       getCommissionWorkersForCustomer: (customerId) =>
@@ -936,6 +969,7 @@ export const useDataStore = create<DataStore>()(
 
         const created = await apiClient.createCommissionPayment(payment);
         set((state) => ({ commissionPayments: [...state.commissionPayments, created] }));
+        void queryClient.invalidateQueries({ queryKey: COMMISSION_PAYMENTS_KEY });
         return created;
       },
 
@@ -954,6 +988,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           commissionPayments: state.commissionPayments.map((p) => (p.id === id ? updated : p)),
         }));
+        void queryClient.invalidateQueries({ queryKey: COMMISSION_PAYMENTS_KEY });
         return updated;
       },
 
@@ -969,6 +1004,7 @@ export const useDataStore = create<DataStore>()(
         set((state) => ({
           commissionPayments: state.commissionPayments.filter((p) => p.id !== id),
         }));
+        void queryClient.invalidateQueries({ queryKey: COMMISSION_PAYMENTS_KEY });
       },
 
       getCommissionPaymentsForWorker: (workerId) =>
@@ -976,6 +1012,11 @@ export const useDataStore = create<DataStore>()(
 
       getCommissionPaymentsForCustomer: (customerId) =>
         get().commissionPayments.filter((p) => p.customerId === customerId),
+
+      setBulkCustomers: (customers) => set({ customers: patchCommissionDcCustomers(customers) }),
+      setBulkWorkTypes: (workTypes) => set({ workTypes }),
+      setBulkCommissionWorkers: (commissionWorkers) => set({ commissionWorkers }),
+      setBulkCommissionPayments: (commissionPayments) => set({ commissionPayments }),
     }),
     {
       name: 'siva_data',

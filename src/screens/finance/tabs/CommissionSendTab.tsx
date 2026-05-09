@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { formatCurrency } from '@/lib/currencyUtils';
 import type { CommissionMetrics } from '@/lib/financeUtils';
+import type { CommissionPayment } from '@/types';
 import { nextSortState, sortMark, type SortOrder, type WorkerSortKey } from '../financeHelpers';
 
 interface WorkerRow {
@@ -23,6 +24,7 @@ interface CommissionSendTabProps {
   sortedWorkerRows: WorkerRow[];
   workerSort: { key: WorkerSortKey; order: SortOrder } | null;
   setWorkerSort: Dispatch<SetStateAction<{ key: WorkerSortKey; order: SortOrder } | null>>;
+  commissionPayments: CommissionPayment[];
 }
 
 export function CommissionSendTab({
@@ -31,6 +33,7 @@ export function CommissionSendTab({
   sortedWorkerRows,
   workerSort,
   setWorkerSort,
+  commissionPayments,
 }: CommissionSendTabProps) {
   return (
     <div className="fin-tab-content">
@@ -181,6 +184,38 @@ export function CommissionSendTab({
         </div>
       ) : (
         <p className="fin-empty">No commission workers configured</p>
+      )}
+
+      {commissionPayments.length > 0 && (
+        <div className="fin-table-tile">
+          <div className="fin-chart-title">Payout History</div>
+          <div className="fin-table-wrap">
+            <table className="fin-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Worker</th>
+                  <th className="text-right">Amount</th>
+                  <th>Jobs</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...commissionPayments]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map((p) => (
+                    <tr key={p.id}>
+                      <td>{p.date}</td>
+                      <td className="fw-600">{p.workerName}</td>
+                      <td className="text-right color-green">{formatCurrency(p.amount)}</td>
+                      <td className="color-muted">{p.jobIds.length} job{p.jobIds.length !== 1 ? 's' : ''}</td>
+                      <td className="color-muted">{p.notes ?? '—'}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

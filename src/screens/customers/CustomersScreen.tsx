@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { useUIStore } from '@/stores/uiStore';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { TypeBadge } from '@/components/ui/Badge';
@@ -14,7 +15,8 @@ type TypeFilter = 'all' | 'Monthly' | 'Invoice' | 'Party-Credit' | 'Cash';
 
 export function CustomersScreen() {
   const [searchParams] = useSearchParams();
-  const { customers: allCustomers, jobs, payments, getActiveCustomers } = useDataStore();
+  const { data: allCustomers = [], isLoading, isError } = useCustomersQuery();
+  const { jobs, payments } = useDataStore();
   const { openModal } = useUIStore();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -25,7 +27,7 @@ export function CustomersScreen() {
   const deepLinkSearch = (searchParams.get('search') || '').trim();
   const deepLinkCustomerId = Number(searchParams.get('customerId') || 0);
 
-  const customers = showInactive ? allCustomers : getActiveCustomers();
+  const customers = showInactive ? allCustomers : allCustomers.filter((c) => c.isActive);
   const inactiveCount = allCustomers.filter((c) => !c.isActive).length;
 
   const typeCounts: Record<Exclude<TypeFilter, 'all'>, number> = {
@@ -195,6 +197,9 @@ export function CustomersScreen() {
       ),
     },
   ];
+
+  if (isLoading) return <div className="loading-screen"><p>Loading customers…</p></div>;
+  if (isError) return <div className="loading-screen"><p className="text-danger">Failed to load customers.</p></div>;
 
   return (
     <div className="cust-screen">

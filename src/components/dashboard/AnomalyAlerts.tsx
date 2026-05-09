@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { detectAnomalies } from '@/lib/anomalyUtils';
 import './AnomalyAlerts.css';
 
@@ -27,7 +28,8 @@ function saveDismissedIds(ids: string[]) {
 }
 
 export function AnomalyAlerts() {
-  const { jobs, payments, customers } = useDataStore();
+  const { jobs, payments } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
   const [expanded, setExpanded] = useState(true);
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => loadDismissedIds());
 

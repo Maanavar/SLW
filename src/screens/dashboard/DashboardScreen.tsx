@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/stores/uiStore';
 import { Icon } from '@/components/ui/Icon';
@@ -11,6 +12,7 @@ import './DashboardScreen.css';
 export function DashboardScreen() {
   const navigate = useNavigate();
   const { openModal } = useUIStore();
+  const [sharedDateRange, setSharedDateRange] = useState<{ from: string; to: string } | undefined>();
 
   return (
     <div className="dashboard-screen">
@@ -34,8 +36,8 @@ export function DashboardScreen() {
 
       <AnomalyAlerts />
       <QuickActions />
-      <PeriodSummaryRow />
-      <CustomerBalancesTable />
+      <PeriodSummaryRow onRangeChange={setSharedDateRange} />
+      <CustomerBalancesTable dateRange={sharedDateRange} />
     </div>
   );
 }

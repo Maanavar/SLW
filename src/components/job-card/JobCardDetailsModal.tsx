@@ -6,7 +6,7 @@ import {
   getJobPaymentMode,
   isDcApplicableCustomer,
 } from '@/lib/jobUtils';
-import { useDataStore } from '@/stores/dataStore';
+import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import type { Customer, Job } from '@/types';
 import './JobCardDetailsModal.css';
 
@@ -35,7 +35,7 @@ export function JobCardDetailsModal({
   onDelete,
   onEdit,
 }: JobCardDetailsModalProps) {
-  const { workTypes } = useDataStore();
+  const { data: workTypes = [] } = useWorkTypesQuery();
 
   const sortedJobs =
     jobs?.length

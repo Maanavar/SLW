@@ -1,5 +1,5 @@
-import { useDataStore } from '@/stores/dataStore';
 import type { ChangeEvent } from 'react';
+import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { type WorkType, type CommissionWorker } from '@/types';
@@ -35,7 +35,7 @@ export function JobLine({
   commissionWorkers = [],
   onAddNewWorkType,
 }: JobLineProps) {
-  const { workTypes } = useDataStore();
+  const { data: workTypes = [] } = useWorkTypesQuery();
 
   const sortedWorkTypes = [...workTypes].sort((a, b) => {
     const categoryCompare = a.category.localeCompare(b.category);

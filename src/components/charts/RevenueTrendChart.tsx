@@ -10,7 +10,7 @@ import {
   Legend,
 } from 'recharts';
 import type { Job, Payment } from '@/types';
-import { buildRevenueTrend } from '@/lib/trendUtils';
+import { buildRevenueTrend, buildRevenueTrendYoY } from '@/lib/trendUtils';
 import type { TrendGroupBy as GroupBy } from '@/lib/trendUtils';
 import { formatCurrency } from '@/lib/currencyUtils';
 import './RevenueTrendChart.css';
@@ -26,10 +26,16 @@ type TrendMetricView = 'all' | 'slwRevenue' | 'revenue' | 'grossProfit' | 'recei
 export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendChartProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>('set');
   const [metricView, setMetricView] = useState<TrendMetricView>('all');
+  const [showYoY, setShowYoY] = useState(false);
+
   const trendData = useMemo(
-    () => buildRevenueTrend(jobs, payments, groupBy, dateRange),
-    [jobs, payments, groupBy, dateRange]
+    () =>
+      showYoY && dateRange
+        ? buildRevenueTrendYoY(jobs, payments, groupBy, dateRange)
+        : buildRevenueTrend(jobs, payments, groupBy, dateRange),
+    [jobs, payments, groupBy, dateRange, showYoY]
   );
+
   const showLine = (metric: Exclude<TrendMetricView, 'all'>) => metricView === 'all' || metricView === metric;
 
   return (
@@ -39,33 +45,33 @@ export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendCha
         <div className="trend-chart-controls">
           <div className="trend-group-toggle">
             <button
-            type="button"
-            className={`trend-group-btn${groupBy === 'set' ? ' active' : ''}`}
-            onClick={() => setGroupBy('set')}
-          >
-            10 Days
-          </button>
-          <button
-            type="button"
-            className={`trend-group-btn${groupBy === 'day' ? ' active' : ''}`}
-            onClick={() => setGroupBy('day')}
-          >
-            Daily
-          </button>
-          <button
-            type="button"
-            className={`trend-group-btn${groupBy === 'week' ? ' active' : ''}`}
-            onClick={() => setGroupBy('week')}
-          >
-            Weekly
-          </button>
-          <button
-            type="button"
-            className={`trend-group-btn${groupBy === 'month' ? ' active' : ''}`}
-            onClick={() => setGroupBy('month')}
-          >
-            Monthly
-          </button>
+              type="button"
+              className={`trend-group-btn${groupBy === 'set' ? ' active' : ''}`}
+              onClick={() => setGroupBy('set')}
+            >
+              10 Days
+            </button>
+            <button
+              type="button"
+              className={`trend-group-btn${groupBy === 'day' ? ' active' : ''}`}
+              onClick={() => setGroupBy('day')}
+            >
+              Daily
+            </button>
+            <button
+              type="button"
+              className={`trend-group-btn${groupBy === 'week' ? ' active' : ''}`}
+              onClick={() => setGroupBy('week')}
+            >
+              Weekly
+            </button>
+            <button
+              type="button"
+              className={`trend-group-btn${groupBy === 'month' ? ' active' : ''}`}
+              onClick={() => setGroupBy('month')}
+            >
+              Monthly
+            </button>
           </div>
           <label className="trend-metric-select-wrap" htmlFor="trend-metric-view">
             <span className="trend-metric-label">Show</span>
@@ -83,6 +89,16 @@ export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendCha
               <option value="outstanding">Outstanding</option>
             </select>
           </label>
+          {dateRange && (
+            <button
+              type="button"
+              className={`trend-group-btn${showYoY ? ' active' : ''}`}
+              onClick={() => setShowYoY((v) => !v)}
+              title="Compare with same period last year"
+            >
+              vs Last Year
+            </button>
+          )}
         </div>
       </div>
 
@@ -108,55 +124,39 @@ export function RevenueTrendChart({ jobs, payments, dateRange }: RevenueTrendCha
                 labelStyle={{ color: 'var(--text-muted)' }}
               />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
+
+              {/* This year lines */}
               {showLine('slwRevenue') && (
-                <Line
-                  type="monotone"
-                  dataKey="slwRevenue"
-                  name="SLW Revenue"
-                  stroke="var(--accent)"
-                  strokeWidth={2}
-                  dot={false}
-                />
+                <Line type="monotone" dataKey="slwRevenue" name="SLW Revenue" stroke="var(--accent)" strokeWidth={2} dot={false} />
               )}
               {showLine('revenue') && (
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  name="Total Revenue"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={false}
-                />
+                <Line type="monotone" dataKey="revenue" name="Total Revenue" stroke="#3b82f6" strokeWidth={2} dot={false} />
               )}
               {showLine('grossProfit') && (
-                <Line
-                  type="monotone"
-                  dataKey="grossProfit"
-                  name="Gross Profit"
-                  stroke="var(--green)"
-                  strokeWidth={2}
-                  dot={false}
-                />
+                <Line type="monotone" dataKey="grossProfit" name="Gross Profit" stroke="var(--green)" strokeWidth={2} dot={false} />
               )}
               {showLine('received') && (
-                <Line
-                  type="monotone"
-                  dataKey="received"
-                  name="Received"
-                  stroke="var(--amber)"
-                  strokeWidth={2}
-                  dot={false}
-                />
+                <Line type="monotone" dataKey="received" name="Received" stroke="var(--amber)" strokeWidth={2} dot={false} />
               )}
               {showLine('outstanding') && (
-                <Line
-                  type="monotone"
-                  dataKey="outstanding"
-                  name="Outstanding"
-                  stroke="var(--red)"
-                  strokeWidth={2}
-                  dot={false}
-                />
+                <Line type="monotone" dataKey="outstanding" name="Outstanding" stroke="var(--red)" strokeWidth={2} dot={false} />
+              )}
+
+              {/* Last year lines (dashed, only when YoY enabled) */}
+              {showYoY && showLine('slwRevenue') && (
+                <Line type="monotone" dataKey="lySlwRevenue" name="SLW Rev (LY)" stroke="var(--accent)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+              )}
+              {showYoY && showLine('revenue') && (
+                <Line type="monotone" dataKey="lyRevenue" name="Total Rev (LY)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+              )}
+              {showYoY && showLine('grossProfit') && (
+                <Line type="monotone" dataKey="lyGrossProfit" name="Gross Profit (LY)" stroke="var(--green)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+              )}
+              {showYoY && showLine('received') && (
+                <Line type="monotone" dataKey="lyReceived" name="Received (LY)" stroke="var(--amber)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+              )}
+              {showYoY && showLine('outstanding') && (
+                <Line type="monotone" dataKey="lyOutstanding" name="Outstanding (LY)" stroke="var(--red)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
               )}
             </LineChart>
           </ResponsiveContainer>

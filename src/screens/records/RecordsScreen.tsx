@@ -2,6 +2,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { useToast } from '@/hooks/useToast';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { JobCardEditOverlay } from '@/components/job-card/JobCardEditOverlay';
@@ -418,7 +419,8 @@ function getSafeExportPixelRatio(width: number, height: number): number {
 
 export function RecordsScreen() {
   const navigate = useNavigate();
-  const { jobs, customers, getCustomer, deleteJob, ensureRangeLoaded } = useDataStore();
+  const { jobs, getCustomer, deleteJob, ensureRangeLoaded } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
   const toast = useToast();
   const today = getLocalDateString(new Date());
 

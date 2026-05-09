@@ -27,6 +27,7 @@
     "express": "^4.21.1",
     "express-rate-limit": "^8.5.1",
     "helmet": "^8.0.0",
+    "ioredis": "^5.10.1",
     "jose": "^4.15.9",
     "morgan": "^1.10.0",
     "openapi3-ts": "^4.4.0",

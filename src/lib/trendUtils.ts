@@ -81,6 +81,59 @@ function toBucketKey(dateStr: string, groupBy: GroupBy): string {
 
 export type { GroupBy as TrendGroupBy };
 
+export interface YoYDataPoint extends TrendDataPoint {
+  lyRevenue: number;
+  lySlwRevenue: number;
+  lyGrossProfit: number;
+  lyReceived: number;
+  lyOutstanding: number;
+}
+
+function shiftDateYears(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split('-');
+  return `${Number(y) + delta}-${m}-${d}`;
+}
+
+export function buildRevenueTrendYoY(
+  jobs: Job[],
+  payments: Payment[],
+  groupBy: GroupBy,
+  dateRange: { from: string; to: string }
+): YoYDataPoint[] {
+  const thisYearPoints = buildRevenueTrend(jobs, payments, groupBy, dateRange);
+
+  // Shift last year's data forward 1 year so it falls in the same buckets as this year
+  const lyJobs = jobs.map((j) => ({ ...j, date: shiftDateYears(j.date, 1) }));
+  const lyPayments = payments.map((p) => ({ ...p, date: shiftDateYears(p.date, 1) }));
+
+  // Filter to the equivalent last-year window then shift forward — use same dateRange for bucket alignment
+  const lyDateRange = {
+    from: shiftDateYears(dateRange.from, -1),
+    to: shiftDateYears(dateRange.to, -1),
+  };
+  const lyJobsFiltered = lyJobs.filter(
+    (j) => shiftDateYears(j.date, -1) >= lyDateRange.from && shiftDateYears(j.date, -1) <= lyDateRange.to
+  );
+  const lyPaymentsFiltered = lyPayments.filter(
+    (p) => shiftDateYears(p.date, -1) >= lyDateRange.from && shiftDateYears(p.date, -1) <= lyDateRange.to
+  );
+
+  const lastYearPoints = buildRevenueTrend(lyJobsFiltered, lyPaymentsFiltered, groupBy, dateRange);
+  const lyByLabel = new Map(lastYearPoints.map((p) => [p.label, p]));
+
+  return thisYearPoints.map((p) => {
+    const ly = lyByLabel.get(p.label);
+    return {
+      ...p,
+      lyRevenue: ly?.revenue ?? 0,
+      lySlwRevenue: ly?.slwRevenue ?? 0,
+      lyGrossProfit: ly?.grossProfit ?? 0,
+      lyReceived: ly?.received ?? 0,
+      lyOutstanding: ly?.outstanding ?? 0,
+    };
+  });
+}
+
 export function buildRevenueTrend(
   jobs: Job[],
   payments: Payment[],

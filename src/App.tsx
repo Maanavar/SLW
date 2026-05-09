@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import { useDataStore } from '@/stores/dataStore';
+import { useDataBridge } from '@/hooks/useDataBridge';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
@@ -29,6 +30,7 @@ export default function App() {
 
   const { showWarning, secondsLeft, stayActive } = useSessionTimeout(handleSessionLogout);
   const isDev = import.meta.env.DEV;
+  useDataBridge();
 
   useEffect(() => {
     void initializeData();
