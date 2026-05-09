@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
+import { useCommissionWorkersQuery } from '@/hooks/useCommissionWorkersQuery';
+import { useCommissionPaymentsQuery } from '@/hooks/useCommissionPaymentsQuery';
 import { getLocalDateString } from '@/lib/dateUtils';
 import {
   getJobAgentCommissionIncome,
@@ -25,6 +28,8 @@ import {
 import { rankCustomers } from '@/lib/customerRankingUtils';
 import { isRmpCustomer, isWwCustomer } from '@/constants/customers';
 import { exportFinanceSummaryToExcel } from '@/lib/exportUtils';
+import type { BandKey } from '@/components/charts/AgeingHeatmap';
+import { AgeingDrillDownModal } from './finance/AgeingDrillDownModal';
 import {
   getDateRangeWithOffset,
   getOffsetPeriodLabel,
@@ -59,13 +64,13 @@ export function FinanceReports() {
   const {
     jobs,
     payments,
-    customers,
-    commissionPayments,
-    commissionWorkers,
     expenses,
     getCustomer,
     ensureRangeLoaded,
   } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
+  const { data: commissionWorkers = [] } = useCommissionWorkersQuery();
+  const { data: commissionPayments = [] } = useCommissionPaymentsQuery();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<ReportTab>(() => {
     return mapQueryTab(searchParams.get('tab')) ?? 'revenue';
@@ -85,6 +90,11 @@ export function FinanceReports() {
   const [cashflowSort, setCashflowSort] = useState<{
     key: CashflowSortKey;
     order: SortOrder;
+  } | null>(null);
+  const [ageingDrillDown, setAgeingDrillDown] = useState<{
+    customerId: number;
+    customerName: string;
+    band: BandKey;
   } | null>(null);
 
   const todayDate = new Date();
@@ -251,6 +261,13 @@ export function FinanceReports() {
   const commissionMetrics = useMemo(
     () => calculateCommissionMetrics(jobs, commissionPayments, dateRange),
     [jobs, commissionPayments, dateRange]
+  );
+  const filteredCommissionPayments = useMemo(
+    () =>
+      dateRange
+        ? commissionPayments.filter((p) => p.date >= dateRange.from && p.date <= dateRange.to)
+        : commissionPayments,
+    [commissionPayments, dateRange]
   );
   const workerSummary = useMemo(
     () => calculateWorkerCommissionSummary(jobs, commissionPayments, commissionWorkers, dateRange),
@@ -583,6 +600,11 @@ export function FinanceReports() {
         payments: filteredPayments,
         expenses: filteredExpenses,
         customers,
+        customerFinancials: sortedCustomerFinancials,
+        customerAgeingRows,
+        workerRows: sortedWorkerRows,
+        cashflowRows: dailyCashFlow,
+        customerRankings,
       },
       `slw-finance-${periodLabel.replace(/\s+/g, '-').toLowerCase()}.xlsx`
     );
@@ -772,6 +794,7 @@ export function FinanceReports() {
           sortedWorkerRows={sortedWorkerRows}
           workerSort={workerSort}
           setWorkerSort={setWorkerSort}
+          commissionPayments={filteredCommissionPayments}
         />
       )}
 
@@ -796,7 +819,14 @@ export function FinanceReports() {
 
       {activeTab === 'rankings' && <RankingsTab customerRankings={customerRankings} />}
 
-      {activeTab === 'ageing' && <AgeingTab customerAgeingRows={customerAgeingRows} />}
+      {activeTab === 'ageing' && (
+        <AgeingTab
+          customerAgeingRows={customerAgeingRows}
+          onCellClick={(customerId, customerName, band) =>
+            setAgeingDrillDown({ customerId, customerName, band })
+          }
+        />
+      )}
 
       {activeTab === 'cashflow' && (
         <CashflowTab
@@ -817,6 +847,15 @@ export function FinanceReports() {
           setSelectedDay={setSelectedDay}
           navigateTenDayMonth={navigateTenDayMonth}
           getCustomer={getCustomer}
+        />
+      )}
+      {ageingDrillDown && (
+        <AgeingDrillDownModal
+          customerId={ageingDrillDown.customerId}
+          customerName={ageingDrillDown.customerName}
+          band={ageingDrillDown.band}
+          jobs={jobs}
+          onClose={() => setAgeingDrillDown(null)}
         />
       )}
     </div>

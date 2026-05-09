@@ -1,6 +1,18 @@
 import type { Workbook } from 'exceljs';
 import type { Customer, Expense, Job, Payment } from '@/types';
 import { getJobFinalBillValue } from '@/lib/jobUtils';
+import type { CustomerAgeingRow, CustomerFinancials, DailyCashFlow } from '@/lib/financeUtils';
+import type { CustomerRank } from '@/lib/customerRankingUtils';
+
+interface WorkerExportRow {
+  workerId: number;
+  workerName: string;
+  customerName: string;
+  cards: number;
+  totalDue: number;
+  totalPaid: number;
+  outstanding: number;
+}
 
 type ExcelRow = Record<string, string | number>;
 
@@ -137,6 +149,11 @@ export async function exportFinanceSummaryToExcel(
     payments: Payment[];
     expenses: Expense[];
     customers: Customer[];
+    customerFinancials?: CustomerFinancials[];
+    customerAgeingRows?: CustomerAgeingRow[];
+    workerRows?: WorkerExportRow[];
+    cashflowRows?: DailyCashFlow[];
+    customerRankings?: CustomerRank[];
   },
   fileName = 'slw-finance-summary.xlsx'
 ) {
@@ -191,6 +208,93 @@ export async function exportFinanceSummaryToExcel(
       Amount: Number(expense.amount),
     }))
   );
+
+  if (params.customerFinancials && params.customerFinancials.length > 0) {
+    addSheet(
+      workbook,
+      'Customer Financials',
+      params.customerFinancials.map((c) => ({
+        Customer: c.customerName,
+        Jobs: c.jobCount,
+        Revenue: Number(c.totalRevenue),
+        Commission: Number(c.commissionExpense),
+        'Gross Profit': Number(c.grossProfit),
+        Received: Number(c.totalReceived),
+        Outstanding: Number(c.totalOutstanding),
+        'Collection %': `${c.paymentRate.toFixed(1)}%`,
+        'Avg Days Outstanding': Math.round(c.daysOutstanding),
+      }))
+    );
+  }
+
+  if (params.customerAgeingRows && params.customerAgeingRows.length > 0) {
+    addSheet(
+      workbook,
+      'Ageing',
+      params.customerAgeingRows.map((r) => ({
+        Customer: r.customerName,
+        '0-7 Days': Number(r.current),
+        '8-30 Days': Number(r.band1),
+        '31-60 Days': Number(r.band2),
+        '61-90 Days': Number(r.band3),
+        '90+ Days': Number(r.band4),
+        Total: Number(r.total),
+        'Oldest Invoice (Days)': r.oldestInvoiceDays,
+      }))
+    );
+  }
+
+  if (params.workerRows && params.workerRows.length > 0) {
+    addSheet(
+      workbook,
+      'Commission Workers',
+      params.workerRows.map((w) => ({
+        Worker: w.workerName,
+        Customer: w.customerName,
+        Jobs: w.cards,
+        Earned: Number(w.totalDue),
+        Paid: Number(w.totalPaid),
+        Outstanding: Number(w.outstanding),
+      }))
+    );
+  }
+
+  if (params.cashflowRows && params.cashflowRows.length > 0) {
+    addSheet(
+      workbook,
+      'Cashflow',
+      params.cashflowRows.map((d) => ({
+        Date: d.date,
+        Revenue: Number(d.revenue),
+        Commission: Number(d.commission),
+        'Net Income': Number(d.netIncome),
+        Expenses: Number(d.expenses),
+        'Net Profit': Number(d.netProfit),
+        Received: Number(d.received),
+        Outstanding: Number(d.outstanding),
+      }))
+    );
+  }
+
+  if (params.customerRankings && params.customerRankings.length > 0) {
+    addSheet(
+      workbook,
+      'Rankings',
+      params.customerRankings.map((r) => ({
+        Rank: r.rank,
+        Customer: r.customerName,
+        Revenue: Number(r.totalRevenue),
+        'Gross Profit': Number(r.grossProfit),
+        'SLW Net Profit': Number(r.slwNetProfit),
+        Outstanding: Number(r.totalOutstanding),
+        'Job Cards': r.jobCardCount,
+        'Collection %': `${r.collectionRate.toFixed(1)}%`,
+        'Avg Job Value': Number(r.avgJobValue),
+        'Health Score': r.healthScore,
+        Health: r.healthLabel,
+      }))
+    );
+  }
 
   await saveWorkbook(workbook, fileName);
 }

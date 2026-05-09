@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import { useDataStore } from '@/stores/dataStore';
+import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
@@ -14,7 +15,8 @@ import './Modals.css';
 
 export function WorkTypeModal() {
   const { modal, closeModal } = useUIStore();
-  const { workTypes, addWorkType, updateWorkType, categories } = useDataStore();
+  const { addWorkType, updateWorkType, categories } = useDataStore();
+  const { data: workTypes = [] } = useWorkTypesQuery();
   const toast = useToast();
 
   const isWorkTypeModal = modal.isOpen && modal.type === 'worktype';

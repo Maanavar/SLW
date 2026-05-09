@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
+import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { useToast } from '@/hooks/useToast';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { StatusBadge } from '@/components/ui/Badge';
@@ -106,7 +108,9 @@ function isPristineJobLine(line: JobLineState) {
 }
 
 export function JobForm() {
-  const { getActiveCustomers, getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer, addCustomer, addWorkType, workTypes } = useDataStore();
+  const { getCustomer, jobs, addJobsBulk, updateJob, deleteJob, getCommissionWorkersForCustomer, updateCustomer, addCustomer, addWorkType } = useDataStore();
+  const { data: allCustomers = [] } = useCustomersQuery();
+  const { data: workTypes = [] } = useWorkTypesQuery();
   const toast = useToast();
 
   const customers = useMemo(() => {
@@ -114,11 +118,11 @@ export function JobForm() {
     jobs.forEach((job) => {
       jobCountByCustomer[job.customerId] = (jobCountByCustomer[job.customerId] || 0) + 1;
     });
-    return getActiveCustomers().sort((a, b) => {
+    return allCustomers.filter((c) => c.isActive).sort((a, b) => {
       const diff = (jobCountByCustomer[b.id] || 0) - (jobCountByCustomer[a.id] || 0);
       return diff !== 0 ? diff : a.name.localeCompare(b.name);
     });
-  }, [getActiveCustomers, jobs]);
+  }, [allCustomers, jobs]);
   const today = getLocalDateString(new Date());
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);

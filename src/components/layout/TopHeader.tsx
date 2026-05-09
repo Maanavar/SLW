@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useUIStore } from '@/stores/uiStore';
 import { Icon } from '@/components/ui/Icon';
 import { UniversalSearch } from '@/components/ui/UniversalSearch';
 import { NotificationBell } from './NotificationBell';
 import { apiClient } from '@/lib/apiClient';
+import { JOBS_KEY } from '@/hooks/useJobsQuery';
 import './TopHeader.css';
 
 interface PageMeta {
@@ -26,10 +28,48 @@ const pageMap: Record<string, PageMeta> = {
   '/logger': { title: 'Logger', subtitle: 'Activity and danger zone' },
 };
 
+function useLastJobSync() {
+  const queryClient = useQueryClient();
+  const isFetching = useIsFetching({ queryKey: JOBS_KEY }) > 0;
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        Array.isArray(event.query.queryKey) &&
+        event.query.queryKey[0] === 'jobs' &&
+        event.query.state.status === 'success'
+      ) {
+        setLastSync(new Date());
+      }
+    });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!lastSync) return;
+    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, [lastSync]);
+
+  const label = (() => {
+    if (!lastSync) return null;
+    const secs = Math.floor((Date.now() - lastSync.getTime()) / 1000);
+    if (secs < 60) return 'just now';
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
+  })();
+
+  return { isFetching, label };
+}
+
 export function TopHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme, toggleSidebar, openMobileDrawer } = useUIStore();
+  const { isFetching: jobsFetching, label: syncLabel } = useLastJobSync();
 
   // Desktop: collapse/expand the sidebar. Mobile/tablet: open the slide-in drawer.
   const handleNavToggle = () => {
@@ -96,9 +136,24 @@ export function TopHeader() {
         </div>
       </div>
 
-      {/* Right: Search → Theme → User (Atlassian order) */}
+      {/* Right: Search → Sync → Theme → User (Atlassian order) */}
       <div className="top-header-actions" aria-label="Global actions">
         <UniversalSearch />
+
+        {(jobsFetching || syncLabel) && (
+          <span className={`top-sync-indicator${jobsFetching ? ' top-sync-indicator--active' : ''}`} title="Jobs data sync status">
+            {jobsFetching ? (
+              <svg className="top-sync-spinner" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="14 8" />
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            )}
+            <span className="top-sync-label">{jobsFetching ? 'Syncing…' : `Synced ${syncLabel}`}</span>
+          </span>
+        )}
 
         <button
           type="button"

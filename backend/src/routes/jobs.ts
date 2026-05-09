@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
+import { cacheGet, cacheSet, cacheInvalidatePrefix } from '../lib/cache';
 import {
   PAYMENT_MODES,
   PAYMENT_STATUSES,
@@ -136,6 +137,14 @@ router.get(
         ? Number(customerIdRaw)
         : undefined;
 
+    const cacheKey = `jobs:${from ?? '*'}:${to ?? '*'}:${customerId ?? '*'}`;
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      res.json(JSON.parse(cached));
+      return;
+    }
+
     const where = {
       ...(from || to
         ? {
@@ -153,6 +162,7 @@ router.get(
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
+    void cacheSet(cacheKey, JSON.stringify(jobs));
     res.json(jobs);
   })
 );
@@ -249,6 +259,7 @@ router.post(
       after: created,
     });
 
+    void cacheInvalidatePrefix('jobs');
     res.status(201).json(created);
   })
 );
@@ -336,6 +347,7 @@ router.post(
       },
     });
 
+    void cacheInvalidatePrefix('jobs');
     res.status(201).json(created);
   })
 );
@@ -396,6 +408,7 @@ router.put(
       after: updated,
     });
 
+    void cacheInvalidatePrefix('jobs');
     res.json(updated);
   })
 );
@@ -429,6 +442,7 @@ router.delete(
       before: existing,
     });
 
+    void cacheInvalidatePrefix('jobs');
     res.status(204).send();
   })
 );
@@ -455,6 +469,7 @@ router.delete(
       metadata: { count: deleted.count },
     });
 
+    void cacheInvalidatePrefix('jobs');
     res.json({
       deleted: deleted.count,
     });

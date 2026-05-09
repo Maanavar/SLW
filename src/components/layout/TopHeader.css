@@ -299,3 +299,38 @@
     padding: 0 8px;
   }
 }
+
+/* ── Sync indicator ──────────────────────────────────────── */
+.top-sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.top-sync-indicator--active {
+  color: var(--accent);
+}
+
+.top-sync-label {
+  line-height: 1;
+}
+
+@keyframes top-spin {
+  to { transform: rotate(360deg); }
+}
+
+.top-sync-spinner {
+  animation: top-spin 1s linear infinite;
+  display: block;
+}
+
+@media (max-width: 480px) {
+  .top-sync-label {
+    display: none;
+  }
+}

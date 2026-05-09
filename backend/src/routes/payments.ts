@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
+import { cacheGet, cacheSet, cacheInvalidatePrefix } from '../lib/cache';
 import { PAYMENT_MODES } from '../domain/constants';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
@@ -71,6 +72,14 @@ router.get(
         ? Number(customerIdRaw)
         : undefined;
 
+    const cacheKey = `payments:${from ?? '*'}:${to ?? '*'}:${customerId ?? '*'}`;
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      res.json(JSON.parse(cached));
+      return;
+    }
+
     const where = {
       ...(from || to
         ? {
@@ -88,6 +97,7 @@ router.get(
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
+    void cacheSet(cacheKey, JSON.stringify(payments));
     res.json(payments);
   })
 );
@@ -184,6 +194,7 @@ router.post(
       after: created,
     });
 
+    void cacheInvalidatePrefix('payments');
     res.status(201).json(created);
   })
 );
@@ -238,6 +249,7 @@ router.put(
       after: updated,
     });
 
+    void cacheInvalidatePrefix('payments');
     res.json(updated);
   })
 );
@@ -271,6 +283,7 @@ router.delete(
       before: existing,
     });
 
+    void cacheInvalidatePrefix('payments');
     res.status(204).send();
   })
 );
@@ -321,6 +334,8 @@ router.delete(
       },
     });
 
+    void cacheInvalidatePrefix('payments');
+    void cacheInvalidatePrefix('jobs');
     res.json({
       deleted: outcome.deletedPayments,
       resetJobs: outcome.resetJobs,

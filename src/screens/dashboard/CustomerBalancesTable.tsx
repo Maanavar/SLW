@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
 import { rankCustomers } from '@/lib/customerRankingUtils';
@@ -34,6 +35,13 @@ interface CustomerBalancesTableProps {
   dateRange?: { from: string; to: string };
 }
 
+function fmtRange(from: string, to: string): string {
+  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+  const f = new Date(`${from}T00:00:00`).toLocaleDateString('en-IN', opts);
+  const t = new Date(`${to}T00:00:00`).toLocaleDateString('en-IN', { ...opts, year: 'numeric' });
+  return from === to ? t : `${f} – ${t}`;
+}
+
 function getTypeBadgeClass(type: Customer['type']): string {
   if (type === 'Monthly') return 'type-monthly';
   if (type === 'Invoice') return 'type-invoice';
@@ -42,7 +50,8 @@ function getTypeBadgeClass(type: Customer['type']): string {
 }
 
 export function CustomerBalancesTable({ showFilters = true, dateRange }: CustomerBalancesTableProps) {
-  const { customers: allCustomers, jobs, payments } = useDataStore();
+  const { jobs, payments } = useDataStore();
+  const { data: allCustomers = [] } = useCustomersQuery();
   const [typeFilter, setTypeFilter] = useState<CustomerTypeFilter>('All');
   const [customerFilter, setCustomerFilter] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerBalance | null>(null);
@@ -75,9 +84,9 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
         const commission = customerJobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
         const finalBill = ourIncome + commission;
         const paidAmount = customerJobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
-        const openingBalanceAmt = customer.openingBalance || 0;
+        const openingBalanceAmt = Number(customer.openingBalance) || 0;
         const balance = openingBalanceAmt + finalBill - paidAmount;
-        const advance = customer.advanceBalance || 0;
+        const advance = Number(customer.advanceBalance) || 0;
 
         return {
           ...customer,
@@ -150,7 +159,12 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
     <section className="customer-balances">
       {showFilters ? (
         <div className="customer-balances-head">
-          <h2 className="customer-balances-title">Customer balances</h2>
+          <h2 className="customer-balances-title">
+            Customer balances
+            {dateRange ? (
+              <span className="customer-balances-period">{fmtRange(dateRange.from, dateRange.to)}</span>
+            ) : null}
+          </h2>
 
           <div className="customer-balances-toolbar">
             <label className="customer-search" aria-label="Search customer">
@@ -322,33 +336,37 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
               sorted.map((customer) => {
                 const balanceClass =
                   customer.balance > 0 ? 'amount-balance' : customer.balance < 0 ? 'amount-paid' : '';
+                const rankEntry = customerRankMap.get(customer.id);
                 return (
-                  <tr key={customer.id}>
+                  <tr
+                    key={customer.id}
+                    className="customer-table-row"
+                    tabIndex={0}
+                    onClick={() => setSelectedCustomer(customer)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedCustomer(customer);
+                      }
+                    }}
+                  >
                     <td>
                       <div className="customer-name">
-                        {customerRankMap.get(customer.id) ? (
+                        {rankEntry ? (
                           <span
                             className={`customer-health-dot ${
-                              customerRankMap.get(customer.id)!.healthLabel === 'Excellent'
+                              rankEntry.healthLabel === 'Excellent'
                                 ? 'excellent'
-                                : customerRankMap.get(customer.id)!.healthLabel === 'Good'
+                                : rankEntry.healthLabel === 'Good'
                                   ? 'good'
-                                  : customerRankMap.get(customer.id)!.healthLabel === 'Attention'
+                                  : rankEntry.healthLabel === 'Attention'
                                     ? 'attention'
                                     : 'risk'
                             }`}
-                            title={`Health: ${customerRankMap.get(customer.id)!.healthScore}/100 - ${
-                              customerRankMap.get(customer.id)!.healthLabel
-                            }`}
+                            title={`Health: ${rankEntry.healthScore}/100 - ${rankEntry.healthLabel}`}
                           />
                         ) : null}
-                        <button
-                          type="button"
-                          className="customer-name-link"
-                          onClick={() => setSelectedCustomer(customer)}
-                        >
-                          {customer.name}
-                        </button>
+                        <span className="customer-name-link">{customer.name}</span>
                       </div>
                       <div className="customer-code">{customer.shortCode || '-'}</div>
                     </td>

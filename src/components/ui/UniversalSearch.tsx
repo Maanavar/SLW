@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { groupJobsByCard } from '@/lib/reportUtils';
 import { getJobCardPaymentSummary, getJobFinalBillValue } from '@/lib/jobUtils';
@@ -126,7 +127,8 @@ export function UniversalSearch() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { jobs, customers, getCustomer } = useDataStore();
+  const { jobs, getCustomer } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

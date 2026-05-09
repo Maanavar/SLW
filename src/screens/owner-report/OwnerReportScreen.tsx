@@ -1,5 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useCommissionWorkersQuery } from '@/hooks/useCommissionWorkersQuery';
+import { useCommissionPaymentsQuery } from '@/hooks/useCommissionPaymentsQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import {
@@ -68,7 +70,9 @@ const EXPENSE_LABEL: Record<string, string> = {
 // â”€â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function OwnerReportScreen() {
-  const { jobs, expenses, commissionWorkers, commissionPayments, ensureRangeLoaded } = useDataStore();
+  const { jobs, expenses, ensureRangeLoaded } = useDataStore();
+  const { data: commissionWorkers = [] } = useCommissionWorkersQuery();
+  const { data: commissionPayments = [] } = useCommissionPaymentsQuery();
   const reportRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 

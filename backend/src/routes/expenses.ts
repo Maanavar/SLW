@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
+import { cacheGet, cacheSet, cacheInvalidatePrefix } from '../lib/cache';
 import { EXPENSE_CATEGORIES } from '../domain/constants';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
@@ -75,6 +76,14 @@ router.get(
     const isRecurring =
       isRecurringRaw === 'true' ? true : isRecurringRaw === 'false' ? false : undefined;
 
+    const cacheKey = `expenses:${from ?? '*'}:${to ?? '*'}:${category ?? '*'}:${isRecurring ?? '*'}`;
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      res.json(JSON.parse(cached));
+      return;
+    }
+
     const where = {
       ...(from || to
         ? {
@@ -93,6 +102,7 @@ router.get(
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
+    void cacheSet(cacheKey, JSON.stringify(expenses));
     res.json(expenses);
   })
 );
@@ -185,6 +195,7 @@ router.post(
       after: created,
     });
 
+    void cacheInvalidatePrefix('expenses');
     res.status(201).json(created);
   })
 );
@@ -238,6 +249,7 @@ router.put(
       after: updated,
     });
 
+    void cacheInvalidatePrefix('expenses');
     res.json(updated);
   })
 );
@@ -271,6 +283,7 @@ router.delete(
       before: existing,
     });
 
+    void cacheInvalidatePrefix('expenses');
     res.status(204).send();
   })
 );
@@ -297,6 +310,7 @@ router.delete(
       metadata: { count: deleted.count },
     });
 
+    void cacheInvalidatePrefix('expenses');
     res.json({
       deleted: deleted.count,
     });

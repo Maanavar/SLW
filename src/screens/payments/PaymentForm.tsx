@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
+import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { useToast } from '@/hooks/useToast';
 import { DataTable } from '@/components/ui/DataTable';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
@@ -110,7 +111,8 @@ function formatPaymentBreakdown(row: PaymentDisplay): string {
 }
 
 export function PaymentForm() {
-  const { payments, jobs, customers, getCustomer, deletePayment, updateJob } = useDataStore();
+  const { payments, jobs, getCustomer, deletePayment, updateJob } = useDataStore();
+  const { data: customers = [] } = useCustomersQuery();
   const toast = useToast();
 
   const [reportPeriod, setReportPeriod] = useState<PeriodType>('today');
