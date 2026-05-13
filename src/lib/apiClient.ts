@@ -125,9 +125,50 @@ function isErrorBody(body: unknown): body is { error: string } {
   return typeof error === 'string' && error.trim().length > 0;
 }
 
+function formatErrorDetails(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null || !('details' in body)) {
+    return null;
+  }
+
+  const details = (body as { details?: unknown }).details;
+  if (typeof details !== 'object' || details === null) {
+    return null;
+  }
+
+  const fieldErrors =
+    'fieldErrors' in details && typeof (details as { fieldErrors?: unknown }).fieldErrors === 'object'
+      ? ((details as { fieldErrors?: Record<string, unknown> }).fieldErrors ?? {})
+      : {};
+  const formErrors =
+    'formErrors' in details && Array.isArray((details as { formErrors?: unknown }).formErrors)
+      ? ((details as { formErrors?: unknown[] }).formErrors ?? [])
+      : [];
+
+  const messages: string[] = [];
+
+  Object.entries(fieldErrors).forEach(([field, value]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
+    const text = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    if (text.length > 0) {
+      messages.push(`${field}: ${text.join(', ')}`);
+    }
+  });
+
+  formErrors.forEach((entry) => {
+    if (typeof entry === 'string' && entry.trim().length > 0) {
+      messages.push(entry);
+    }
+  });
+
+  return messages.length > 0 ? messages.join(' | ') : null;
+}
+
 function getErrorMessage(body: unknown, status: number): string {
   if (isErrorBody(body)) {
-    return body.error;
+    const details = formatErrorDetails(body);
+    return details ? `${body.error}: ${details}` : body.error;
   }
   return `Request failed (${status})`;
 }

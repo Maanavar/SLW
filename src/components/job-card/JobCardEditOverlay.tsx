@@ -254,6 +254,16 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   const handleSave = async () => {
     if (!jobs) return;
 
+    if (!jobDate) {
+      toast.error('Error', 'Please select a job date');
+      return;
+    }
+
+    if (jobDate > today) {
+      toast.error('Error', 'Future date is not allowed');
+      return;
+    }
+
     if (jobLines.some((line) => !line.workType)) {
       toast.error('Error', 'All job lines must have a work type selected');
       return;
@@ -281,6 +291,11 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
 
     if (showBillNoField && !billNo.trim()) {
       toast.error('Error', 'Bill number is required for this customer');
+      return;
+    }
+
+    if (showDcFields && !dcNo.trim() && !dcApproval) {
+      toast.error('Error', 'For DC customers, enter DC Number or mark DC waived');
       return;
     }
 
@@ -350,8 +365,10 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           quantity: line.quantity,
           workTypeName: line.workType?.name ?? '',
           workName: line.workType?.shortCode,
+          netAmount: parseFloat(line.amount) || 0,
           paymentStatus,
           workMode,
+          isSpotWork: workMode === 'Spot',
           notes: notes.trim() ? notes.trim() : undefined,
           jobCardId: baseCardId || undefined,
           jobCardLine: index + 1,
@@ -417,7 +434,8 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
       onSave?.();
     } catch (error) {
       console.error('Save error:', error);
-      toast.error('Error', 'Failed to update job card');
+      const message = error instanceof Error ? error.message : 'Failed to update job card';
+      toast.error('Error', message);
     } finally {
       setIsSaving(false);
     }

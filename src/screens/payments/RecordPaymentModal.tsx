@@ -247,45 +247,54 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
 
       await addPayment(newPayment);
 
-      if (isSettled) {
-        const remaining = await applyPaymentAcrossJobs(
-          customerJobs,
-          totalAmount,
-          finalMode
-        );
-        if (remaining > 0) {
-          await updateCustomer(selectedCustomer.id, {
-            advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
-          });
+      // Job paidAmount updates are best-effort; locked-month jobs are skipped.
+      // The payment voucher above is the source of truth for balance.
+      try {
+        if (isSettled) {
+          const remaining = await applyPaymentAcrossJobs(
+            customerJobs,
+            totalAmount,
+            finalMode
+          );
+          if (remaining > 0) {
+            await updateCustomer(selectedCustomer.id, {
+              advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
+            });
+          }
+        } else if (paymentScope !== 'manual') {
+          const remaining = await applyPaymentAcrossJobs(scopedJobs, totalAmount, finalMode);
+          if (remaining > 0) {
+            await updateCustomer(selectedCustomer.id, {
+              advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
+            });
+          }
+        } else {
+          const outstanding = jobs.filter(j =>
+            j.customerId === selectedCustomer.id && getJobFinalBillValue(j) - getJobPaidAmount(j) > 0
+          );
+          const remaining = await applyPaymentAcrossJobs(
+            outstanding,
+            totalAmount,
+            finalMode
+          );
+          if (remaining > 0) {
+            await updateCustomer(selectedCustomer.id, {
+              advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
+            });
+          }
         }
-      } else if (paymentScope !== 'manual') {
-        const remaining = await applyPaymentAcrossJobs(scopedJobs, totalAmount, finalMode);
-        if (remaining > 0) {
-          await updateCustomer(selectedCustomer.id, {
-            advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
-          });
-        }
-      } else {
-        const outstanding = jobs.filter(j =>
-          j.customerId === selectedCustomer.id && getJobFinalBillValue(j) - getJobPaidAmount(j) > 0
-        );
-        const remaining = await applyPaymentAcrossJobs(
-          outstanding,
-          totalAmount,
-          finalMode
-        );
-        if (remaining > 0) {
-          await updateCustomer(selectedCustomer.id, {
-            advanceBalance: (selectedCustomer.advanceBalance || 0) + remaining,
-          });
-        }
+      } catch {
+        // Job updates failed (e.g. locked month) — payment voucher is saved and
+        // balance will be calculated from payment records.
       }
 
       toast.success('Payment recorded', `${formatCurrency(totalAmount)} for ${selectedCustomer.name}`);
       resetForm();
       onClose();
-    } catch {
-      toast.error('Error', 'Failed to record payment');
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to record payment';
+      toast.error('Error', msg);
     }
   };
 

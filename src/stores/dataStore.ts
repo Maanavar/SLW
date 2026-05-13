@@ -12,13 +12,7 @@ import { EXPENSES_KEY } from '@/hooks/useExpensesQuery';
 import { defaultCustomers, defaultWorkTypes, defaultCommissionWorkers } from '@/lib/seedData';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { apiClient } from '@/lib/apiClient';
-import {
-  CUSTOMER_SHORT_CODES,
-  isMahalingamCustomerLabel,
-  isRmpCustomer,
-  isWagenAutosCustomerLabel,
-  normalizeCustomerCode,
-} from '@/constants/customers';
+import { normalizeCustomers } from '@/lib/customerRules';
 import ENV from '@/lib/envConfig';
 
 const LEGACY_KEYS = {
@@ -151,81 +145,6 @@ function normalizeLegacyJob(job: LegacyJobLike): Job {
   return normalized;
 }
 
-function patchCommissionDcCustomers(customers: Customer[]): Customer[] {
-  return customers.map((customer) => {
-    const normalizedShortCode = normalizeCustomerCode(customer.shortCode);
-    const isRmp = isRmpCustomer(customer.shortCode, customer.name);
-    const isNm = isMahalingamCustomerLabel(customer.shortCode, customer.name);
-    const hasBillNo = customer.hasBillNo === true || isRmp || isNm;
-
-    if (isWagenAutosCustomerLabel(customer.name, customer.shortCode)) {
-      return {
-        ...customer,
-        hasBillNo,
-        requiresDc: false,
-      };
-    }
-
-    if (isNm) {
-      return {
-        ...customer,
-        hasBillNo,
-        requiresDc: true,
-      };
-    }
-
-    if (isRmp) {
-      return {
-        ...customer,
-        hasBillNo: true,
-      };
-    }
-
-    // AKR has commission but does NOT require DC
-    if (normalizedShortCode === CUSTOMER_SHORT_CODES.AKR) {
-      return {
-        ...customer,
-        hasBillNo,
-        hasCommission: true,
-        requiresDc: false,
-      };
-    }
-
-    const isCommissionDcCustomer = [1, 2, 17, 18].includes(customer.id);
-    if (customer.id === 17 && !customer.shortCode) {
-      return {
-        ...customer,
-        shortCode: 'AKR',
-        hasBillNo,
-        hasCommission: true,
-        requiresDc: false,
-      };
-    }
-    if (customer.id === 18 && !customer.shortCode) {
-      return {
-        ...customer,
-        shortCode: 'AVP',
-        hasBillNo,
-        hasCommission: true,
-        requiresDc: true,
-      };
-    }
-    if (isCommissionDcCustomer) {
-      return {
-        ...customer,
-        hasBillNo,
-        hasCommission: true,
-        requiresDc: true,
-      };
-    }
-
-    return {
-      ...customer,
-      hasBillNo,
-    };
-  });
-}
-
 function loadLegacySnapshot() {
   const customers = parseJsonArray<Customer>(localStorage.getItem(LEGACY_KEYS.customers));
   const workTypes = parseJsonArray<WorkType>(localStorage.getItem(LEGACY_KEYS.workTypes));
@@ -238,7 +157,7 @@ function loadLegacySnapshot() {
   const commissionPayments = parseJsonArray<CommissionPayment>(localStorage.getItem(LEGACY_KEYS.commissionPayments));
 
   return {
-    customers: patchCommissionDcCustomers(customers.length > 0 ? customers : defaultCustomers),
+    customers: normalizeCustomers(customers.length > 0 ? customers : defaultCustomers),
     workTypes: workTypes.length > 0 ? workTypes : defaultWorkTypes,
     jobs,
     payments,
@@ -347,7 +266,7 @@ export const useDataStore = create<DataStore>()(
           };
 
           const data = await hydrateFromApi();
-          data.customers = patchCommissionDcCustomers(data.customers);
+          data.customers = normalizeCustomers(data.customers);
 
           set({
             ...data,
@@ -408,7 +327,7 @@ export const useDataStore = create<DataStore>()(
         ]);
 
         set({
-          customers: patchCommissionDcCustomers(customers),
+          customers: normalizeCustomers(customers),
           workTypes,
           jobs,
           payments,
@@ -1013,7 +932,7 @@ export const useDataStore = create<DataStore>()(
       getCommissionPaymentsForCustomer: (customerId) =>
         get().commissionPayments.filter((p) => p.customerId === customerId),
 
-      setBulkCustomers: (customers) => set({ customers: patchCommissionDcCustomers(customers) }),
+      setBulkCustomers: (customers) => set({ customers: normalizeCustomers(customers) }),
       setBulkWorkTypes: (workTypes) => set({ workTypes }),
       setBulkCommissionWorkers: (commissionWorkers) => set({ commissionWorkers }),
       setBulkCommissionPayments: (commissionPayments) => set({ commissionPayments }),
