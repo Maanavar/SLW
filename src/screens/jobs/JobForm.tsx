@@ -283,6 +283,23 @@ export function JobForm() {
   }, [showBillNoField, billNo]);
 
   useEffect(() => {
+    if (!selectedCustomer) {
+      return;
+    }
+
+    const latestCustomer = allCustomers.find((customer) => customer.id === selectedCustomer.id) || null;
+
+    if (!latestCustomer) {
+      setSelectedCustomer(null);
+      return;
+    }
+
+    if (latestCustomer !== selectedCustomer) {
+      setSelectedCustomer(latestCustomer);
+    }
+  }, [allCustomers, selectedCustomer]);
+
+  useEffect(() => {
     if (!showVehicleNoField && vehicleNo) {
       setVehicleNo('');
     }
@@ -621,7 +638,7 @@ export function JobForm() {
           agentTdsAmount: useAgentCommission && index === 0 ? Number(agentTdsAmount) || 0 : 0,
           agentSettlementPaidAmount:
             index === 0
-              ? (existingJobs[0]?.agentSettlementPaidAmount || 0)
+              ? (Number(existingJobs[0]?.agentSettlementPaidAmount) || 0)
               : 0,
         });
 
@@ -653,7 +670,7 @@ export function JobForm() {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
           if (overpayment > 0) {
-            const currentAdvance = selectedCustomer.advanceBalance || 0;
+            const currentAdvance = Number(selectedCustomer.advanceBalance) || 0;
             await updateCustomer(selectedCustomer.id, {
               advanceBalance: currentAdvance + overpayment,
             });
@@ -664,7 +681,7 @@ export function JobForm() {
         // Deduct advance if it was applied during edit
         if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
-          const currentAdvance = selectedCustomer.advanceBalance || 0;
+          const currentAdvance = Number(selectedCustomer.advanceBalance) || 0;
           const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
           if (advanceUsed > 0 && advanceUsed < currentAdvance) {
             // Only deduct if not creating advance
@@ -730,7 +747,7 @@ export function JobForm() {
           const enteredPaidAmount = parseFloat(paidAmount) || 0;
           const overpayment = Math.max(0, enteredPaidAmount - summary.finalValue);
           if (overpayment > 0) {
-            const currentAdvance = selectedCustomer.advanceBalance || 0;
+            const currentAdvance = Number(selectedCustomer.advanceBalance) || 0;
             await updateCustomer(selectedCustomer.id, {
               advanceBalance: currentAdvance + overpayment,
             });
@@ -742,7 +759,7 @@ export function JobForm() {
       // Deduct advance if it was applied during creation (edit mode)
       if (selectedCustomer && paymentIntent === 'now' && enteredPaidAmount > 0) {
         const enteredPaidAmount = parseFloat(paidAmount) || 0;
-        const currentAdvance = selectedCustomer.advanceBalance || 0;
+        const currentAdvance = Number(selectedCustomer.advanceBalance) || 0;
         const advanceUsed = Math.min(enteredPaidAmount, currentAdvance);
         if (advanceUsed > 0) {
           await updateCustomer(selectedCustomer.id, {
