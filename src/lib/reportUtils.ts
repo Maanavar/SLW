@@ -99,47 +99,31 @@ export function getPaymentEventsInRange(
     };
   });
 
-  const vouchersByCustomerDate = new Map<string, PaymentEvent[]>();
-  voucherEvents.forEach((v) => {
-    const key = `${v.customerId}|${v.date}`;
-    const list = vouchersByCustomerDate.get(key) || [];
-    list.push(v);
-    vouchersByCustomerDate.set(key, list);
-  });
+  // Customers who have ANY voucher recorded (all-time) use the voucher system as
+  // authoritative. Their job.paidAmount fields are redundant entry — including both
+  // would double-count the same money. Only fall back to job-paid entries for
+  // customers who have never had a payment voucher recorded.
+  const customersWithVouchers = new Set(payments.map((p) => p.customerId));
 
   const paidGroups = groupJobsByCard(jobsInRange.filter((j) => getJobPaidAmount(j) > 0));
-  const jobPaidEvents: PaymentEvent[] = paidGroups.map((group) => {
-    const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-    const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
-    return {
-      id: `job:${cardId}`,
-      customerId: group.primary.customerId,
-      amount,
-      date: group.primary.date,
-      paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
-      notes: `From JobCard ${cardId}`,
-      source: 'Job Paid Entry',
-      jobCardId: cardId,
-    };
-  });
+  const jobPaidEvents: PaymentEvent[] = paidGroups
+    .filter((group) => !customersWithVouchers.has(group.primary.customerId))
+    .map((group) => {
+      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+      const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
+      return {
+        id: `job:${cardId}`,
+        customerId: group.primary.customerId,
+        amount,
+        date: group.primary.date,
+        paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
+        notes: `From JobCard ${cardId}`,
+        source: 'Job Paid Entry',
+        jobCardId: cardId,
+      };
+    });
 
-  const dedupedJobPaidEvents = jobPaidEvents.filter((jobEvent) => {
-    const key = `${jobEvent.customerId}|${jobEvent.date}`;
-    const sameDayVouchers = vouchersByCustomerDate.get(key) || [];
-    if (sameDayVouchers.length === 0) return true;
-
-    // Only suppress a job-paid entry when a voucher explicitly references this card by ID.
-    // Amount-only matching is too aggressive: two legitimate same-amount payments on the same
-    // day would cause one to be silently dropped from reports.
-    const cardId = jobEvent.jobCardId || '';
-    const hasExplicitLink = cardId
-      ? sameDayVouchers.some((v) => (v.notes || '').toLowerCase().includes(cardId.toLowerCase()))
-      : false;
-
-    return !hasExplicitLink;
-  });
-
-  return [...voucherEvents, ...dedupedJobPaidEvents].filter((e) => (e.amount || 0) > 0);
+  return [...voucherEvents, ...jobPaidEvents].filter((e) => (e.amount || 0) > 0);
 }
 
 /**

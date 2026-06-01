@@ -45,17 +45,34 @@ describe('jobUtils', () => {
     });
 
     expect(getJobNetValue(slwJob)).toBe(800);
-    expect(getJobNetValue(agentJob)).toBe(200);
+    // TDS is a government pass-through — only commission is SLW income
+    expect(getJobNetValue(agentJob)).toBe(180);
   });
 
   it('prevents double-counting when both job-paid and payment vouchers exist', () => {
     const jobs: Job[] = [
       createJob({ id: 1, customerId: 1, amount: 1000, commissionAmount: 100, paidAmount: 900 }),
     ];
-
+    // Voucher exists — use payment table as authoritative source
     const payments = [{ customerId: 1, amount: 900 }];
-
     expect(calculateCustomerBalance(jobs, payments, 1, 0)).toBe(200);
+  });
+
+  it('falls back to job-paid amounts when no vouchers exist (legacy data)', () => {
+    const jobs: Job[] = [
+      createJob({ id: 1, customerId: 1, amount: 1000, commissionAmount: 100, paidAmount: 600 }),
+    ];
+    // No payment vouchers — use job.paidAmount
+    expect(calculateCustomerBalance(jobs, [], 1, 0)).toBe(500);
+  });
+
+  it('uses payment vouchers even when job shows higher paidAmount', () => {
+    const jobs: Job[] = [
+      createJob({ id: 1, customerId: 1, amount: 1000, commissionAmount: 0, paidAmount: 1000 }),
+    ];
+    // Voucher records only 700 — treat that as authoritative
+    const payments = [{ customerId: 1, amount: 700 }];
+    expect(calculateCustomerBalance(jobs, payments, 1, 0)).toBe(300);
   });
 
   it('identifies DC-applicable customers from flag or name heuristic', () => {

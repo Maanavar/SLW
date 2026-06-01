@@ -133,8 +133,8 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
         const finalBill = ourIncome + commission;
         const paidAmount = scopedCollectionsByCustomer.get(customer.id) || 0;
         const openingBalanceAmt = carriedOpeningByCustomer.get(customer.id) || 0;
-        const balance = Math.max(0, openingBalanceAmt + finalBill - paidAmount);
         const advance = Number(customer.advanceBalance) || 0;
+        const balance = Math.max(0, openingBalanceAmt + finalBill - paidAmount - advance);
 
         return {
           ...customer,

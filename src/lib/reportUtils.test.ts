@@ -128,10 +128,11 @@ describe('invoice payment attribution (monthly customers)', () => {
 });
 
 describe('reportUtils', () => {
-  it('combines payment vouchers and job-paid entries while de-duping linked cards', () => {
+  it('suppresses all job-paid entries for customers who have any payment voucher', () => {
     const jobs: Job[] = [
       createJob({ id: 1, customerId: 1, date: '2026-05-05', jobCardId: 'JC-1', paidAmount: 300 }),
       createJob({ id: 2, customerId: 1, date: '2026-05-06', jobCardId: 'JC-2', paidAmount: 200 }),
+      createJob({ id: 3, customerId: 2, date: '2026-05-06', jobCardId: 'JC-3', paidAmount: 400 }),
     ];
 
     const payments: Payment[] = [
@@ -152,10 +153,14 @@ describe('reportUtils', () => {
 
     const events = getPaymentEventsInRange(jobs, payments, '2026-05-01', '2026-05-31');
 
+    // Vouchers always included
     expect(events.map((e) => e.id)).toContain('payment:10');
     expect(events.map((e) => e.id)).toContain('payment:11');
-    expect(events.map((e) => e.id)).toContain('job:JC-2');
+    // Customer 1 has vouchers — ALL job-paid entries suppressed to avoid double-counting
     expect(events.map((e) => e.id)).not.toContain('job:JC-1');
+    expect(events.map((e) => e.id)).not.toContain('job:JC-2');
+    // Customer 2 has no vouchers — job-paid entry included as fallback
+    expect(events.map((e) => e.id)).toContain('job:JC-3');
   });
 
   it('calculates monthly balances using max(job-paid, payment-paid) and payment period fields', () => {

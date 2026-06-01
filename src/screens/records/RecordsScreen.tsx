@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
@@ -27,7 +27,7 @@ import {
 } from '@/constants/customers';
 import './RecordsScreen.css';
 
-// ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Types ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+// -- Types -------------------------------------------------------------------
 
 type PeriodMode =
   | 'day'
@@ -242,7 +242,7 @@ const PERIOD_TABS: { mode: PeriodMode; label: string }[] = [
   { mode: 'range', label: 'Range' },
 ];
 
-// ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Helpers ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+// ----------------------------------------------------------------------------
 
 function shiftDate(value: string, days: number): string {
   const [year, month, day] = value.split('-').map(Number);
@@ -415,7 +415,7 @@ function getSafeExportPixelRatio(width: number, height: number): number {
   return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
 }
 
-// ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Component ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+// ----------------------------------------------------------------------------
 
 export function RecordsScreen() {
   const navigate = useNavigate();
@@ -424,10 +424,10 @@ export function RecordsScreen() {
   const toast = useToast();
   const today = getLocalDateString(new Date());
 
-  // ï¿½" URL params (must come first so they seed other state initialisers)
+  // URL params (must come first so they seed other state initialisers)
   const [searchParams] = useSearchParams();
 
-  // ï¿½" Period / date state
+  // Period / date state
   const [periodMode, setPeriodMode] = useState<PeriodMode>(() =>
     searchParams.get('card') || searchParams.get('customer') ? 'all' : 'day'
   );
@@ -441,7 +441,7 @@ export function RecordsScreen() {
     setPeriodOffset(0);
   };
 
-  // ï¿½" Filter state
+  // Filter state
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(() => {
     const cid = searchParams.get('customer');
     return cid ? parseInt(cid, 10) || null : null;
@@ -457,7 +457,7 @@ export function RecordsScreen() {
     order: 'asc' | 'desc';
   } | null>(null);
 
-  // ï¿½" Modal state
+  // Modal state
   const [selectedCardKey, setSelectedCardKey] = useState<string | null>(null);
   const [editingCardKey, setEditingCardKey] = useState<string | null>(() => {
     const card = searchParams.get('card');
@@ -473,7 +473,7 @@ export function RecordsScreen() {
     setEditingCardKey(card);
   }, [searchParams]);
 
-  // ï¿½" Export state
+  // Export state
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showExportFields, setShowExportFields] = useState(false);
   const [exportColumns, setExportColumns] = useState<ExportColumn[]>(DEFAULT_EXPORT_COLUMNS);
@@ -494,7 +494,7 @@ export function RecordsScreen() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showExportMenu]);
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Date range ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const { from: rangeStart, to: rangeEnd } = useMemo(
     () => computeDateRange(periodMode, selectedDate, rangeFrom, rangeTo, periodOffset),
@@ -516,7 +516,7 @@ export function RecordsScreen() {
 
   const isToday = periodMode === 'day' && selectedDate === today;
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Data ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const customerOptions = useMemo<RecordCustomerOption[]>(() => {
     const usageMap = new Map<number, { count: number; latestDate: string }>();
@@ -695,7 +695,18 @@ export function RecordsScreen() {
     const totalPaid = rows.reduce((s, r) => s + r.paid, 0);
     const totalPending = rows.reduce((s, r) => s + r.pending, 0);
     const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
-    const grossProfit = totalNet;
+    const totalAgentWorkRevenue = groupedJobs.reduce((sum, group) => {
+      return sum + group.jobs.reduce((jobSum, job) => {
+        return isAgentWorkJob(job) ? jobSum + getJobFinalBillValue(job) : jobSum;
+      }, 0);
+    }, 0);
+    const totalAgentCommissionReceived = groupedJobs.reduce((sum, group) => {
+      return sum + group.jobs.reduce((jobSum, job) => {
+        return jobSum + getJobAgentCommissionIncome(job);
+      }, 0);
+    }, 0);
+    const grossProfit =
+      totalBill - totalCommission - totalAgentWorkRevenue + totalAgentCommissionReceived;
     const uniqueDates = new Set(groupedJobs.flatMap((g) => g.jobs.map((j) => j.date)));
     const workDays = uniqueDates.size;
     const avgPerDay = workDays > 0 ? totalNet / workDays : 0;
@@ -710,6 +721,8 @@ export function RecordsScreen() {
       totalPaid,
       totalPending,
       totalCommission,
+      totalAgentWorkRevenue,
+      totalAgentCommissionReceived,
       grossProfit,
       workDays,
       avgPerDay,
@@ -933,7 +946,7 @@ export function RecordsScreen() {
     [exportSummaryMetrics, exportSummaryFields]
   );
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Modals ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const selectedGroup = useMemo(
     () => groupedJobs.find((g) => g.key === selectedCardKey) || null,
@@ -967,7 +980,7 @@ export function RecordsScreen() {
 
   // columns defined inline in JSX
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Export ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const reportRows = useMemo(
     () =>
@@ -1051,7 +1064,7 @@ export function RecordsScreen() {
       .replace(/'/g, '&#39;');
   }
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Shared report HTML builder ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const buildReportHtml = (): string => {
     const { headers, keys, showSno } = buildHeadersAndIndices();
@@ -1170,7 +1183,7 @@ tbody tr:last-child td{border-bottom:none}
 </div>`;
   };
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Export PNG ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const handleExportPng = async () => {
     setShowExportMenu(false);
@@ -1428,7 +1441,7 @@ tbody tr:last-child td{border-bottom:none}
     window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
   };
 
-  // ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ Render ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½ï¿½"ï¿½
+  // ----------------------------------------------------------------------------
 
   const ChevL = () => (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1455,7 +1468,7 @@ tbody tr:last-child td{border-bottom:none}
 
   return (
     <div className="records-screen">
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Page header ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Page header */}
       <div className="records-pg-header">
         <div>
           <h1 className="records-pg-title">
@@ -1665,7 +1678,7 @@ tbody tr:last-child td{border-bottom:none}
         </div>
       </div>
 
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Unified toolbar ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Unified toolbar */}
       <div className="records-toolbar">
         {/* Period tabs */}
         <div className="records-period-tabs">
@@ -1899,7 +1912,7 @@ tbody tr:last-child td{border-bottom:none}
         </div>
       </div>
 
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Range inputs (below toolbar, only for range mode) ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Range inputs (below toolbar, only for range mode) */}
       {periodMode === 'range' && (
         <div className="records-range-inputs">
           <div className="records-range-field">
@@ -1948,7 +1961,7 @@ tbody tr:last-child td{border-bottom:none}
         </div>
       )}
 
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Summary stats ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Summary stats */}
       {rows.length > 0 && (
         <>
           <div className="records-summary">
@@ -2037,7 +2050,7 @@ tbody tr:last-child td{border-bottom:none}
               <span className="records-stat-label">Gross Profit</span>
               <span className="records-stat-value">{formatCurrency(summary.grossProfit)}</span>
               <span className="records-stat-sub">
-                Revenue - commission
+                Revenue - commission - agent work + commission received
                 <RecTrendBadge
                   current={summary.grossProfit}
                   prev={prevSummary?.grossProfit ?? 0}
@@ -2054,6 +2067,14 @@ tbody tr:last-child td{border-bottom:none}
                   <div className="breakdown-item">
                     <span>- Commission</span>
                     <span>-{formatCurrency(summary.totalCommission)}</span>
+                  </div>
+                  <div className="breakdown-item">
+                    <span>- Agent Work</span>
+                    <span>-{formatCurrency(summary.totalAgentWorkRevenue)}</span>
+                  </div>
+                  <div className="breakdown-item">
+                    <span>+ Commission Received from Agent Work</span>
+                    <span>{formatCurrency(summary.totalAgentCommissionReceived)}</span>
                   </div>
                   <div className="breakdown-item">
                     <span>= Gross Profit</span>
@@ -2161,7 +2182,7 @@ tbody tr:last-child td{border-bottom:none}
         </>
       )}
 
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Export field selector ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Export field selector */}
       {showExportFields && (
         <div className="records-export-fields">
           <div className="records-export-fields-header">
@@ -2248,7 +2269,7 @@ tbody tr:last-child td{border-bottom:none}
         </div>
       )}
 
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Content ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Content */}
       {viewMode === 'cards' ? (
         rows.length > 0 ? (
           <div className="records-cards-grid">
@@ -2687,7 +2708,7 @@ tbody tr:last-child td{border-bottom:none}
         </div>
       )}
 
-      {/* ï¿½"ï¿½ï¿½"ï¿½ Modals ï¿½"ï¿½ï¿½"ï¿½ */}
+      {/* -- Modals */}
       <JobCardDetailsModal
         isOpen={Boolean(selectedGroup)}
         jobs={selectedGroup?.jobs || null}

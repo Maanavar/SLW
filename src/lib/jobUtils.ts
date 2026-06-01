@@ -143,14 +143,14 @@ export function getPaymentStatusFromAmounts(paid: number, due: number): PaymentS
 
 /**
  * Get our net income for a job line.
- * Business rule: `job.amount` already stores our net income.
+ * For SLW work: job.amount is the net income.
+ * For agent work: SLW retains only the commission — TDS is a government pass-through, not income.
  */
 export function getJobNetValue(job: Job): number {
   if (!isAgentWorkJob(job)) {
     return Number(job.amount) || 0;
   }
-  // In agent flow, SLW income is retained commission + TDS.
-  return getJobAgentCommissionIncome(job) + getJobAgentTdsAmount(job);
+  return getJobAgentCommissionIncome(job);
 }
 
 /**
@@ -172,8 +172,14 @@ export function getJobDcStatus(job: Job, customer?: Customer): string {
 }
 
 /**
- * Calculate customer balance
- * Balance = openingBalance + Total Final Bill - Amount Paid from Jobs - Direct Payments
+ * Calculate customer balance.
+ * Balance = openingBalance + Total Final Bill - Total Paid
+ *
+ * Payment source selection:
+ * - When payment vouchers exist for the customer, use their sum as the authoritative total.
+ *   Voucher recording also writes job.paidAmount, so both sources reflect the same transactions.
+ * - When no vouchers exist (legacy data recorded only on the job card), fall back to job.paidAmount.
+ * This avoids double-counting payments that appear in both places.
  */
 export function calculateCustomerBalance(
   jobs: Job[],
@@ -188,9 +194,9 @@ export function calculateCustomerBalance(
   const totalPaidFromJobs = customerJobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
   const totalPaidFromPayments = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // Payments are usually reflected in both `payments` and `job.paidAmount`.
-  // Using the larger source prevents double-counting while staying backward-compatible with legacy rows.
-  const totalPaid = Math.max(totalPaidFromJobs, totalPaidFromPayments);
+  // Use payment vouchers when they exist; fall back to job-level paid amounts for legacy rows
+  // that pre-date the payments table. Never add both — they represent the same money.
+  const totalPaid = totalPaidFromPayments > 0 ? totalPaidFromPayments : totalPaidFromJobs;
   return Math.max(0, (openingBalance || 0) + totalDue - totalPaid);
 }
 

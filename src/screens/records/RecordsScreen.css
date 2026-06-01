@@ -91,7 +91,6 @@
   padding: 2px;
   overflow-x: auto;
   scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
 
 .records-period-tabs::-webkit-scrollbar { display: none; }
@@ -483,9 +482,12 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
   padding: 10px 12px;
   min-width: 200px;
-  max-width: 280px;
+  max-width: min(320px, calc(100vw - 24px));
+  width: max-content;
   z-index: 400;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .records-breakdown::before {
@@ -1012,10 +1014,7 @@
 }
 
 @media (max-width: 1024px) {
-  /* Reduce table min-width so tablets don't scroll horizontally */
-  .records-table {
-    min-width: 560px;
-  }
+  .records-table { min-width: 560px; }
 
   .records-table thead th,
   .records-table tbody td {
@@ -1041,17 +1040,115 @@
   .records-dc-input { width: 82px; }
 }
 
-@media (max-width: 480px) {
-  .records-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .records-table {
-    min-width: 440px;
+/* ── Tablet portrait & phone ─────────────────────────────────── */
+@media (max-width: 680px) {
+  /* Stack page header vertically */
+  .records-pg-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
+
+  .records-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Period tabs: full-width scrollable strip */
+  .records-period-tabs {
+    width: 100%;
+  }
+
+  /* Toolbar: two-row layout */
+  .records-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Day navigator grows to fill */
+  .records-day-nav-shell {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .records-period-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Toolbar end row pins to its own line */
+  .records-toolbar-end {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Customer select fills available width */
+  .records-customer-select {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  /* Range inputs stack */
+  .records-range-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .records-range-arrow { display: none; }
+
+  /* Nav buttons bigger for touch */
+  .records-nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .records-period-label {
+    line-height: 36px;
+  }
+
+  .records-date-input {
+    height: 36px;
+    font-size: 14px;
+  }
+
+  .records-today-btn {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  /* Period tabs taller */
+  .records-period-tab {
+    padding: 6px 12px;
+    font-size: 12.5px;
+  }
+
+  /* Stat cards: 2-col */
+  .records-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
+  .records-pg-title { font-size: 17px; }
+
+  /* Table: allow horizontal scroll, tighten columns */
+  .records-table { min-width: 400px; }
+
   .records-table thead th,
   .records-table tbody td {
     padding: 8px 8px;
     font-size: 12px;
   }
-  .records-pg-title { font-size: 17px; }
+
+  /* Hide less critical columns on small phones */
+  .records-table .col-workmode,
+  .records-table .col-dc {
+    display: none;
+  }
+
+  /* Stats: 1-col on tiny phones */
+  .records-summary { grid-template-columns: 1fr; }
 }
 
 /* ── Trend badges ─────────────────────────────────────────── */

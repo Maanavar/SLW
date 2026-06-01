@@ -38,6 +38,11 @@ const RecordsScreen = React.lazy(() =>
 const FinanceReports = React.lazy(() =>
   import('./screens/FinanceReports').then((module) => ({ default: module.FinanceReports }))
 );
+const PaymentSettlementScreen = React.lazy(() =>
+  import('./screens/payment-settlement/PaymentSettlementScreen').then((module) => ({
+    default: module.PaymentSettlementScreen,
+  }))
+);
 const ExpenseManager = React.lazy(() =>
   import('./screens/ExpenseManager').then((module) => ({ default: module.ExpenseManager }))
 );
@@ -131,6 +136,10 @@ const router = createHashRouter([
       {
         path: '/finance',
         element: withLazyBoundary('Audit', <FinanceReports />),
+      },
+      {
+        path: '/settlement',
+        element: withLazyBoundary('Settlement', <PaymentSettlementScreen />),
       },
       {
         path: '/expenses',

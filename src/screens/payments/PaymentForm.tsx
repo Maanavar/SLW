@@ -259,7 +259,7 @@ export function PaymentForm() {
       }
       return;
     }
-    if (!window.confirm(`Delete payment of ${formatCurrency(payment.amount)}?\n\nThis cannot be undone.`)) return;
+    if (!window.confirm(`Delete payment of ${formatCurrency(payment.amount)}?\n\nThis removes the payment record. Job card paid amounts are not changed — edit the job card directly to adjust those.\n\nThis cannot be undone.`)) return;
     try {
       await deletePayment(payment.id);
       toast.success('Success', 'Payment deleted');

@@ -857,6 +857,60 @@ select.form-input {
   .jobs-pg-title { font-size: 19px; }
 }
 
+/* ── Tablet portrait & phone ─────────────────────────────── */
+@media (max-width: 680px) {
+  /* Page header: stack */
+  .jobs-pg-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* Panel padding tighter */
+  .njc-head { padding: 10px 12px; }
+  .njc-body { padding: 12px; }
+
+  /* Section headers tighter */
+  .submitted-head { padding: 10px 12px; }
+
+  /* Job card table: horizontal scroll with reduced min-width */
+  .submitted-table { min-width: 520px; }
+
+  .submitted-table thead th,
+  .submitted-table tbody td {
+    padding: 9px 10px;
+    font-size: 12.5px;
+  }
+
+  /* Row action buttons: bigger */
+  .row-act-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Work line action buttons: bigger */
+  .row-act-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .jobs-pg-title { font-size: 17px; }
+
+  /* Submitted table: tighter still, hide less critical columns */
+  .submitted-table { min-width: 380px; }
+
+  .submitted-table thead th,
+  .submitted-table tbody td {
+    padding: 8px 8px;
+    font-size: 12px;
+  }
+
+  /* Hide work-mode column on tiny phones */
+  .submitted-table .col-mode { display: none; }
+}
+
 @media (max-width: 400px) {
   .jobs-pg-title { font-size: 17px; }
 }
