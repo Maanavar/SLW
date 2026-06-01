@@ -5,6 +5,7 @@ import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
 import { getJobFinalBillValue, isMahalingamCustomer } from '@/lib/jobUtils';
+import { getPaymentEffectivePeriodKey } from '@/lib/reportUtils';
 import { isWagenAutosCustomerLabel } from '@/constants/customers';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { useToast } from '@/hooks/useToast';
@@ -111,7 +112,6 @@ function getBillNumberSortValue(value?: string): number {
   const parsed = Number.parseInt(match[0], 10);
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
-
 // â”€â”€â”€ Main screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function InvoiceScreen() {
@@ -220,22 +220,36 @@ export function InvoiceScreen() {
     [customerJobs, periodStart, periodEnd, customerGroup, rmpHandlerFilter]
   );
 
-  const periodPayments = useMemo(
-    () => customerPayments.filter((p) => periodStart && p.date >= periodStart && p.date <= periodEnd),
-    [customerPayments, periodStart, periodEnd]
-  );
+  const periodPayments = useMemo(() => {
+    if (!periodStart) return [];
+    const periodMonthKey = periodStart.substring(0, 7);
+    return customerPayments.filter((p) => {
+      const effectiveKey = getPaymentEffectivePeriodKey(p);
+      // For monthly billing, match by effective accounting period month
+      if (isMonthly) return effectiveKey === periodMonthKey;
+      // For date-range billing, match by physical date within range (as before)
+      return p.date >= periodStart && p.date <= periodEnd;
+    });
+  }, [customerPayments, periodStart, periodEnd, isMonthly]);
 
   // Old balance: openingBalance (from customer profile) + total billed before period start - total paid before period start
   const oldBalance = useMemo(() => {
     if (!periodStart) return 0;
+    const periodMonthKey = periodStart.substring(0, 7);
     const billedBefore = customerJobs
       .filter((j) => j.date < periodStart)
       .reduce((s, j) => s + getJobFinalBillValue(j), 0);
+    // For monthly customers, attribute each payment to its effective accounting month so that a
+    // payment physically received on June 1 *for May* reduces the May balance, not June's.
+    // For date-range customers, use the physical payment date as before.
     const paidBefore = customerPayments
-      .filter((p) => p.date < periodStart)
+      .filter((p) => {
+        if (isMonthly) return getPaymentEffectivePeriodKey(p) < periodMonthKey;
+        return p.date < periodStart;
+      })
       .reduce((s, p) => s + (Number(p.amount) || 0), 0);
     return (selectedCustomer?.openingBalance || 0) + billedBefore - paidBefore;
-  }, [customerJobs, customerPayments, periodStart, selectedCustomer]);
+  }, [customerJobs, customerPayments, periodStart, selectedCustomer, isMonthly]);
 
   const periodTotal = useMemo(
     () => periodJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0),
@@ -246,6 +260,15 @@ export function InvoiceScreen() {
     () => periodPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
     [periodPayments]
   );
+
+  // Payments in this period that have no explicit scope — they landed here via physical date fallback.
+  // We surface a warning so the user knows these may be misattributed if they were meant for another period.
+  const unscopedPeriodPaymentCount = useMemo(() => {
+    if (!isMonthly) return 0;
+    return periodPayments.filter(
+      (p) => !p.paymentForMonth && !p.paymentForDate && !p.paymentForFromDate
+    ).length;
+  }, [periodPayments, isMonthly]);
 
   // For DC group customers, old balance isn't aggregated (invoice is per-period)
   const grossTotal = isDcGroup || hidePreviousBalance ? periodTotal : oldBalance + periodTotal;
@@ -336,6 +359,9 @@ export function InvoiceScreen() {
     exportHost.appendChild(exportNode);
     document.body.appendChild(exportHost);
 
+    // Wait two animation frames so the browser finishes layout before measuring
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
     try {
       const exportWidth = Math.ceil(exportNode.scrollWidth || exportNode.clientWidth || INVOICE_EXPORT_WIDTH);
       const exportHeight = Math.ceil(exportNode.scrollHeight || exportNode.clientHeight || 1);
@@ -395,8 +421,9 @@ export function InvoiceScreen() {
         '_blank'
       );
       toast.info('WhatsApp', 'PNG downloaded. Attach it in WhatsApp.');
-    } catch {
-      toast.error('Error', 'Failed to prepare PNG for WhatsApp');
+    } catch (err) {
+      console.error('[PNG export]', err);
+      toast.error('Error', err instanceof Error ? err.message : 'Failed to prepare PNG for WhatsApp');
     }
   };
 
@@ -445,14 +472,20 @@ export function InvoiceScreen() {
     doc.line(margin, 42, pageW - margin, 42);
 
     // Jobs table
-    const tableRows = periodJobs.map((j, idx) => [
-      String(idx + 1),
-      formatDate(j.date),
-      j.billNo || j.dcNo || '-',
-      resolveWorkLabel(j, workTypes),
-      String(j.quantity),
-      formatCurrency(getJobFinalBillValue(j)),
-    ]);
+    const tableRows = periodJobs.map((j, idx) => {
+      const isSpot = j.isSpotWork || j.workMode === 'Spot';
+      let workLabel = resolveWorkLabel(j, workTypes);
+      if (isSpot) workLabel += ' [SPOT WORK]';
+      if (j.notes) workLabel += `\n${j.notes}`;
+      return [
+        String(idx + 1),
+        formatDate(j.date),
+        j.billNo || j.dcNo || '-',
+        workLabel,
+        String(j.quantity),
+        formatCurrency(getJobFinalBillValue(j)),
+      ];
+    });
 
     autoTable(doc, {
       startY: 46,
@@ -616,6 +649,20 @@ export function InvoiceScreen() {
           </>
         )}
 
+        {canGenerate && unscopedPeriodPaymentCount > 0 && (
+          <div className="inv-scope-warning no-print">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>
+              {unscopedPeriodPaymentCount} payment{unscopedPeriodPaymentCount > 1 ? 's' : ''} in this period
+              {' '}have no month scope — they are counted here by date.
+              If they were for a different month, edit them and set the correct Month scope.
+            </span>
+          </div>
+        )}
+
         {canGenerate && (
           <div className="inv-actions">
             <div className="inv-summary-grid">
@@ -744,7 +791,13 @@ export function InvoiceScreen() {
                         <tr key={job.id} className="inv-tr">
                           <td className="inv-td inv-col-date">{formatDateShort(job.date)}</td>
                           <td className="inv-td inv-col-work">
-                            {resolveWorkLabel(job, workTypes)}
+                            <span className="inv-work-name">{resolveWorkLabel(job, workTypes)}</span>
+                            {(job.isSpotWork || job.workMode === 'Spot') && (
+                              <span className="inv-spot-tag">SPOT WORK</span>
+                            )}
+                            {job.notes && (
+                              <span className="inv-job-note">{job.notes}</span>
+                            )}
                           </td>
                           <td className="inv-td inv-col-qty inv-align-right numeric">
                             {job.quantity ?? '-'}
@@ -788,7 +841,13 @@ export function InvoiceScreen() {
                         <td className="inv-td inv-col-dcno">{job.dcNo || '-'}</td>
                         <td className="inv-td inv-col-vehicle">{job.vehicleNo || '-'}</td>
                         <td className="inv-td inv-col-wtype">
-                          {resolveWorkLabel(job, workTypes)}
+                          <span className="inv-work-name">{resolveWorkLabel(job, workTypes)}</span>
+                          {(job.isSpotWork || job.workMode === 'Spot') && (
+                            <span className="inv-spot-tag">SPOT WORK</span>
+                          )}
+                          {job.notes && (
+                            <span className="inv-job-note">{job.notes}</span>
+                          )}
                         </td>
                         <td className="inv-td inv-col-amt inv-align-right numeric">
                           {formatCurrency(getJobFinalBillValue(job))}

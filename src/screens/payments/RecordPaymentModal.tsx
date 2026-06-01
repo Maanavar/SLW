@@ -370,6 +370,21 @@ export function RecordPaymentModal({ isOpen, onClose }: RecordPaymentModalProps)
           </div>
         )}
 
+        {/* Hint: manual scope means no period is recorded — nudge toward Month scope for monthly customers */}
+        {!isSettled && paymentScope === 'manual' && selectedCustomer && (
+          <p className="rpm-scope-hint">
+            No period linked. If this payment is for a specific month's work, switch to{' '}
+            <button
+              type="button"
+              className="rpm-scope-hint-btn"
+              onClick={() => setPaymentScope('month')}
+            >
+              Month scope
+            </button>{' '}
+            so invoices stay accurate.
+          </p>
+        )}
+
         {/* Scope date pickers */}
         {!isSettled && paymentScope === 'week' && (
           <div className="rpm-grid-2">

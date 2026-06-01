@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Job, Payment } from '@/types';
-import { calculateMonthlyBalances, getPaymentEventsInRange } from './reportUtils';
+import { calculateMonthlyBalances, getPaymentEffectivePeriodKey, getPaymentEventsInRange } from './reportUtils';
 
 function createJob(overrides: Partial<Job> = {}): Job {
   return {
@@ -25,6 +25,107 @@ function createPayment(overrides: Partial<Payment> = {}): Payment {
     ...overrides,
   };
 }
+
+describe('getPaymentEffectivePeriodKey', () => {
+  it('uses paymentForMonth when set, regardless of physical date', () => {
+    const p = createPayment({ date: '2026-06-01', paymentForMonth: '2026-05' });
+    expect(getPaymentEffectivePeriodKey(p)).toBe('2026-05');
+  });
+
+  it('extracts month from paymentForDate when no paymentForMonth', () => {
+    const p = createPayment({ date: '2026-06-01', paymentForDate: '2026-05-31' });
+    expect(getPaymentEffectivePeriodKey(p)).toBe('2026-05');
+  });
+
+  it('extracts month from paymentForFromDate when no other scope', () => {
+    const p = createPayment({ date: '2026-06-01', paymentForFromDate: '2026-05-16' });
+    expect(getPaymentEffectivePeriodKey(p)).toBe('2026-05');
+  });
+
+  it('falls back to physical date month when no scope fields set', () => {
+    const p = createPayment({ date: '2026-06-01' });
+    expect(getPaymentEffectivePeriodKey(p)).toBe('2026-06');
+  });
+
+  it('paymentForMonth takes priority over paymentForDate', () => {
+    const p = createPayment({ date: '2026-06-01', paymentForMonth: '2026-04', paymentForDate: '2026-05-15' });
+    expect(getPaymentEffectivePeriodKey(p)).toBe('2026-04');
+  });
+});
+
+// Simulate the invoice screen's periodPayments / oldBalance logic
+// so we can assert cross-month payment attribution without mounting React.
+function invoicePeriodPayments(
+  payments: Payment[],
+  periodMonthKey: string
+): Payment[] {
+  return payments.filter((p) => getPaymentEffectivePeriodKey(p) === periodMonthKey);
+}
+
+function invoicePaidBefore(payments: Payment[], periodMonthKey: string): number {
+  return payments
+    .filter((p) => getPaymentEffectivePeriodKey(p) < periodMonthKey)
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+}
+
+describe('invoice payment attribution (monthly customers)', () => {
+  it('payment recorded on June 1 FOR May is excluded from June periodPayments', () => {
+    const payments = [
+      createPayment({ id: 1, date: '2026-06-01', amount: 12500, paymentForMonth: '2026-05' }),
+    ];
+    const junePeriod = invoicePeriodPayments(payments, '2026-06');
+    expect(junePeriod).toHaveLength(0);
+  });
+
+  it('payment recorded on June 1 FOR May reduces May old balance (paidBefore)', () => {
+    const payments = [
+      createPayment({ id: 1, date: '2026-06-01', amount: 12500, paymentForMonth: '2026-05' }),
+    ];
+    const paidBefore = invoicePaidBefore(payments, '2026-06');
+    expect(paidBefore).toBe(12500);
+  });
+
+  it('payment with no scope in June is included in June periodPayments', () => {
+    const payments = [
+      createPayment({ id: 1, date: '2026-06-10', amount: 5000 }),
+    ];
+    const junePeriod = invoicePeriodPayments(payments, '2026-06');
+    expect(junePeriod).toHaveLength(1);
+    expect(junePeriod[0].amount).toBe(5000);
+  });
+
+  it('WP scenario: June invoice balance is just June work when May payment is scoped correctly', () => {
+    const mayWork = 12500;
+    const juneWork = 15000;
+    const payments = [
+      // Customer paid May's bill on June 1, correctly scoped
+      createPayment({ id: 1, date: '2026-06-01', amount: mayWork, paymentForMonth: '2026-05' }),
+    ];
+
+    const paidBefore = invoicePaidBefore(payments, '2026-06');
+    const oldBalance = mayWork - paidBefore; // openingBalance=0, billedBefore=mayWork
+    const periodPaymentsTotal = invoicePeriodPayments(payments, '2026-06')
+      .reduce((s, p) => s + p.amount, 0);
+
+    // hidePreviousBalance=true for WP, so grossTotal = juneWork only
+    const balanceDue = juneWork - periodPaymentsTotal;
+    expect(oldBalance).toBe(0);
+    expect(balanceDue).toBe(15000);
+  });
+
+  it('unscoped June 1 payment is counted as June payment (user discipline required)', () => {
+    const juneWork = 15000;
+    const payments = [
+      // No scope set — falls back to physical date month = June
+      createPayment({ id: 1, date: '2026-06-01', amount: 12500 }),
+    ];
+    const periodPaymentsTotal = invoicePeriodPayments(payments, '2026-06')
+      .reduce((s, p) => s + p.amount, 0);
+    const balanceDue = juneWork - periodPaymentsTotal;
+    // Unscoped: deducts from June, leaving 2500 — this is the known behaviour
+    expect(balanceDue).toBe(2500);
+  });
+});
 
 describe('reportUtils', () => {
   it('combines payment vouchers and job-paid entries while de-duping linked cards', () => {

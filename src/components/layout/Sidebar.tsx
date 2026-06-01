@@ -63,25 +63,27 @@ export function Sidebar() {
     {
       title: 'Operations',
       items: [
+        { path: '/', label: 'Jobs', tamil: 'வேலைகள்', icon: <Icon name="jobs" width={15} height={15} />, count: todayCount },
         { path: '/dashboard', label: 'Dashboard', tamil: 'முகப்பு', icon: <Icon name="dashboard" width={15} height={15} /> },
-        { path: '/', label: 'Jobs', tamil: 'முகப்பு', icon: <Icon name="jobs" width={15} height={15} />, count: todayCount },
-      ],
-    },
-    {
-      title: 'Reporting',
-      items: [
-        { path: '/history', label: 'History', tamil: '??????', icon: <Icon name="history" width={15} height={15} /> },
-        { path: '/records', label: 'Records', tamil: '????????', icon: <Icon name="records" width={15} height={15} /> },
         { path: '/follow-ups', label: 'Follow-ups', icon: <Icon name="bell" width={15} height={15} /> },
-        { path: '/commission-dc', label: 'Commission DC', icon: <Icon name="commission" width={15} height={15} /> },
       ],
     },
     {
       title: 'Finance',
       items: [
-        { path: '/invoice', label: 'Invoice', tamil: '??????', icon: <Icon name="invoice" width={15} height={15} /> },
-        { path: '/payments', label: 'Record Payments', tamil: '?????????', icon: <Icon name="payments" width={15} height={15} /> },
-        { path: '/finance', label: 'Audit', tamil: '????', icon: <Icon name="finance" width={15} height={15} /> },
+        { path: '/payments', label: 'Payments', tamil: 'வரவுகள்', icon: <Icon name="payments" width={15} height={15} /> },
+        {
+          path: '/settlement',
+          label: 'Settlement',
+          icon: (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+              <path d="M8 14l2 2 5-5" />
+            </svg>
+          ),
+        },
+        { path: '/invoice', label: 'Invoice', tamil: 'இன்வாய்ஸ்', icon: <Icon name="invoice" width={15} height={15} /> },
         {
           path: '/owner-report',
           label: 'Monthly Report',
@@ -95,15 +97,24 @@ export function Sidebar() {
             </svg>
           ),
         },
+        { path: '/commission-dc', label: 'Commission DC', icon: <Icon name="commission" width={15} height={15} /> },
+        { path: '/expenses', label: 'Expenses', tamil: 'செலவுகள்', icon: <Icon name="expenses" width={15} height={15} /> },
+      ],
+    },
+    {
+      title: 'Reporting',
+      items: [
+        { path: '/records', label: 'Records', tamil: 'பதிவுகள்', icon: <Icon name="records" width={15} height={15} /> },
+        { path: '/history', label: 'History', tamil: 'வரலாறு', icon: <Icon name="history" width={15} height={15} /> },
+        { path: '/finance', label: 'Audit', tamil: 'தணிக்கை', icon: <Icon name="finance" width={15} height={15} /> },
       ],
     },
     {
       title: 'Admin',
       items: [
-        { path: '/expenses', label: 'Expense', tamil: '????????', icon: <Icon name="expenses" width={15} height={15} /> },
-        { path: '/customers', label: 'Customer', tamil: '????????????????', icon: <Icon name="customers" width={15} height={15} /> },
-        { path: '/work-types', label: 'Worktype', tamil: '???? ??????', icon: <Icon name="worktypes" width={15} height={15} /> },
-        { path: '/logger', label: 'Logger', tamil: '???????', icon: <Icon name="logger" width={15} height={15} /> },
+        { path: '/customers', label: 'Customers', tamil: 'வாடிக்கையாளர்கள்', icon: <Icon name="customers" width={15} height={15} /> },
+        { path: '/work-types', label: 'Work Types', tamil: 'வேலை வகைகள்', icon: <Icon name="worktypes" width={15} height={15} /> },
+        { path: '/logger', label: 'Logger', icon: <Icon name="logger" width={15} height={15} /> },
       ],
     },
   ];
