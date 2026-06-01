@@ -710,15 +710,65 @@
   }
 }
 
-@media (max-width: 480px) {
+/* ── Phone-specific dashboard fixes ──────────────────────────── */
+@media (max-width: 680px) {
+  /* Header actions: full-width row of equal buttons */
+  .dashboard-header-actions {
+    width: 100%;
+    display: flex;
+  }
+
+  /* Period controls: taller touch targets */
+  .period-toggle-select {
+    height: 36px;
+    font-size: 14px;
+    padding: 0 10px;
+  }
+
+  /* Period nav buttons taller */
+  .period-nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Period label taller */
+  .period-nav-label {
+    line-height: 36px;
+    font-size: 13px;
+  }
+
+  /* Customer table: allow horizontal scroll with tighter columns */
   .customer-table {
-    min-width: 480px;
+    min-width: 420px;
   }
 
   .customer-table thead th,
   .customer-table tbody td,
   .customer-table tfoot td {
-    padding: 8px 8px;
+    padding: 10px 8px;
+    font-size: 12.5px;
+  }
+
+  /* Hide less critical columns on phone */
+  .customer-table .col-type {
+    display: none;
+  }
+
+  /* Stat card values: slightly smaller */
+  .period-card-value {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .customer-table {
+    min-width: 360px;
+  }
+
+  .customer-table thead th,
+  .customer-table tbody td,
+  .customer-table tfoot td {
+    padding: 8px 6px;
     font-size: 12px;
   }
 }

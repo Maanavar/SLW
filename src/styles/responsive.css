@@ -148,6 +148,13 @@
   .modal-panel {
     max-height: calc(100dvh - var(--mobile-nav-height) - env(safe-area-inset-bottom) - 2rem);
   }
+
+  /* Modal backdrop: add bottom clearance for nav bar */
+  .modal-backdrop {
+    padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 16px);
+    align-items: flex-start;
+    padding-top: 24px;
+  }
 }
 
 /* Hover states only on non-touch devices */

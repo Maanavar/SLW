@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(pg_isready -h localhost -p 5432)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(grep -r \"require\\\\|import.*\\\\\\\\.js\" src backend/src --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(grep -v \"\\\\\\\\.d\\\\\\\\.ts\")",
+      "Bash(npm test *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\senth\\\\Downloads\\\\SLW\" -Force)",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(cat > *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

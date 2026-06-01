@@ -60,12 +60,14 @@ export const useUIStore = create<UIStore>()(
         set((state) => {
           const newTheme = state.theme === 'dark' ? 'light' : 'dark';
           applyThemeToDOM(newTheme);
+          syncLegacyThemeKey(newTheme);
           return { theme: newTheme };
         });
       },
 
       setTheme: (theme) => {
         applyThemeToDOM(theme);
+        syncLegacyThemeKey(theme);
         set({ theme });
       },
 
@@ -147,35 +149,33 @@ export const useUIStore = create<UIStore>()(
   )
 );
 
-/**
- * Apply theme to DOM
- * Matches the theme-init script logic from vanilla app
- */
 function applyThemeToDOM(theme: 'light' | 'dark') {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }
 
-// Subscribe to theme changes and sync to localStorage
-useUIStore.subscribe((state) => {
+// Keep the legacy siva_theme key in sync so any non-React code that reads it stays correct.
+function syncLegacyThemeKey(theme: 'light' | 'dark') {
   try {
-    localStorage.setItem('slw_ui_v1.theme', state.theme);
-    localStorage.setItem('siva_theme', state.theme);
-    applyThemeToDOM(state.theme);
-  } catch (error) {
-    console.error('Failed to save theme preference:', error);
+    localStorage.setItem('siva_theme', theme);
+  } catch {
+    // ignore — non-critical
   }
-});
+}
 
-// Initialize theme from localStorage on mount (HTML script handles initial DOM setup)
+// On startup: migrate theme from legacy keys if the persist store doesn't have one yet.
+// The persist middleware (slw_ui_v1) is the authoritative store going forward.
 if (typeof document !== 'undefined') {
   try {
-    const savedTheme =
-      localStorage.getItem('slw_ui_v1.theme') || localStorage.getItem('siva_theme');
-    if (savedTheme === 'light' || savedTheme === 'dark') {
-      useUIStore.setState({ theme: savedTheme });
+    const persistedRaw = localStorage.getItem('slw_ui_v1');
+    const alreadyHasTheme = persistedRaw && JSON.parse(persistedRaw)?.state?.theme;
+    if (!alreadyHasTheme) {
+      const legacyTheme = localStorage.getItem('siva_theme');
+      if (legacyTheme === 'light' || legacyTheme === 'dark') {
+        useUIStore.getState().setTheme(legacyTheme);
+      }
     }
-  } catch (error) {
-    console.error('Failed to load theme preference:', error);
+  } catch {
+    // ignore parse errors — default theme will be used
   }
 }

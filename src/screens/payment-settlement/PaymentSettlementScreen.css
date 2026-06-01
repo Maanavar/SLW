@@ -1,0 +1,579 @@
+.settle-screen {
+  display: grid;
+  gap: 12px;
+}
+
+.settle-header {
+  align-items: flex-start;
+}
+
+.settle-header-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.settle-period-tabs {
+  flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.settle-period-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.settle-control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 2px;
+}
+
+.settle-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.settle-toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.settle-period-nav {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunk);
+  overflow: hidden;
+  flex-shrink: 0;
+  /* match the fin-period-tabs pill height: 2px top + 2px bottom container padding + tab content */
+  padding: 2px;
+  gap: 2px;
+}
+
+.settle-period-nav .fin-period-nav-btn {
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  width: 28px;
+  height: auto;
+  padding: 0;
+}
+
+.settle-period-nav .fin-period-nav-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.settle-period-nav .fin-period-nav-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  min-width: 120px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+}
+
+.settle-range-row {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.settle-customer-select {
+  min-width: 0;
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.settle-customer-select .searchable-select-trigger {
+  height: 30px;
+  padding: 0 8px 0 9px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.settle-search-input {
+  height: 26px;
+  width: 150px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  flex-shrink: 0;
+}
+
+.settle-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.settle-search-input::placeholder {
+  color: var(--text-faint);
+}
+
+.settle-payment-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.settle-pf-btn {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.settle-pf-btn.active {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.settle-pf-btn:not(.active):hover {
+  color: var(--text);
+}
+
+.settle-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.settle-reset-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settle-reset-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.settle-table-tile {
+  gap: 14px;
+}
+
+.settle-table-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.settle-table-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settle-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.settle-table-wrap {
+  overflow-x: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.settle-inline-nav {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.settle-inline-range {
+  margin-bottom: 0;
+}
+
+.settle-table thead tr {
+  background: var(--bg-sunk);
+}
+
+.settle-table thead th {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.settle-table tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+  vertical-align: middle;
+  text-align: left;
+}
+
+.settle-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.settle-table th.numeric,
+.settle-table td.numeric {
+  text-align: right;
+}
+
+.settle-table th.ta-c,
+.settle-table td.ta-c {
+  text-align: center;
+}
+
+.settle-table tbody tr {
+  cursor: pointer;
+}
+
+.settle-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.settle-row:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.settle-date,
+.settle-card-id,
+.settle-handler,
+.settle-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.settle-date {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.settle-customer-name,
+.settle-card-id,
+.settle-work-summary {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settle-customer-code,
+.settle-card-line,
+.settle-work-summary {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.settle-card-line {
+  margin-top: 2px;
+}
+
+.settle-table .settle-card-id,
+.settle-table .settle-card-line,
+.settle-table .settle-work-summary {
+  text-align: left;
+}
+
+.settle-flow-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.settle-flow-pill--slw {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+  border-color: color-mix(in srgb, var(--green) 24%, transparent);
+}
+
+.settle-flow-pill--agent {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 25%, transparent);
+}
+
+.settle-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.settle-paid {
+  color: var(--green);
+}
+
+.settle-pending {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.settle-action-btn {
+  min-width: 80px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settle-action-btn:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.settle-action-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.settle-action-btn--primary {
+  min-width: 100px;
+}
+
+.settle-empty-cell {
+  text-align: center;
+  padding: 28px 12px;
+  color: var(--text-muted);
+}
+
+.settle-total-row td {
+  border-top: 2px solid var(--border);
+  background: var(--bg-sunk);
+  font-weight: 600;
+  text-align: left;
+}
+
+.settle-total-row td.numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.settle-preview-modal .modal-body {
+  padding: 0;
+}
+
+.settle-preview {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.settle-preview-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 82%, transparent), transparent 56%),
+    var(--bg-elev);
+}
+
+.settle-preview-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-text);
+}
+
+.settle-preview-card {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.settle-preview-customer {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settle-preview-amount-wrap {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.settle-preview-amount {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.settle-preview-amount-label {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.settle-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settle-preview-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+
+.settle-preview-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.settle-preview-note {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sunk);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settle-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1200px) {
+  .settle-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .settle-control-bar {
+    flex-wrap: wrap;
+  }
+
+  .settle-toolbar-end {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 780px) {
+  .settle-header {
+    align-items: flex-start;
+  }
+
+  .settle-customer-select {
+    width: 100%;
+    flex: 1 1 0;
+  }
+
+  .settle-search-input {
+    width: 100%;
+  }
+
+  .settle-table-head {
+    flex-direction: column;
+  }
+
+  .settle-legend {
+    justify-content: flex-start;
+  }
+
+  .settle-preview-hero {
+    flex-direction: column;
+  }
+
+  .settle-preview-amount-wrap {
+    text-align: left;
+  }
+
+  .settle-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settle-preview-actions {
+    justify-content: stretch;
+  }
+
+  .settle-preview-actions > button {
+    flex: 1 1 0;
+  }
+
+  .settle-period-nav .fin-period-nav-label {
+    min-width: 100px;
+  }
+}

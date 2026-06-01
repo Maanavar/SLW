@@ -12,6 +12,18 @@ export function getReportRange(period: string): PeriodRange {
   return getDateReportRange(period);
 }
 
+/**
+ * Resolve which accounting month-key (YYYY-MM) a payment belongs to.
+ * Explicit scope fields take priority over the physical payment date so that a
+ * payment recorded on June 1 *for May* is attributed to May, not June.
+ */
+export function getPaymentEffectivePeriodKey(p: Pick<Payment, 'date' | 'paymentForMonth' | 'paymentForDate' | 'paymentForFromDate'>): string {
+  if (p.paymentForMonth) return p.paymentForMonth;
+  if (p.paymentForDate) return p.paymentForDate.substring(0, 7);
+  if (p.paymentForFromDate) return p.paymentForFromDate.substring(0, 7);
+  return p.date.substring(0, 7);
+}
+
 export { groupJobsByCard };
 
 export type PaymentEventSource = 'Payment Voucher' | 'Job Paid Entry';
@@ -87,54 +99,31 @@ export function getPaymentEventsInRange(
     };
   });
 
-  const vouchersByCustomerDate = new Map<string, PaymentEvent[]>();
-  voucherEvents.forEach((v) => {
-    const key = `${v.customerId}|${v.date}`;
-    const list = vouchersByCustomerDate.get(key) || [];
-    list.push(v);
-    vouchersByCustomerDate.set(key, list);
-  });
+  // Customers who have ANY voucher recorded (all-time) use the voucher system as
+  // authoritative. Their job.paidAmount fields are redundant entry — including both
+  // would double-count the same money. Only fall back to job-paid entries for
+  // customers who have never had a payment voucher recorded.
+  const customersWithVouchers = new Set(payments.map((p) => p.customerId));
 
   const paidGroups = groupJobsByCard(jobsInRange.filter((j) => getJobPaidAmount(j) > 0));
-  const jobPaidEvents: PaymentEvent[] = paidGroups.map((group) => {
-    const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-    const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
-    return {
-      id: `job:${cardId}`,
-      customerId: group.primary.customerId,
-      amount,
-      date: group.primary.date,
-      paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
-      notes: `From JobCard ${cardId}`,
-      source: 'Job Paid Entry',
-      jobCardId: cardId,
-    };
-  });
+  const jobPaidEvents: PaymentEvent[] = paidGroups
+    .filter((group) => !customersWithVouchers.has(group.primary.customerId))
+    .map((group) => {
+      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
+      const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
+      return {
+        id: `job:${cardId}`,
+        customerId: group.primary.customerId,
+        amount,
+        date: group.primary.date,
+        paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
+        notes: `From JobCard ${cardId}`,
+        source: 'Job Paid Entry',
+        jobCardId: cardId,
+      };
+    });
 
-  const dedupedJobPaidEvents = jobPaidEvents.filter((jobEvent) => {
-    const key = `${jobEvent.customerId}|${jobEvent.date}`;
-    const sameDayVouchers = vouchersByCustomerDate.get(key) || [];
-    if (sameDayVouchers.length === 0) {
-      return true;
-    }
-
-    const cardId = jobEvent.jobCardId || '';
-    const hasExplicitLink = cardId
-      ? sameDayVouchers.some((v) => (v.notes || '').toLowerCase().includes(cardId.toLowerCase()))
-      : false;
-    if (hasExplicitLink) {
-      return false;
-    }
-
-    const hasExactAmountMatch = sameDayVouchers.some((v) => Math.abs((v.amount || 0) - jobEvent.amount) < 0.01);
-    if (hasExactAmountMatch) {
-      return false;
-    }
-
-    return true;
-  });
-
-  return [...voucherEvents, ...dedupedJobPaidEvents].filter((e) => (e.amount || 0) > 0);
+  return [...voucherEvents, ...jobPaidEvents].filter((e) => (e.amount || 0) > 0);
 }
 
 /**

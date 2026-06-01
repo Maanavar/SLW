@@ -272,16 +272,87 @@
   }
 }
 
-@media (max-width: 600px) {
+/* ── Tablet portrait & phone ─────────────────────────────────── */
+@media (max-width: 680px) {
+  /* Page header: stack vertically */
+  .pay-pg-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* Toolbar: wrap into rows */
+  .pay-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Period tabs fill full width */
+  .pay-period-tabs {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .pay-period-tabs::-webkit-scrollbar { display: none; }
+
+  /* Nav shell grows to fill */
+  .pay-nav-shell {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pay-nav-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Nav buttons bigger */
+  .pay-nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .pay-nav-label { line-height: 36px; }
+
+  .pay-today-btn {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  /* Customer select fills available row */
+  .pay-customer-select {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  /* Count pill moves to its own line */
+  .pay-count { margin-left: 0; }
+
+  /* Stat tiles: 2-col */
   .pay-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .pay-stat-value { font-size: 17px; }
 
-  .pay-toolbar {
-    flex-wrap: nowrap;
-    overflow-x: auto;
+  /* Mode breakdown: 2×2 grid instead of 1×4 */
+  .pay-mode-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 12px;
+  }
+
+  /* Icon buttons bigger */
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Period tab taller */
+  .pay-period-tab {
+    padding: 6px 12px;
   }
 }
 
@@ -289,4 +360,6 @@
   .pay-stats {
     grid-template-columns: 1fr;
   }
+
+  .pay-stat-value { font-size: 18px; }
 }

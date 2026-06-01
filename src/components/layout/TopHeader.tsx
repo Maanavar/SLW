@@ -21,6 +21,7 @@ const pageMap: Record<string, PageMeta> = {
   '/history': { title: 'History', subtitle: 'Day-wise card history' },
   '/payments': { title: 'Payments', subtitle: 'Record and track payments' },
   '/finance': { title: 'Finance', subtitle: 'Revenue and analysis' },
+  '/settlement': { title: 'Settlement', subtitle: 'Mark job cards paid' },
   '/commission': { title: 'Commission', subtitle: 'Workers and history' },
   '/expenses': { title: 'Expenses', subtitle: 'Overview and break-even' },
   '/customers': { title: 'Customers', subtitle: 'Customer accounts' },

@@ -172,6 +172,25 @@
 
 /* ── Summary grid ───────────────────────────────────────────────────────── */
 
+.inv-scope-warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-top: 4px;
+}
+
+.inv-scope-warning svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .inv-actions {
   display: flex;
   flex-direction: column;
@@ -671,6 +690,32 @@
 .inv-col-vehicle { width: 108px; white-space: nowrap; }
 .inv-col-work,
 .inv-col-wtype   { /* flex fill */ }
+
+.inv-work-name {
+  display: block;
+}
+
+.inv-spot-tag {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 3px;
+}
+
+.inv-job-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
 
 /* ── Totals section ─────────────────────────────────────────────────────── */
 
