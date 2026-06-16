@@ -40,6 +40,14 @@ function parseNonNegativeInt(
   return parsed;
 }
 
+function parseTimeOfDay(rawValue: string | undefined, fallback: string): string {
+  const value = rawValue === undefined || rawValue.trim() === '' ? fallback : rawValue.trim();
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    throw new Error(`Invalid BACKUP_SCHEDULE_TIME value: ${rawValue ?? '(undefined)'}`);
+  }
+  return value;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parsePort(process.env.PORT),
@@ -56,6 +64,7 @@ export const env = {
     24,
     'BACKUP_SCHEDULE_HOURS'
   ),
+  backupScheduleTime: parseTimeOfDay(process.env.BACKUP_SCHEDULE_TIME, '21:00'),
   backupRetentionDays: parseNonNegativeInt(
     process.env.BACKUP_RETENTION_DAYS,
     30,

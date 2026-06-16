@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { HttpError } from '../middleware/httpError';
 import { getAuthUser } from '../middleware/auth';
+import { env } from '../config/env';
 import {
   createBackup,
   listBackups,
@@ -22,6 +23,17 @@ function assertAdmin(req: Parameters<typeof getAuthUser>[0]) {
 }
 
 const router = Router();
+
+router.get(
+  '/settings',
+  asyncHandler(async (req, res) => {
+    assertAdmin(req);
+    res.json({
+      enabled: env.backupScheduleHours > 0,
+      scheduleTime: env.backupScheduleTime,
+    });
+  })
+);
 
 router.get(
   '/',

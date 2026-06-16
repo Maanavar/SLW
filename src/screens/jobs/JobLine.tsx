@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import type { ChangeEvent } from 'react';
 import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
+import { useDataStore } from '@/stores/dataStore';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { type WorkType, type CommissionWorker } from '@/types';
@@ -36,11 +38,30 @@ export function JobLine({
   onAddNewWorkType,
 }: JobLineProps) {
   const { data: workTypes = [] } = useWorkTypesQuery();
+  const jobs = useDataStore((s) => s.jobs);
 
-  const sortedWorkTypes = [...workTypes].sort((a, b) => {
-    const categoryCompare = a.category.localeCompare(b.category);
-    return categoryCompare !== 0 ? categoryCompare : a.name.localeCompare(b.name);
-  });
+  const { sortedWorkTypes, frequentWorkTypeNames } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    jobs.forEach((job) => {
+      if (job.workTypeName) counts[job.workTypeName] = (counts[job.workTypeName] || 0) + 1;
+    });
+    const frequentNames = new Set(
+      Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name]) => name)
+    );
+    const frequent = workTypes
+      .filter((wt) => frequentNames.has(wt.name))
+      .sort((a, b) => (counts[b.name] || 0) - (counts[a.name] || 0));
+    const rest = workTypes
+      .filter((wt) => !frequentNames.has(wt.name))
+      .sort((a, b) => {
+        const cat = a.category.localeCompare(b.category);
+        return cat !== 0 ? cat : a.name.localeCompare(b.name);
+      });
+    return { sortedWorkTypes: [...frequent, ...rest], frequentWorkTypeNames: frequentNames };
+  }, [jobs, workTypes]);
 
   const sortedWorkers = [...commissionWorkers].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -89,7 +110,7 @@ export function JobLine({
           getLabel={(wt) => wt.name}
           getSearchText={(wt) => `${wt.name} ${wt.shortCode || ''} ${wt.category || ''}`}
           getKey={(wt) => String(wt.id)}
-          groupBy={(wt) => wt.category}
+          groupBy={(wt) => frequentWorkTypeNames.has(wt.name) ? 'Frequent' : wt.category}
           placeholder="Select work type..."
           onAddNew={onAddNewWorkType}
         />
