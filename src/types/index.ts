@@ -271,3 +271,8 @@ export interface BackupListItem {
   mode: 'manual' | 'scheduled';
   triggeredBy: string | null;
 }
+
+export interface BackupScheduleSettings {
+  enabled: boolean;
+  scheduleTime: string;
+}

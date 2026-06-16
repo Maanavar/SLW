@@ -24,6 +24,9 @@ backend/.env
 .env.local
 .env.*.local
 
+# Runtime dev port (written by backend on startup, read by Vite proxy)
+.dev-port
+
 # Logs
 *.log
 npm-debug.log*

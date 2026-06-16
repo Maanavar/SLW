@@ -4,14 +4,20 @@ import fs from 'fs';
 import path from 'path';
 
 function readBackendPort() {
-  const envFiles = ['backend/.env', 'backend/.env.example'];
+  const devPortFile = path.resolve(__dirname, '.dev-port');
+  if (fs.existsSync(devPortFile)) {
+    const port = fs.readFileSync(devPortFile, 'utf8').trim();
+    if (/^\d+$/.test(port)) {
+      return port;
+    }
+  }
 
+  const envFiles = ['backend/.env', 'backend/.env.example'];
   for (const envFile of envFiles) {
     const envPath = path.resolve(__dirname, envFile);
     if (!fs.existsSync(envPath)) {
       continue;
     }
-
     const match = fs.readFileSync(envPath, 'utf8').match(/^\s*PORT\s*=\s*(\d+)\s*$/m);
     if (match) {
       return match[1];

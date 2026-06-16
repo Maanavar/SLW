@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/node';
 import type { AddressInfo } from 'node:net';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { createApp } from './app';
 import { env, isDevelopment } from './config/env';
 import { prisma } from './db/prisma';
@@ -29,6 +31,13 @@ server.on('listening', () => {
   const address = server.address();
   if (address && typeof address !== 'string') {
     activePort = (address as AddressInfo).port;
+  }
+  if (isDevelopment) {
+    try {
+      writeFileSync(path.resolve(process.cwd(), '../.dev-port'), String(activePort), 'utf8');
+    } catch {
+      // non-fatal: Vite will fall back to the configured PORT
+    }
   }
   console.log(`SLW backend running on http://localhost:${activePort}`);
   startBackupScheduler();

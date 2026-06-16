@@ -2,6 +2,7 @@
   ActivityLog,
   AuthUser,
   BackupListItem,
+  BackupScheduleSettings,
   CommissionPayment,
   CommissionWorker,
   Customer,
@@ -441,6 +442,7 @@ export const apiClient = {
     }),
 
   getBackups: () => request<BackupListItem[]>('/admin/backups'),
+  getBackupScheduleSettings: () => request<BackupScheduleSettings>('/admin/backups/settings'),
   createBackup: () =>
     request<BackupListItem>('/admin/backups/create', {
       method: 'POST',

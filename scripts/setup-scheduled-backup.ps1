@@ -1,9 +1,9 @@
-# Registers a Windows Task Scheduler job to backup the SLW database daily at 11 PM.
+# Registers a Windows Task Scheduler job to backup the SLW database daily at 9 PM.
 # Run ONCE as Administrator: powershell -ExecutionPolicy Bypass -File scripts\setup-scheduled-backup.ps1
 
 $TASK_NAME   = "SLW-Database-Backup"
 $SCRIPT_PATH = Resolve-Path (Join-Path $PSScriptRoot "backup-db.ps1")
-$HOUR        = 23   # 11 PM — change if needed
+$HOUR        = 21   # 9 PM - change if needed
 $MINUTE      = 0
 
 $action  = New-ScheduledTaskAction `
@@ -29,7 +29,7 @@ Register-ScheduledTask `
     -RunLevel Highest | Out-Null
 
 Write-Host "Scheduled task '$TASK_NAME' registered." -ForegroundColor Green
-Write-Host "Runs daily at $($HOUR):$('{0:D2}' -f $MINUTE) (11 PM)." -ForegroundColor Cyan
+Write-Host "Runs daily at $($HOUR):$('{0:D2}' -f $MINUTE) (9 PM)." -ForegroundColor Cyan
 Write-Host "Backups saved to: $(Resolve-Path (Join-Path $PSScriptRoot '..\backups'))" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "To run it now for a test:  Start-ScheduledTask -TaskName '$TASK_NAME'"

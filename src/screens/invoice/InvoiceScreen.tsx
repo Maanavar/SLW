@@ -4,7 +4,7 @@ import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
-import { getJobFinalBillValue, isMahalingamCustomer } from '@/lib/jobUtils';
+import { getJobFinalBillValue, getJobPaidAmount, isMahalingamCustomer } from '@/lib/jobUtils';
 import { getPaymentEffectivePeriodKey } from '@/lib/reportUtils';
 import { isWagenAutosCustomerLabel } from '@/constants/customers';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -236,19 +236,28 @@ export function InvoiceScreen() {
   const oldBalance = useMemo(() => {
     if (!periodStart) return 0;
     const periodMonthKey = periodStart.substring(0, 7);
-    const billedBefore = customerJobs
-      .filter((j) => j.date < periodStart)
-      .reduce((s, j) => s + getJobFinalBillValue(j), 0);
-    // For monthly customers, attribute each payment to its effective accounting month so that a
-    // payment physically received on June 1 *for May* reduces the May balance, not June's.
-    // For date-range customers, use the physical payment date as before.
-    const paidBefore = customerPayments
-      .filter((p) => {
-        if (isMonthly) return getPaymentEffectivePeriodKey(p) < periodMonthKey;
-        return p.date < periodStart;
-      })
-      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    return (selectedCustomer?.openingBalance || 0) + billedBefore - paidBefore;
+    const priorJobs = customerJobs.filter((j) => j.date < periodStart);
+    const billedBefore = priorJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0);
+
+    let paidBefore: number;
+    if (customerPayments.length > 0) {
+      // Customer uses payment vouchers — use them as authoritative source.
+      // For monthly customers, attribute each payment to its effective accounting month so that a
+      // payment physically received on June 1 *for May* reduces the May balance, not June's.
+      // For date-range customers, use the physical payment date as before.
+      paidBefore = customerPayments
+        .filter((p) => {
+          if (isMonthly) return getPaymentEffectivePeriodKey(p) < periodMonthKey;
+          return p.date < periodStart;
+        })
+        .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    } else {
+      // Legacy customer with no payment vouchers — fall back to job-level paid amounts
+      // to avoid treating all prior paid jobs as unpaid (which inflates old balance).
+      paidBefore = priorJobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
+    }
+
+    return (Number(selectedCustomer?.openingBalance) || 0) + billedBefore - paidBefore;
   }, [customerJobs, customerPayments, periodStart, selectedCustomer, isMonthly]);
 
   const periodTotal = useMemo(

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type {
   ActivityLog,
   BackupListItem,
+  BackupScheduleSettings,
   MonthLockStateResponse,
 } from '@/types';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -275,6 +276,7 @@ export function LoggerScreen() {
   const [overrideReason, setOverrideReason] = useState('');
   const [lockBusy, setLockBusy] = useState(false);
   const [backups, setBackups] = useState<BackupListItem[]>([]);
+  const [backupSchedule, setBackupSchedule] = useState<BackupScheduleSettings | null>(null);
   const [backupsLoading, setBackupsLoading] = useState(true);
   const [backupActionKey, setBackupActionKey] = useState<string | null>(null);
   const isLoadingRef = useRef(false);
@@ -316,12 +318,14 @@ export function LoggerScreen() {
     isAdminOpsLoadingRef.current = true;
     setBackupsLoading(true);
     try {
-      const [lockState, backupItems] = await Promise.all([
+      const [lockState, backupItems, backupScheduleSettings] = await Promise.all([
         apiClient.getMonthLockState(),
         apiClient.getBackups(),
+        apiClient.getBackupScheduleSettings(),
       ]);
       setMonthLockState(lockState);
       setBackups(backupItems);
+      setBackupSchedule(backupScheduleSettings);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load admin tools';
       addToast('Error', message, 'error');
@@ -956,6 +960,13 @@ export function LoggerScreen() {
           <h3>Backup & Restore</h3>
           <p>
             Keep scheduled backups and create manual snapshots before major changes. Restoring replaces current operational data.
+          </p>
+          <p className="lgr-admin-status">
+            {backupSchedule
+              ? backupSchedule.enabled
+                ? `Scheduled daily at ${backupSchedule.scheduleTime} (server local time).`
+                : 'Automatic scheduled backups are disabled.'
+              : 'Loading backup schedule...'}
           </p>
           <div className="lgr-inline-actions">
             <button

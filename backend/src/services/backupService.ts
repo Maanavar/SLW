@@ -347,27 +347,52 @@ export async function restoreBackup(fileNameRaw: string) {
 
 let backupScheduler: NodeJS.Timeout | null = null;
 
+function getNextBackupDelayMs(scheduleTime: string): number {
+  const [hourRaw, minuteRaw] = scheduleTime.split(':');
+  const hour = Number.parseInt(hourRaw, 10);
+  const minute = Number.parseInt(minuteRaw, 10);
+
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(hour, minute, 0, 0);
+  if (next.getTime() <= now.getTime()) {
+    next.setDate(next.getDate() + 1);
+  }
+
+  return Math.max(next.getTime() - now.getTime(), 1_000);
+}
+
+function queueNextScheduledBackup() {
+  if (env.backupScheduleHours <= 0) {
+    return;
+  }
+
+  const delayMs = getNextBackupDelayMs(env.backupScheduleTime);
+  backupScheduler = setTimeout(() => {
+    void createBackup({
+      mode: 'scheduled',
+      triggeredBy: 'backup-scheduler',
+    })
+      .catch((error) => {
+        console.error('Scheduled backup failed:', error);
+      })
+      .finally(() => {
+        queueNextScheduledBackup();
+      });
+  }, delayMs);
+}
+
 export function startBackupScheduler() {
   if (backupScheduler || env.backupScheduleHours <= 0) {
     return;
   }
-
-  const intervalMs = env.backupScheduleHours * 60 * 60 * 1000;
-  backupScheduler = setInterval(() => {
-    void createBackup({
-      mode: 'scheduled',
-      triggeredBy: 'backup-scheduler',
-    }).catch((error) => {
-      console.error('Scheduled backup failed:', error);
-    });
-  }, intervalMs);
+  queueNextScheduledBackup();
 }
 
 export function stopBackupScheduler() {
   if (!backupScheduler) {
     return;
   }
-  clearInterval(backupScheduler);
+  clearTimeout(backupScheduler);
   backupScheduler = null;
 }
-

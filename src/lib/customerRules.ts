@@ -9,6 +9,12 @@ import {
 
 export function normalizeCustomers(customers: Customer[]): Customer[] {
   return customers.map((customer) => {
+    // Coerce Decimal/string values from legacy localStorage cache to numbers
+    customer = {
+      ...customer,
+      openingBalance: Number(customer.openingBalance) || 0,
+      advanceBalance: Number(customer.advanceBalance) || 0,
+    };
     const normalizedShortCode = normalizeCustomerCode(customer.shortCode);
     const isRmp = isRmpCustomer(customer.shortCode, customer.name);
     const isNm = isMahalingamCustomerLabel(customer.shortCode, customer.name);
