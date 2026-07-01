@@ -4,8 +4,9 @@ import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { useWorkTypesQuery } from '@/hooks/useWorkTypesQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
-import { getJobFinalBillValue, getJobPaidAmount, isMahalingamCustomer } from '@/lib/jobUtils';
+import { getJobFinalBillValue, isMahalingamCustomer } from '@/lib/jobUtils';
 import { getPaymentEffectivePeriodKey } from '@/lib/reportUtils';
+import { buildAccountingCollectionTotals, calculateCustomerBalanceAmounts } from '@/lib/customerBalanceUtils';
 import { isWagenAutosCustomerLabel } from '@/constants/customers';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { useToast } from '@/hooks/useToast';
@@ -132,17 +133,8 @@ export function InvoiceScreen() {
 
   // Compute per-customer outstanding balance (all-time) for sort order
   const customerBalanceMap = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const c of customers) {
-      const billed = jobs
-        .filter((j) => j.customerId === c.id)
-        .reduce((s, j) => s + getJobFinalBillValue(j), 0);
-      const paid = payments
-        .filter((p) => p.customerId === c.id)
-        .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-      map.set(c.id, Math.max(0, billed - paid));
-    }
-    return map;
+    const rows = calculateCustomerBalanceAmounts(customers, jobs, payments);
+    return new Map(Array.from(rows.values()).map((row) => [row.customerId, row.balance]));
   }, [customers, jobs, payments]);
 
   // Monthly + Invoice are always shown; Party-Credit only when unpaid balance exists.
@@ -232,6 +224,11 @@ export function InvoiceScreen() {
     });
   }, [customerPayments, periodStart, periodEnd, isMonthly]);
 
+  const periodResidualPaid = useMemo(() => {
+    if (!selectedCustomer) return 0;
+    return buildAccountingCollectionTotals(periodJobs, periodPayments, customerPayments).get(selectedCustomer.id) || 0;
+  }, [periodJobs, periodPayments, customerPayments, selectedCustomer]);
+
   // Old balance: openingBalance (from customer profile) + total billed before period start - total paid before period start
   const oldBalance = useMemo(() => {
     if (!periodStart) return 0;
@@ -239,23 +236,13 @@ export function InvoiceScreen() {
     const priorJobs = customerJobs.filter((j) => j.date < periodStart);
     const billedBefore = priorJobs.reduce((s, j) => s + getJobFinalBillValue(j), 0);
 
-    let paidBefore: number;
-    if (customerPayments.length > 0) {
-      // Customer uses payment vouchers — use them as authoritative source.
-      // For monthly customers, attribute each payment to its effective accounting month so that a
-      // payment physically received on June 1 *for May* reduces the May balance, not June's.
-      // For date-range customers, use the physical payment date as before.
-      paidBefore = customerPayments
-        .filter((p) => {
-          if (isMonthly) return getPaymentEffectivePeriodKey(p) < periodMonthKey;
-          return p.date < periodStart;
-        })
-        .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    } else {
-      // Legacy customer with no payment vouchers — fall back to job-level paid amounts
-      // to avoid treating all prior paid jobs as unpaid (which inflates old balance).
-      paidBefore = priorJobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
-    }
+    const priorPayments = customerPayments.filter((p) => {
+      if (isMonthly) return getPaymentEffectivePeriodKey(p) < periodMonthKey;
+      return p.date < periodStart;
+    });
+    const paidBefore = selectedCustomer
+      ? buildAccountingCollectionTotals(priorJobs, priorPayments, customerPayments).get(selectedCustomer.id) || 0
+      : 0;
 
     return (Number(selectedCustomer?.openingBalance) || 0) + billedBefore - paidBefore;
   }, [customerJobs, customerPayments, periodStart, selectedCustomer, isMonthly]);
@@ -266,8 +253,8 @@ export function InvoiceScreen() {
   );
 
   const paymentsReceived = useMemo(
-    () => periodPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
-    [periodPayments]
+    () => periodResidualPaid,
+    [periodResidualPaid]
   );
 
   // Payments in this period that have no explicit scope — they landed here via physical date fallback.

@@ -66,13 +66,45 @@ describe('jobUtils', () => {
     expect(calculateCustomerBalance(jobs, [], 1, 0)).toBe(500);
   });
 
-  it('uses payment vouchers even when job shows higher paidAmount', () => {
+  it('uses job-card paid amounts when they are higher than vouchers', () => {
     const jobs: Job[] = [
       createJob({ id: 1, customerId: 1, amount: 1000, commissionAmount: 0, paidAmount: 1000 }),
     ];
-    // Voucher records only 700 — treat that as authoritative
+    const payments = [{ customerId: 1, amount: 700 }];
+    expect(calculateCustomerBalance(jobs, payments, 1, 0)).toBe(0);
+  });
+
+  it('uses payment vouchers when they are higher than job-card paid amounts', () => {
+    const jobs: Job[] = [
+      createJob({ id: 1, customerId: 1, amount: 1000, commissionAmount: 0, paidAmount: 600 }),
+    ];
     const payments = [{ customerId: 1, amount: 700 }];
     expect(calculateCustomerBalance(jobs, payments, 1, 0)).toBe(300);
+  });
+
+  it('keeps linked settlement vouchers balanced with prior job-paid amounts', () => {
+    const jobs: Job[] = [
+      createJob({
+        id: 1,
+        customerId: 1,
+        jobCardId: 'JC-1',
+        amount: 1000,
+        paidAmount: 1000,
+      }),
+    ];
+    const payments = [{ customerId: 1, amount: 700, notes: 'From JobCard JC-1' }];
+
+    expect(calculateCustomerBalance(jobs, payments, 1, 0)).toBe(0);
+  });
+
+  it('matches WP balance when vouchers are lower than job-card paid totals', () => {
+    const jobs: Job[] = [
+      createJob({ id: 1, customerId: 1, amount: 24400, paidAmount: 24400 }),
+      createJob({ id: 2, customerId: 1, amount: 9700, paidAmount: 0 }),
+    ];
+    const payments = [{ customerId: 1, amount: 14250 }];
+
+    expect(calculateCustomerBalance(jobs, payments, 1, 0)).toBe(9700);
   });
 
   it('identifies DC-applicable customers from flag or name heuristic', () => {

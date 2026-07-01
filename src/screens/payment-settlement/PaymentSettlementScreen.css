@@ -506,6 +506,68 @@
   line-height: 1.5;
 }
 
+.settle-payment-entry {
+  display: grid;
+  gap: 12px;
+}
+
+.settle-payment-grid,
+.settle-payment-mixed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settle-payment-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settle-payment-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.settle-payment-input {
+  width: 100%;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.settle-payment-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.settle-breakdown-total {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  border: 1px solid var(--amber-border);
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settle-breakdown-total.is-balanced {
+  border-color: color-mix(in srgb, var(--green) 28%, transparent);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  color: var(--green);
+}
+
 .settle-preview-actions {
   display: flex;
   justify-content: flex-end;
@@ -562,6 +624,11 @@
   }
 
   .settle-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settle-payment-grid,
+  .settle-payment-mixed {
     grid-template-columns: 1fr;
   }
 

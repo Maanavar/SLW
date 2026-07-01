@@ -6,6 +6,7 @@
 import type { Job, Payment, Customer, CommissionPayment, CommissionWorker, Expense } from '@/types';
 import { getJobFinalBillValue, getJobNetValue, getJobPaidAmount, getJobWorkerCommissionExpense, groupJobsByCard, isAgentWorkJob, getJobAgentSettlementPending, getJobAgentCommissionIncome, getJobAgentTdsAmount } from './jobUtils';
 import { getLocalDateString } from './dateUtils';
+import { buildJobPaidResidualEvents, getCardIdFromPaymentNotes } from './paymentAttribution';
 
 // ============================================================================
 // ACCOUNTING STANDARD TYPES
@@ -145,10 +146,6 @@ type CollectionEvent = {
   jobCardId?: string;
 };
 
-function getCardIdFromNotes(notes?: string) {
-  return notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
-}
-
 export function buildCollectionEvents(
   jobs: Job[],
   payments: Payment[],
@@ -169,31 +166,24 @@ export function buildCollectionEvents(
     breakdown: p.breakdown,
     notes: p.notes,
     source: 'Payment Voucher',
-    jobCardId: getCardIdFromNotes(p.notes),
+    jobCardId: getCardIdFromPaymentNotes(p.notes),
   }));
 
   // Customers who have ANY voucher recorded (all-time) use the voucher system as
   // authoritative. Their job.paidAmount fields are redundant entry — including both
   // would double-count the same money. Only fall back to job-paid entries for
   // customers who have never had a payment voucher recorded.
-  const customersWithVouchers = new Set(payments.map((p) => p.customerId));
-
-  const paidGroups = groupJobsByCard(jobsInRange.filter((j) => getJobPaidAmount(j) > 0));
-  const jobPaidEvents: CollectionEvent[] = paidGroups
-    .filter((group) => !customersWithVouchers.has(group.primary.customerId))
-    .map((group) => {
-      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-      const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
-      return {
-        customerId: group.primary.customerId,
-        date: group.primary.date,
-        amount,
-        paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
-        source: 'Job Paid Entry',
-        jobCardId: cardId,
-        notes: `From JobCard ${cardId}`,
-      };
-    });
+  const jobPaidEvents: CollectionEvent[] = buildJobPaidResidualEvents(jobsInRange, payments).map(
+    (event) => ({
+      customerId: event.customerId,
+      date: event.date,
+      amount: event.amount,
+      paymentMode: event.paymentMode,
+      source: 'Job Paid Entry',
+      jobCardId: event.jobCardId,
+      notes: event.notes,
+    })
+  );
 
   return [...voucherEvents, ...jobPaidEvents].filter((e) => (e.amount || 0) > 0);
 }

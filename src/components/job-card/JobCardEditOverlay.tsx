@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/ui/Modal';
@@ -52,6 +52,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
   );
   const [notes, setNotes] = useState(primary?.notes || '');
   const [isSaving, setIsSaving] = useState(false);
+  const isInitializedRef = useRef(false);
   const [cardCommissionWorker, setCardCommissionWorker] = useState<typeof commissionWorkersForCustomer[0] | null>(null);
   const [cardTotalCommission, setCardTotalCommission] = useState('0');
 
@@ -146,61 +147,63 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
     }
   }, [showAgentFlowFields]);
 
-  // Initialize when modal opens
+  // Initialize when modal opens — only once per open to avoid resetting form if store updates mid-edit
   useEffect(() => {
-    if (jobs && isOpen && jobs.length > 0) {
-      const firstJob = jobs[0];
-      const workersForCard = getCommissionWorkersForCustomer(firstJob.customerId);
-      setSelectedCustomer(getCustomer(firstJob.customerId) || null);
-      setJobDate(firstJob.date);
-      setWorkMode((firstJob.workMode as 'Workshop' | 'Spot') || 'Workshop');
-      setNotes(firstJob.notes || '');
-      setPaymentStatus(normalizeOverlayPaymentStatus(firstJob.paymentStatus));
-      setPaidAmount(String(jobs.reduce((s, j) => s + getJobPaidAmount(j), 0)));
-      setPaymentMode(firstJob.paymentMode || '');
-      setBillNo(firstJob.billNo || '');
-
-      if (firstJob.dcNo || firstJob.dcApproval || firstJob.vehicleNo || firstJob.dcDate) {
-        setDcNo(firstJob.dcNo || '');
-        setVehicleNo(firstJob.vehicleNo || '');
-        setDcDate(firstJob.dcDate || '');
-        setDcApproval(firstJob.dcApproval || false);
-      }
-
-      setRmpHandler((firstJob.rmpHandler as 'Bhai' | 'Raja' | null) || null);
-      setJobFlowType(firstJob.jobFlowType || 'slw_work');
-      setExternalDc(Boolean(firstJob.externalDc));
-      setAgentName(firstJob.agentName || '');
-      setAgentCommissionAmount(String(firstJob.agentCommissionAmount || 0));
-      setAgentTdsAmount(String(firstJob.agentTdsAmount || 0));
-      setAgentSettlementPaidAmount(String(firstJob.agentSettlementPaidAmount || 0));
-
-      const lines: JobLineState[] = jobs.map((job) => {
-        return {
-          id: job.id.toString(),
-          workType: {
-            id: 0,
-            name: job.workTypeName,
-            shortCode: job.workName || '',
-            category: '',
-            defaultUnit: '',
-            defaultRate: 0,
-          },
-          quantity: job.quantity,
-          amount: String(job.amount),
-          commission: '0',
-          commissionWorker: null,
-        };
-      });
-      setJobLines(lines);
-
-      // Set card-level commission from first job
-      if (firstJob.commissionWorkerId) {
-        const commissionWorker = workersForCard.find((w) => w.id === firstJob.commissionWorkerId);
-        setCardCommissionWorker(commissionWorker || null);
-      }
-      setCardTotalCommission(String(firstJob.commissionAmount || 0));
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      return;
     }
+    if (isInitializedRef.current) return;
+    if (!jobs || jobs.length === 0) return;
+
+    isInitializedRef.current = true;
+    const firstJob = jobs[0];
+    const workersForCard = getCommissionWorkersForCustomer(firstJob.customerId);
+    setSelectedCustomer(getCustomer(firstJob.customerId) || null);
+    setJobDate(firstJob.date);
+    setWorkMode((firstJob.workMode as 'Workshop' | 'Spot') || 'Workshop');
+    setNotes(firstJob.notes || '');
+    setPaymentStatus(normalizeOverlayPaymentStatus(firstJob.paymentStatus));
+    setPaidAmount(String(jobs.reduce((s, j) => s + getJobPaidAmount(j), 0)));
+    setPaymentMode(firstJob.paymentMode || '');
+    setBillNo(firstJob.billNo || '');
+    setDcNo(firstJob.dcNo || '');
+    setVehicleNo(firstJob.vehicleNo || '');
+    setDcDate(firstJob.dcDate || '');
+    setDcApproval(firstJob.dcApproval || false);
+    setRmpHandler((firstJob.rmpHandler as 'Bhai' | 'Raja' | null) || null);
+    setJobFlowType(firstJob.jobFlowType || 'slw_work');
+    setExternalDc(Boolean(firstJob.externalDc));
+    setAgentName(firstJob.agentName || '');
+    setAgentCommissionAmount(String(firstJob.agentCommissionAmount || 0));
+    setAgentTdsAmount(String(firstJob.agentTdsAmount || 0));
+    setAgentSettlementPaidAmount(String(firstJob.agentSettlementPaidAmount || 0));
+
+    const lines: JobLineState[] = jobs.map((job) => {
+      return {
+        id: job.id.toString(),
+        workType: {
+          id: 0,
+          name: job.workTypeName,
+          shortCode: job.workName || '',
+          category: '',
+          defaultUnit: '',
+          defaultRate: 0,
+        },
+        quantity: job.quantity,
+        amount: String(job.amount),
+        commission: '0',
+        commissionWorker: null,
+      };
+    });
+    setJobLines(lines);
+
+    // Set card-level commission from first job
+    if (firstJob.commissionWorkerId) {
+      const commissionWorker = workersForCard.find((w) => w.id === firstJob.commissionWorkerId);
+      setCardCommissionWorker(commissionWorker || null);
+    }
+    setCardTotalCommission(String(firstJob.commissionAmount || 0));
   }, [jobs, isOpen, getCustomer, getCommissionWorkersForCustomer]);
 
   const handleAddLine = () => {
@@ -369,7 +372,7 @@ export function JobCardEditOverlay({ isOpen, jobs, onClose, onSave }: JobCardEdi
           paymentStatus,
           workMode,
           isSpotWork: workMode === 'Spot',
-          notes: notes.trim() ? notes.trim() : undefined,
+          notes: notes.trim(),
           jobCardId: baseCardId || undefined,
           jobCardLine: index + 1,
           billNo: showBillNoField ? billNo.trim() : undefined,

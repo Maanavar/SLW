@@ -3,8 +3,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useDataStore } from '@/stores/dataStore';
 import { useCustomersQuery } from '@/hooks/useCustomersQuery';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobNetValue, getJobWorkerCommissionExpense } from '@/lib/jobUtils';
-import { buildCollectionEvents } from '@/lib/financeUtils';
+import { calculateCustomerBalanceAmounts } from '@/lib/customerBalanceUtils';
 import { rankCustomers } from '@/lib/customerRankingUtils';
 import { type Customer } from '@/types';
 import { CustomerBillsOverlay } from './CustomerBillsOverlay';
@@ -50,16 +49,6 @@ function getTypeBadgeClass(type: Customer['type']): string {
   return 'type-cash';
 }
 
-function shiftDateString(dateStr: string, deltaDays: number): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + deltaDays);
-  const nextYear = date.getFullYear();
-  const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
-  const nextDay = String(date.getDate()).padStart(2, '0');
-  return `${nextYear}-${nextMonth}-${nextDay}`;
-}
-
 export function CustomerBalancesTable({ showFilters = true, dateRange }: CustomerBalancesTableProps) {
   const { jobs, payments } = useDataStore();
   const { data: allCustomers = [] } = useCustomersQuery();
@@ -81,74 +70,29 @@ export function CustomerBalancesTable({ showFilters = true, dateRange }: Custome
     return new Map(entries.map((entry) => [entry.customerId, entry]));
   }, [jobs, payments, customers]);
 
-  const scopedJobs = useMemo(
-    () =>
-      dateRange ? jobs.filter((job) => job.date >= dateRange.from && job.date <= dateRange.to) : jobs,
-    [jobs, dateRange]
+  const balanceAmountsByCustomer = useMemo(
+    () => calculateCustomerBalanceAmounts(customers, jobs, payments, dateRange),
+    [customers, jobs, payments, dateRange]
   );
-  const scopedCollectionsByCustomer = useMemo(() => {
-    const events = buildCollectionEvents(jobs, payments, dateRange);
-    const totals = new Map<number, number>();
-    events.forEach((event) => {
-      totals.set(event.customerId, (totals.get(event.customerId) || 0) + (Number(event.amount) || 0));
-    });
-    return totals;
-  }, [jobs, payments, dateRange]);
-  const carriedOpeningByCustomer = useMemo(() => {
-    const totals = new Map<number, number>();
-
-    customers.forEach((customer) => {
-      totals.set(customer.id, Number(customer.openingBalance) || 0);
-    });
-
-    if (!dateRange) {
-      return totals;
-    }
-
-    const carryTo = shiftDateString(dateRange.from, -1);
-    const priorJobs = jobs.filter((job) => job.date < dateRange.from);
-    priorJobs.forEach((job) => {
-      const current = totals.get(job.customerId) || 0;
-      totals.set(job.customerId, current + getJobNetValue(job) + getJobWorkerCommissionExpense(job));
-    });
-
-    buildCollectionEvents(jobs, payments, { from: '0001-01-01', to: carryTo }).forEach((event) => {
-      const current = totals.get(event.customerId) || 0;
-      totals.set(event.customerId, current - (Number(event.amount) || 0));
-    });
-
-    customers.forEach((customer) => {
-      totals.set(customer.id, Math.max(0, totals.get(customer.id) || 0));
-    });
-
-    return totals;
-  }, [customers, jobs, payments, dateRange]);
 
   const balances = useMemo<CustomerBalance[]>(() => {
     return customers
       .map((customer) => {
-        const customerJobs = scopedJobs.filter((job) => job.customerId === customer.id);
-        const ourIncome = customerJobs.reduce((sum, job) => sum + getJobNetValue(job), 0);
-        const commission = customerJobs.reduce((sum, job) => sum + getJobWorkerCommissionExpense(job), 0);
-        const finalBill = ourIncome + commission;
-        const paidAmount = scopedCollectionsByCustomer.get(customer.id) || 0;
-        const openingBalanceAmt = carriedOpeningByCustomer.get(customer.id) || 0;
-        const advance = Number(customer.advanceBalance) || 0;
-        const balance = Math.max(0, openingBalanceAmt + finalBill - paidAmount - advance);
+        const amounts = balanceAmountsByCustomer.get(customer.id);
 
         return {
           ...customer,
-          ourIncome,
-          commission,
-          finalBill,
-          paidAmount,
-          openingBalanceAmt,
-          balance,
-          advance,
+          ourIncome: amounts?.ourIncome || 0,
+          commission: amounts?.commission || 0,
+          finalBill: amounts?.finalBill || 0,
+          paidAmount: amounts?.paidAmount || 0,
+          openingBalanceAmt: amounts?.openingBalanceAmt || 0,
+          balance: amounts?.balance || 0,
+          advance: amounts?.advance || 0,
         };
       })
       .filter((customer) => customer.balance !== 0);
-  }, [customers, scopedJobs, scopedCollectionsByCustomer, carriedOpeningByCustomer]);
+  }, [customers, balanceAmountsByCustomer]);
 
   const filtered = useMemo(() => {
     const q = customerFilter.trim().toLowerCase();

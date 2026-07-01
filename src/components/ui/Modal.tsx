@@ -104,7 +104,7 @@ export function Modal({
   }
 
   return ReactDOM.createPortal(
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={modalRef}
         className={`modal modal-${size} ${className}`}

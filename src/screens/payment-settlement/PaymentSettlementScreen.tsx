@@ -6,9 +6,11 @@ import { useToast } from '@/hooks/useToast';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
+import { PaymentModeGroup, type PaymentMode as PaymentModeInput } from '@/components/ui/PaymentModeGroup';
 import { JobCardDetailsModal } from '@/components/job-card/JobCardDetailsModal';
 import { formatCurrency } from '@/lib/currencyUtils';
 import { getLocalDateString } from '@/lib/dateUtils';
+import { generateMeaningfulPaymentId } from '@/lib/paymentUtils';
 import {
   isMahalingamCustomerLabel,
   isRmpCustomer,
@@ -30,7 +32,7 @@ import {
   type PeriodType,
   type SortOrder,
 } from '@/screens/finance/financeHelpers';
-import type { Job } from '@/types';
+import type { Job, Payment } from '@/types';
 import './PaymentSettlementScreen.css';
 import '../FinanceReports.css';
 
@@ -120,8 +122,32 @@ function rowSearchText(row: SettlementRow): string {
     .toLowerCase();
 }
 
+const PAYMENT_MODE_MAP: Record<Exclude<PaymentModeInput, 'mixed'>, Payment['paymentMode']> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  bank: 'Bank',
+  cheque: 'Cheque',
+};
+
+function toMoney(value: string): number {
+  return Math.round(((parseFloat(value) || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function sumMoney(values: number[]): number {
+  return Math.round((values.reduce((sum, value) => sum + value, 0) + Number.EPSILON) * 100) / 100;
+}
+
+function getJobDateRange(jobs: Job[]): { from: string; to: string } {
+  const dates = jobs.map((job) => job.date).filter(Boolean).sort();
+  const fallback = getLocalDateString(new Date());
+  return {
+    from: dates[0] || fallback,
+    to: dates[dates.length - 1] || fallback,
+  };
+}
+
 export function PaymentSettlementScreen() {
-  const { jobs, getCustomer, updateJob, ensureRangeLoaded } = useDataStore();
+  const { jobs, payments, getCustomer, addPayment, updateJob, ensureRangeLoaded } = useDataStore();
   const { data: customers = [] } = useCustomersQuery();
   const toast = useToast();
   const today = getLocalDateString(new Date());
@@ -145,6 +171,13 @@ export function PaymentSettlementScreen() {
   const [settlingCardKey, setSettlingCardKey] = useState<string | null>(null);
   const [settlementPreviewKey, setSettlementPreviewKey] = useState<string | null>(null);
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null);
+  const [settlementPaymentMode, setSettlementPaymentMode] = useState<PaymentModeInput>('cash');
+  const [settlementPaymentDate, setSettlementPaymentDate] = useState(today);
+  const [settlementCash, setSettlementCash] = useState('');
+  const [settlementUPI, setSettlementUPI] = useState('');
+  const [settlementBank, setSettlementBank] = useState('');
+  const [settlementCheque, setSettlementCheque] = useState('');
+  const [settlementNotes, setSettlementNotes] = useState('');
 
   const dateRange = useMemo(() => {
     if (period === 'all') return undefined;
@@ -373,25 +406,122 @@ export function PaymentSettlementScreen() {
     return getOffsetPeriodLabel(period, periodOffset);
   }, [period, periodOffset, dateRange]);
 
+  const resetSettlementEntry = () => {
+    setSettlementPaymentMode('cash');
+    setSettlementPaymentDate(today);
+    setSettlementCash('');
+    setSettlementUPI('');
+    setSettlementBank('');
+    setSettlementCheque('');
+    setSettlementNotes('');
+  };
+
+  const closeSettlementPreview = () => {
+    setSettlementPreviewKey(null);
+    resetSettlementEntry();
+  };
+
+  const settlementBreakdownTotal = useMemo(
+    () =>
+      sumMoney([
+        toMoney(settlementCash),
+        toMoney(settlementUPI),
+        toMoney(settlementBank),
+        toMoney(settlementCheque),
+      ]),
+    [settlementCash, settlementUPI, settlementBank, settlementCheque]
+  );
+
   const performSettlement = async (row: SettlementRow) => {
     if (row.pending <= 0.009) {
       toast.info('Nothing due', `${row.cardId} is already settled.`);
       return;
     }
 
+    if (settlementPaymentDate > today) {
+      toast.error('Error', 'Future payment date not allowed');
+      return;
+    }
+
+    const amountToSettle = Math.round((row.pending + Number.EPSILON) * 100) / 100;
+    let finalMode: Payment['paymentMode'] =
+      settlementPaymentMode === 'mixed'
+        ? 'Mixed'
+        : PAYMENT_MODE_MAP[settlementPaymentMode];
+    let breakdown: Payment['breakdown'] | undefined;
+
+    if (settlementPaymentMode === 'mixed') {
+      const cash = toMoney(settlementCash);
+      const upi = toMoney(settlementUPI);
+      const bank = toMoney(settlementBank);
+      const cheque = toMoney(settlementCheque);
+
+      if (Math.abs(settlementBreakdownTotal - amountToSettle) > 0.01) {
+        toast.error(
+          'Error',
+          `Mixed payment split must total ${formatCurrency(amountToSettle)}`
+        );
+        return;
+      }
+
+      breakdown = {
+        ...(cash > 0 && { cash }),
+        ...(upi > 0 && { upi }),
+        ...(bank > 0 && { bank }),
+        ...(cheque > 0 && { cheque }),
+      };
+
+      const usedModes = [
+        cash > 0 ? 'Cash' : null,
+        upi > 0 ? 'UPI' : null,
+        bank > 0 ? 'Bank' : null,
+        cheque > 0 ? 'Cheque' : null,
+      ].filter(Boolean) as Payment['paymentMode'][];
+
+      if (usedModes.length === 1) {
+        finalMode = usedModes[0];
+      }
+    }
+
     setSettlingCardKey(row.key);
     try {
+      const customer = getCustomer(row.customerId);
+      const paymentCount = payments.filter(
+        (payment) => payment.date === settlementPaymentDate && payment.customerId === row.customerId
+      ).length;
+      const jobDateRange = getJobDateRange(row.jobs);
+      const sameMonth = jobDateRange.from.substring(0, 7) === jobDateRange.to.substring(0, 7);
+      const customNotes = settlementNotes.trim();
+      const notes = `From JobCard ${row.cardId}${customNotes ? ` - ${customNotes}` : ''}`;
+
+      const newPayment: Omit<Payment, 'id' | 'createdAt'> = {
+        customerId: row.customerId,
+        amount: amountToSettle,
+        paymentMode: finalMode,
+        breakdown,
+        date: settlementPaymentDate,
+        referenceNumber: customer
+          ? generateMeaningfulPaymentId(customer, settlementPaymentDate, paymentCount + 1)
+          : undefined,
+        paymentForMonth: sameMonth ? jobDateRange.from.substring(0, 7) : undefined,
+        paymentForFromDate: sameMonth ? undefined : jobDateRange.from,
+        paymentForDate: sameMonth ? undefined : jobDateRange.to,
+        notes,
+      };
+
+      await addPayment(newPayment);
+
       await Promise.all(
         row.jobs.map((job) =>
           updateJob(job.id, {
             paidAmount: getJobFinalBillValue(job),
             paymentStatus: 'Paid',
-            paymentMode: 'Cash',
+            paymentMode: finalMode,
           })
         )
       );
-      toast.success('Settled', `${row.cardId} marked paid.`);
-      setSettlementPreviewKey(null);
+      toast.success('Settled', `${row.cardId} payment posted and marked paid.`);
+      closeSettlementPreview();
     } catch (error) {
       toast.error('Error', error instanceof Error ? error.message : 'Failed to settle this job card');
     } finally {
@@ -857,9 +987,10 @@ export function PaymentSettlementScreen() {
                     <td className="ta-c">
                   <button
                         type="button"
-                        className="settle-action-btn"
+                      className="settle-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
+                          resetSettlementEntry();
                           setSettlementPreviewKey(row.key);
                         }}
                         disabled={settlingCardKey === row.key || row.pending <= 0.009}
@@ -900,9 +1031,9 @@ export function PaymentSettlementScreen() {
       {settlementPreviewRow ? (
         <Modal
           isOpen={Boolean(settlementPreviewRow)}
-          onClose={() => setSettlementPreviewKey(null)}
+          onClose={closeSettlementPreview}
           title="Confirm settlement"
-          subtitle="Review the card before posting the payment update."
+          subtitle="Review the card before posting the payment voucher."
           size="md"
           className="settle-preview-modal"
         >
@@ -946,15 +1077,87 @@ export function PaymentSettlementScreen() {
             </div>
 
             <div className="settle-preview-note">
-              Settling this card updates every job line in the card, so payment status and balance
-              reports stay in sync.
+              Settling this card posts a payment voucher and updates every job line, so payment
+              history, card status, and balance reports stay in sync.
+            </div>
+
+            <div className="settle-payment-entry">
+              <div className="settle-payment-field">
+                <label className="settle-payment-label">Payment mode</label>
+                <PaymentModeGroup
+                  value={settlementPaymentMode}
+                  onChange={setSettlementPaymentMode}
+                />
+              </div>
+
+              {settlementPaymentMode === 'mixed' ? (
+                <div className="settle-payment-mixed">
+                  {[
+                    { id: 'settle-cash', label: 'Cash', value: settlementCash, set: setSettlementCash },
+                    { id: 'settle-upi', label: 'UPI', value: settlementUPI, set: setSettlementUPI },
+                    { id: 'settle-bank', label: 'Bank', value: settlementBank, set: setSettlementBank },
+                    { id: 'settle-cheque', label: 'Cheque', value: settlementCheque, set: setSettlementCheque },
+                  ].map(({ id, label, value, set }) => (
+                    <div key={id} className="settle-payment-field">
+                      <label className="settle-payment-label" htmlFor={id}>{label}</label>
+                      <input
+                        id={id}
+                        type="number"
+                        className="settle-payment-input"
+                        value={value}
+                        onChange={(event) => set(event.target.value)}
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  ))}
+                  <div
+                    className={`settle-breakdown-total${
+                      Math.abs(settlementBreakdownTotal - settlementPreviewRow.pending) <= 0.01
+                        ? ' is-balanced'
+                        : ''
+                    }`}
+                  >
+                    Split total {formatCurrency(settlementBreakdownTotal)} /{' '}
+                    {formatCurrency(settlementPreviewRow.pending)}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="settle-payment-grid">
+                <div className="settle-payment-field">
+                  <label className="settle-payment-label" htmlFor="settle-payment-date">Payment date</label>
+                  <input
+                    id="settle-payment-date"
+                    type="date"
+                    className="settle-payment-input"
+                    value={settlementPaymentDate}
+                    onChange={(event) => setSettlementPaymentDate(event.target.value)}
+                    max={today}
+                    required
+                  />
+                </div>
+                <div className="settle-payment-field">
+                  <label className="settle-payment-label" htmlFor="settle-notes">Notes</label>
+                  <input
+                    id="settle-notes"
+                    type="text"
+                    className="settle-payment-input"
+                    value={settlementNotes}
+                    onChange={(event) => setSettlementNotes(event.target.value)}
+                    maxLength={500}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="settle-preview-actions">
               <button
                 type="button"
                 className="settle-reset-btn"
-                onClick={() => setSettlementPreviewKey(null)}
+                onClick={closeSettlementPreview}
               >
                 Cancel
               </button>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { type Job } from '@/types';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { getJobFinalBillValue, getJobPaidAmount } from '@/lib/jobUtils';
+import { getJobFinalBillValue } from '@/lib/jobUtils';
+import { calculateVoucherAwareJobOutstanding, type JobOutstandingAmount } from '@/lib/customerBalanceUtils';
 import { type CustomerBalance } from './CustomerBalancesTable';
 import { useDataStore } from '@/stores/dataStore';
 import { useToast } from '@/hooks/useToast';
@@ -13,7 +14,7 @@ interface CustomerBillsOverlayProps {
 }
 
 export function CustomerBillsOverlay({ customer, jobs, onClose }: CustomerBillsOverlayProps) {
-  const { updateJob } = useDataStore();
+  const { payments, updateJob } = useDataStore();
   const toast = useToast();
   const [settlingJobId, setSettlingJobId] = useState<number | null>(null);
   const [isSettlingAll, setIsSettlingAll] = useState(false);
@@ -27,29 +28,28 @@ export function CustomerBillsOverlay({ customer, jobs, onClose }: CustomerBillsO
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  const unsettledJobs = useMemo(
+  const unsettledRows = useMemo(
     () =>
-      jobs.filter((job) => {
-        const due = Math.max(0, getJobFinalBillValue(job) - getJobPaidAmount(job));
-        return due > 0.009;
-      }),
-    [jobs]
+      calculateVoucherAwareJobOutstanding(jobs, payments, customer.id).filter(
+        (row) => row.dueAmount > 0.009
+      ),
+    [jobs, payments, customer.id]
   );
 
   const sorted = useMemo(
-    () => [...unsettledJobs].sort((a, b) => b.date.localeCompare(a.date)),
-    [unsettledJobs]
+    () => [...unsettledRows].sort((a, b) => b.job.date.localeCompare(a.job.date)),
+    [unsettledRows]
   );
 
   const totalDue = useMemo(
-    () => sorted.reduce((sum, job) => sum + Math.max(0, getJobFinalBillValue(job) - getJobPaidAmount(job)), 0),
+    () => sorted.reduce((sum, row) => sum + row.dueAmount, 0),
     [sorted]
   );
 
-  const settleJob = async (job: Job) => {
-    const currentPaid = getJobPaidAmount(job);
+  const settleJob = async (row: JobOutstandingAmount) => {
+    const { job } = row;
     const finalBill = getJobFinalBillValue(job);
-    const due = Math.max(0, finalBill - currentPaid);
+    const due = row.dueAmount;
     if (due <= 0.009) return;
 
     setSettlingJobId(job.id);
@@ -77,9 +77,9 @@ export function CustomerBillsOverlay({ customer, jobs, onClose }: CustomerBillsO
     setIsSettlingAll(true);
     try {
       await Promise.all(
-        sorted.map((job) =>
-          updateJob(job.id, {
-            paidAmount: getJobFinalBillValue(job),
+        sorted.map((row) =>
+          updateJob(row.job.id, {
+            paidAmount: getJobFinalBillValue(row.job),
             paymentStatus: 'Paid',
             paymentMode: settlementMode,
           })
@@ -145,21 +145,24 @@ export function CustomerBillsOverlay({ customer, jobs, onClose }: CustomerBillsO
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((job) => (
-                    <tr key={job.id}>
-                      <td className="cbo-date">{job.date}</td>
-                      <td className="cbo-worktype">{job.workTypeName}{job.workName ? ` — ${job.workName}` : ''}</td>
+                  {sorted.map((row) => (
+                    <tr key={row.job.id}>
+                      <td className="cbo-date">{row.job.date}</td>
+                      <td className="cbo-worktype">
+                        {row.job.workTypeName}
+                        {row.job.workName ? ` - ${row.job.workName}` : ''}
+                      </td>
                       <td className="numeric cbo-amount">
-                        {formatCurrency(Math.max(0, getJobFinalBillValue(job) - getJobPaidAmount(job)))}
+                        {formatCurrency(row.dueAmount)}
                       </td>
                       <td className="ta-c">
                         <button
                           type="button"
                           className="cbo-settle-btn"
-                          onClick={() => void settleJob(job)}
-                          disabled={settlingJobId === job.id || isSettlingAll}
+                          onClick={() => void settleJob(row)}
+                          disabled={settlingJobId === row.job.id || isSettlingAll}
                         >
-                          {settlingJobId === job.id ? 'Settling...' : 'Settle'}
+                          {settlingJobId === row.job.id ? 'Settling...' : 'Settle'}
                         </button>
                       </td>
                     </tr>

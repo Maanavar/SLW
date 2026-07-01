@@ -128,7 +128,7 @@ describe('invoice payment attribution (monthly customers)', () => {
 });
 
 describe('reportUtils', () => {
-  it('suppresses all job-paid entries for customers who have any payment voucher', () => {
+  it('keeps only residual job-paid entries beyond customer vouchers', () => {
     const jobs: Job[] = [
       createJob({ id: 1, customerId: 1, date: '2026-05-05', jobCardId: 'JC-1', paidAmount: 300 }),
       createJob({ id: 2, customerId: 1, date: '2026-05-06', jobCardId: 'JC-2', paidAmount: 200 }),
@@ -156,11 +156,41 @@ describe('reportUtils', () => {
     // Vouchers always included
     expect(events.map((e) => e.id)).toContain('payment:10');
     expect(events.map((e) => e.id)).toContain('payment:11');
-    // Customer 1 has vouchers — ALL job-paid entries suppressed to avoid double-counting
+    // Customer 1 has vouchers totaling 450 and job-card paid totaling 500.
+    // Keep only the 50 residual so payment + job-paid events do not double-count.
     expect(events.map((e) => e.id)).not.toContain('job:JC-1');
-    expect(events.map((e) => e.id)).not.toContain('job:JC-2');
+    expect(events.find((event) => event.id === 'job:JC-2')?.amount).toBe(50);
     // Customer 2 has no vouchers — job-paid entry included as fallback
     expect(events.map((e) => e.id)).toContain('job:JC-3');
+    expect(events.reduce((sum, event) => sum + event.amount, 0)).toBe(900);
+  });
+
+  it('keeps residual job-paid amount when a settlement voucher links to the same card', () => {
+    const jobs: Job[] = [
+      createJob({
+        id: 1,
+        customerId: 1,
+        date: '2026-05-05',
+        jobCardId: 'JC-1',
+        amount: 1000,
+        paidAmount: 1000,
+      }),
+    ];
+    const payments: Payment[] = [
+      createPayment({
+        id: 20,
+        customerId: 1,
+        date: '2026-05-06',
+        amount: 700,
+        notes: 'From JobCard JC-1',
+      }),
+    ];
+
+    const events = getPaymentEventsInRange(jobs, payments, '2026-05-01', '2026-05-31');
+
+    expect(events.find((event) => event.id === 'payment:20')?.amount).toBe(700);
+    expect(events.find((event) => event.id === 'job:JC-1')?.amount).toBe(300);
+    expect(events.reduce((sum, event) => sum + event.amount, 0)).toBe(1000);
   });
 
   it('calculates monthly balances using max(job-paid, payment-paid) and payment period fields', () => {

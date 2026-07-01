@@ -176,14 +176,13 @@ export function getJobDcStatus(job: Job, customer?: Customer): string {
  * Balance = openingBalance + Total Final Bill - Total Paid
  *
  * Payment source selection:
- * - When payment vouchers exist for the customer, use their sum as the authoritative total.
- *   Voucher recording also writes job.paidAmount, so both sources reflect the same transactions.
- * - When no vouchers exist (legacy data recorded only on the job card), fall back to job.paidAmount.
- * This avoids double-counting payments that appear in both places.
+ * - Vouchers and job-card paid amounts can represent the same collection.
+ * - Use the higher paid total instead of summing both sources, avoiding double-counting
+ *   while keeping balances aligned with the job-card unpaid list.
  */
 export function calculateCustomerBalance(
   jobs: Job[],
-  payments: Array<{ customerId: number; amount: number }>,
+  payments: Array<{ customerId: number; amount: number; notes?: string }>,
   customerId: number,
   openingBalance = 0
 ): number {
@@ -191,12 +190,12 @@ export function calculateCustomerBalance(
   const customerPayments = payments.filter((p) => p.customerId === customerId);
 
   const totalDue = customerJobs.reduce((sum, j) => sum + getJobFinalBillValue(j), 0);
-  const totalPaidFromJobs = customerJobs.reduce((sum, j) => sum + getJobPaidAmount(j), 0);
   const totalPaidFromPayments = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const totalPaidFromJobs = customerJobs.reduce((sum, job) => sum + getJobPaidAmount(job), 0);
 
-  // Use payment vouchers when they exist; fall back to job-level paid amounts for legacy rows
-  // that pre-date the payments table. Never add both — they represent the same money.
-  const totalPaid = totalPaidFromPayments > 0 ? totalPaidFromPayments : totalPaidFromJobs;
+  // Vouchers and job cards can both represent the same collection. For balance,
+  // use the stronger source instead of summing them and double-counting.
+  const totalPaid = Math.max(totalPaidFromPayments, totalPaidFromJobs);
   return Math.max(0, (openingBalance || 0) + totalDue - totalPaid);
 }
 

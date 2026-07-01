@@ -6,6 +6,7 @@
 import type { Job, Payment, Customer, JobGroup, PeriodRange } from '@/types';
 import { getReportRange as getDateReportRange, isDateInRange, formatDate as formatDateUtil } from './dateUtils';
 import { getJobFinalBillValue, groupJobsByCard, getJobPaidAmount } from './jobUtils';
+import { buildJobPaidResidualEvents, getCardIdFromPaymentNotes } from './paymentAttribution';
 
 // Re-export for convenience
 export function getReportRange(period: string): PeriodRange {
@@ -62,18 +63,14 @@ export function getPaymentsInRange(
   return payments.filter((payment) => isDateInRange(payment.date, startDate, endDate));
 }
 
-function getCardIdFromNotes(notes?: string) {
-  return notes?.match(/From JobCard\s+([A-Za-z0-9-]+)/i)?.[1];
-}
-
 /**
  * Get payment events in range (vouchers + job-paid fallbacks).
  *
  * Notes:
  * - Payment vouchers are always included by `payment.date`.
  * - Job-paid entries are grouped by JobCard and included by `job.date`.
- * - Simple de-dupe: if a voucher on the same customer+date explicitly references
- *   the JobCard in its notes OR matches the exact amount, we skip the fallback.
+ * - Linked settlement vouchers subtract from matching JobCard paid entries, so
+ *   voucher payments and legacy job-paid amounts do not double-count.
  */
 export function getPaymentEventsInRange(
   jobs: Job[],
@@ -85,7 +82,7 @@ export function getPaymentEventsInRange(
   const jobsInRange = getJobsInRange(jobs, startDate, endDate);
 
   const voucherEvents: PaymentEvent[] = paymentsInRange.map((p) => {
-    const linkedCardId = getCardIdFromNotes(p.notes);
+    const linkedCardId = getCardIdFromPaymentNotes(p.notes);
     return {
       id: `payment:${p.id}`,
       customerId: p.customerId,
@@ -103,25 +100,18 @@ export function getPaymentEventsInRange(
   // authoritative. Their job.paidAmount fields are redundant entry — including both
   // would double-count the same money. Only fall back to job-paid entries for
   // customers who have never had a payment voucher recorded.
-  const customersWithVouchers = new Set(payments.map((p) => p.customerId));
-
-  const paidGroups = groupJobsByCard(jobsInRange.filter((j) => getJobPaidAmount(j) > 0));
-  const jobPaidEvents: PaymentEvent[] = paidGroups
-    .filter((group) => !customersWithVouchers.has(group.primary.customerId))
-    .map((group) => {
-      const cardId = group.primary.jobCardId || `LEGACY-${group.primary.id}`;
-      const amount = group.jobs.reduce((s, j) => s + getJobPaidAmount(j), 0);
-      return {
-        id: `job:${cardId}`,
-        customerId: group.primary.customerId,
-        amount,
-        date: group.primary.date,
-        paymentMode: (group.primary.paymentMode as Payment['paymentMode']) || 'Cash',
-        notes: `From JobCard ${cardId}`,
-        source: 'Job Paid Entry',
-        jobCardId: cardId,
-      };
-    });
+  const jobPaidEvents: PaymentEvent[] = buildJobPaidResidualEvents(jobsInRange, payments).map(
+    (event) => ({
+      id: `job:${event.jobCardId}`,
+      customerId: event.customerId,
+      amount: event.amount,
+      date: event.date,
+      paymentMode: event.paymentMode,
+      notes: event.notes,
+      source: 'Job Paid Entry',
+      jobCardId: event.jobCardId,
+    })
+  );
 
   return [...voucherEvents, ...jobPaidEvents].filter((e) => (e.amount || 0) > 0);
 }

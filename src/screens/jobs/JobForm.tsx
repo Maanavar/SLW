@@ -14,6 +14,7 @@ import { getLocalDateString } from '@/lib/dateUtils';
 import { groupJobsByCard } from '@/lib/reportUtils';
 import {
   getJobCardPaymentSummary,
+  getJobPaidAmount,
   getPaymentStatusFromAmounts,
   isDcApplicableCustomer,
   isCommissionApplicableCustomer,
@@ -245,11 +246,18 @@ export function JobForm() {
   const agentCommission = useAgentCommission ? (parseFloat(agentCommissionAmount) || 0) : 0;
   const agentTds = useAgentCommission ? (parseFloat(agentTdsAmount) || 0) : 0;
   const agentNetPayable = useAgentCommission ? Math.max(0, totalAmount - agentCommission - agentTds) : 0;
+  const enteredPaidAmount = paymentIntent === 'now' ? parseFloat(paidAmount) || 0 : 0;
+  const enteredPaidForCard = Math.min(enteredPaidAmount, totalAmount + totalCommission);
+  const enteredPending = Math.max(0, totalAmount + totalCommission - enteredPaidForCard);
+  const enteredAdvance = Math.max(0, enteredPaidAmount - (totalAmount + totalCommission));
   const summary = {
     totalAmount,
     totalCommission,
     netValue: totalAmount,
     finalValue: totalAmount + totalCommission,
+    paidValue: enteredPaidForCard,
+    pendingValue: enteredPending,
+    advanceValue: enteredAdvance,
     agentCommission,
     agentTds,
     agentNetPayable,
@@ -414,7 +422,7 @@ export function JobForm() {
       totalPending += payment.pending;
 
       group.jobs.forEach((job) => {
-        const paid = job.paidAmount || 0;
+        const paid = getJobPaidAmount(job);
         if (paid > 0) {
           if (job.paymentMode === 'Cash') byCash += paid;
           else if (job.paymentMode === 'Bank') byBank += paid;
@@ -1146,6 +1154,19 @@ export function JobForm() {
   };
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  const metricsTitle = cardViewMode === 'today' ? "Today's submitted" : 'Range submitted';
+  const metricsPeriodLabel =
+    cardViewMode === 'today'
+      ? todayLabel
+      : filterStartDate && filterEndDate
+        ? `${new Date(`${filterStartDate}T00:00:00`).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+          })} - ${new Date(`${filterEndDate}T00:00:00`).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+          })}`
+        : 'Range';
 
   return (
     <div className="jobs-screen">
@@ -1265,7 +1286,7 @@ export function JobForm() {
                 <div className="wl-col-header">
                   <span>WORK TYPE</span>
                   <span>QTY</span>
-                  <span>AMOUNT ₹</span>
+                  <span>LINE TOTAL ₹</span>
                   <span />
                 </div>
                 {jobLines.map((line) => (
@@ -1645,6 +1666,26 @@ export function JobForm() {
                 <span className="summary-row-val mono summary-final-val">{formatCurrency(summary.finalValue)}</span>
               </div>
               <div className="summary-row">
+                <span className="summary-row-label">Paid</span>
+                <span className="summary-row-val mono is-green">{formatCurrency(summary.paidValue)}</span>
+              </div>
+              <div className="summary-row">
+                <span className="summary-row-label">Pending</span>
+                <span className="summary-row-val mono is-red">{formatCurrency(summary.pendingValue)}</span>
+              </div>
+              {summary.advanceValue > 0 && (
+                <div className="summary-row">
+                  <span className="summary-row-label">Advance</span>
+                  <span className="summary-row-val mono is-amber">{formatCurrency(summary.advanceValue)}</span>
+                </div>
+              )}
+              {paymentIntent === 'now' && (
+                <div className="summary-row">
+                  <span className="summary-row-label">Mode</span>
+                  <span className="summary-row-val mono">{paymentMode}</span>
+                </div>
+              )}
+              <div className="summary-row">
                 <span className="summary-row-label">Net income</span>
                 <span className="summary-row-val mono is-green">{formatCurrency(summary.netValue)}</span>
               </div>
@@ -1654,8 +1695,8 @@ export function JobForm() {
           {/* Today's metrics */}
           <div className="njc-metrics-card">
             <div className="njc-metrics-head">
-              <span>Today's metrics</span>
-              <span className="metrics-date mono">{todayLabel}</span>
+              <span>{metricsTitle}</span>
+              <span className="metrics-date mono">{metricsPeriodLabel}</span>
             </div>
             <div className="njc-metrics-body">
               <div className="metrics-grid">
